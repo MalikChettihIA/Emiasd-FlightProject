@@ -1,0 +1,69 @@
+# Dockerfile.jupyter - Version ARM64 avec Spark 3.5.0, Delta Lake et pyngrok
+FROM quay.io/jupyter/all-spark-notebook:spark-3.5.3
+
+USER root
+
+# Installation des outils système
+RUN apt-get update && \
+    apt-get install -y \
+    openjdk-17-jdk-headless \
+    scala \
+    curl \
+    wget \
+    netcat-openbsd \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Installation de Spark 3.5.0 avec Delta Lake support
+ENV SPARK_VERSION=3.5.3
+ENV HADOOP_VERSION=3
+ENV SPARK_HOME=/usr/local/spark
+ENV DELTA_VERSION=3.2.1
+
+RUN wget -O /tmp/spark.tgz "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" && \
+    tar -xzf /tmp/spark.tgz -C /tmp && \
+    mv /tmp/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION} $SPARK_HOME && \
+    rm /tmp/spark.tgz && \
+    chown -R $NB_USER:$NB_GID $SPARK_HOME
+
+# Téléchargement des JARs Delta Lake
+RUN wget -O $SPARK_HOME/jars/delta-spark_2.12-${DELTA_VERSION}.jar "https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/${DELTA_VERSION}/delta-spark_2.12-${DELTA_VERSION}.jar" && \
+    wget -O $SPARK_HOME/jars/delta-storage-3.2.1.jar "https://repo1.maven.org/maven2/io/delta/delta-storage/3.2.1/delta-storage-3.2.1.jar" && \
+    chown $NB_USER:$NB_GID $SPARK_HOME/jars/delta-*.jar
+
+# Variables d'environnement fixées pour ARM64
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
+ENV SCALA_HOME=/usr/share/scala
+ENV PATH=$JAVA_HOME/bin:$SCALA_HOME/bin:$SPARK_HOME/bin:$PATH
+
+USER $NB_UID
+
+# Installation des packages Python avec Delta Lake et pyngrok
+RUN pip install --no-cache-dir \
+    pyspark==${SPARK_VERSION} \
+    delta-spark==${DELTA_VERSION} \
+    pyngrok \
+    toree==0.5.0 \
+    spylon-kernel \
+    plotly \
+    seaborn \
+    pandas \
+    numpy \
+    matplotlib
+
+# Installation des kernels Jupyter avec JAVA_HOME ARM64
+RUN jupyter toree install \
+    --user \
+    --spark_home=$SPARK_HOME \
+    --kernel_name="apache_toree_scala"
+
+RUN python -m spylon_kernel install --user
+
+WORKDIR /home/jovyan/work
+EXPOSE 8888
+
+# Démarrage simple avec JAVA_HOME fixé
+CMD ["start-notebook.sh", \
+     "--NotebookApp.token=''", \
+     "--NotebookApp.password=''", \
+     "--ServerApp.allow_root=True"]

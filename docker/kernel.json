@@ -1,0 +1,22 @@
+{
+  "language": "scala",
+  "display_name": "Apache Toree - Scala (ARM64)",
+  "argv": [
+    "python", "-m", "toree",
+    "--profile", "{connection_file}",
+    "--ip", "0.0.0.0",
+    "--log-level", "INFO"
+  ],
+  "codemirror_mode": "text/x-scala",
+  "env": {
+    "SPARK_HOME": "/usr/local/spark",
+    "JAVA_HOME": "/usr/lib/jvm/java-1.11.0-openjdk-arm64",
+    "SCALA_HOME": "/usr/share/scala",
+    "PATH": "/usr/lib/jvm/java-1.11.0-openjdk-arm64/bin:/usr/share/scala/bin:/usr/local/spark/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "SPARK_MASTER": "spark://spark-master:7077",
+    "PYTHONPATH": "/usr/local/spark/python/lib/pyspark.zip:/usr/local/spark/python/lib/py4j-*.zip",
+    "TOREE_SPARK_ARGS": "--master=spark://spark-master:7077 --driver-memory=1g --executor-memory=2g --executor-cores=2 --conf spark.sql.warehouse.dir=/tmp/hive --conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true --conf spark.serializer=org.apache.spark.serializer.KryoSerializer",
+    "CAPTURE_STANDARD_OUT": "true",
+    "CAPTURE_STANDARD_ERR": "true"
+  }
+}
