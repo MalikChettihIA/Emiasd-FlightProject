@@ -1,11 +1,13 @@
 #!/bin/bash
+
 spark-submit \
-    --deploy-mode client \
-    --master "$SPARK_MASTER_URL" \
-    --executor-cores 4 \
-    --executor-memory 2G \
-    --num-executors 1 \
-    --class "MainApp" \
-    "apps/Emiasd-Flight-Data-Analysis.jar" \
-    "data/Iris.csv" \
-    "output"
+  --master "$SPARK_MASTER_URL" \
+  --deploy-mode client \
+  --class MainApp \
+  --conf spark.executor.instances=4 \
+  --executor-cores=2 \
+  --executor-memory=6G \
+  --conf spark.executor.memoryOverhead=512m \
+  /apps/Emiasd-Flight-Data-Analysis.jar \
+  /data/Iris.csv \
+  /data/output/iris-$(date +%Y%m%d-%H%M%S)

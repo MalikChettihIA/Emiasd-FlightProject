@@ -16,6 +16,7 @@ services:
     volumes:
       - ../work/notebooks:/notebooks
       - ../work/data:/data
+      - ../work/apps:/apps    
     networks:
       - spark-network
     healthcheck:
@@ -36,6 +37,7 @@ services:
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_WEBUI_PORT=8081
       - SPARK_DAEMON_MEMORY=2g
+      - SPARK_LOCAL_DIRS=/tmp/spark-local
     ports:
       - "8081:8081"
     depends_on:
@@ -43,6 +45,8 @@ services:
         condition: service_healthy
     volumes:
       - ../work/data:/data
+      - ../work/apps:/apps
+      - ../work/spark-tmp-1:/tmp/spark-local
     networks:
       - spark-network
 
@@ -57,6 +61,7 @@ services:
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_WEBUI_PORT=8082
       - SPARK_DAEMON_MEMORY=2g
+      - SPARK_LOCAL_DIRS=/tmp/spark-local
     ports:
       - "8082:8082"
     depends_on:
@@ -64,6 +69,8 @@ services:
         condition: service_healthy
     volumes:
       - ../work/data:/data
+      - ../work/apps:/apps
+      - ../work/spark-tmp-2:/tmp/spark-local
     networks:
       - spark-network
 
@@ -78,6 +85,7 @@ services:
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_WEBUI_PORT=8083
       - SPARK_DAEMON_MEMORY=2g
+      - SPARK_LOCAL_DIRS=/tmp/spark-local
     ports:
       - "8083:8083"
     depends_on:
@@ -85,6 +93,8 @@ services:
         condition: service_healthy
     volumes:
       - ../work/data:/data
+      - ../work/apps:/apps
+      - ../work/spark-tmp-3:/tmp/spark-local
     networks:
       - spark-network
 
@@ -99,6 +109,7 @@ services:
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_WEBUI_PORT=8084
       - SPARK_DAEMON_MEMORY=2g
+      - SPARK_LOCAL_DIRS=/tmp/spark-local
     ports:
       - "8084:8084"
     depends_on:
@@ -106,6 +117,8 @@ services:
         condition: service_healthy
     volumes:
       - ../work/data:/data
+      - ../work/apps:/apps
+      - ../work/spark-tmp-4:/tmp/spark-local
     networks:
       - spark-network
 
