@@ -72,13 +72,15 @@ object FlightDataLoader extends DataLoader[Flight] {
    */
   override def loadRaw(path: String)(implicit spark: SparkSession): Try[DataFrame] = {
     Try {
-      spark.read
+      spark.read.format("csv")
         .option("header", "true")
         .option("inferSchema", "true")
         .option("timestampFormat", DEFAULT_DATE_FORMAT)
         .option("multiline", "true")
         .option("escape", "\"")
-        .csv(path)
+        .load(path)
+        .drop("_c12")
+        .persist()
     }.recoverWith {
       case ex: Exception =>
         println(s"Failed to load raw flight data from $path: ${ex.getMessage}")

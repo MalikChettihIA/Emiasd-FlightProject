@@ -3,8 +3,8 @@ environment: "local"
 data:
   basePath: "/data"
   flight :
-    path: "/data/FLIGHT-3Y/Flights/*.csv"
+    path: "/data/FLIGHT-3Y/Flights/201201.csv"
   weather :
-    path : "/data/FLIGHT-3Y/Weather/*.csv"
+    path : "/data/FLIGHT-3Y/Weather/201201hourly.txt"
   airportMapping :
-    path : "/data/FLIGHT-3Y/wban*.csv"
+    path : "/data/FLIGHT-3Y/wban_airport_timezone.csv"

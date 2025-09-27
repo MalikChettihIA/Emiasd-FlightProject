@@ -3,14 +3,12 @@ package com.flightdelay.app
 import com.flightdelay.config.ConfigurationLoader
 import com.flightdelay.data.preprocessing.FlightDataPreprocessor
 import com.flightdelay.data.loaders.FlightDataLoader
-
 import org.apache.spark.sql.SparkSession
-import org.apache.log4j.Logger
-import scala.util.{Success, Failure}
+import org.slf4j.LoggerFactory
+
+import scala.util.{Failure, Success}
 
 object FlightDelayPredictionApp {
-
-  protected val logger: Logger = Logger.getLogger(this.getClass)
 
   def main(args: Array[String]): Unit = {
 
@@ -24,27 +22,27 @@ object FlightDelayPredictionApp {
     // Réduire les logs pour plus de clarté
     spark.sparkContext.setLogLevel("WARN")
 
-    logger.info("--> FlightDelayPrediction App Starting ...")
+    println("--> FlightDelayPrediction App Starting ...")
     val configuration = ConfigurationLoader.loadConfiguration(args)
-    logger.info("--> FlightDelayPrediction App Configuration "+ configuration.environment +" Loaded")
+    println("--> FlightDelayPrediction App Configuration "+ configuration.environment +" Loaded")
 
     try {
 
       FlightDataLoader.load(configuration) match {
         case Success(flightData) if !flightData.isEmpty =>
-          logger.info(s"Données chargées: ${flightData.count()} lignes")
+          println(s"Donnees chargees: ${flightData.count()} lignes")
 
           val processedFlightData = FlightDataPreprocessor.preprocess(flightData)
 
-          logger.info(s"Preprocessing terminé: ${processedFlightData.count()} lignes traitées")
+          println(s"Preprocessing termine: ${processedFlightData.count()} lignes traitees")
 
         // Continuer avec le processedFlightData...
 
         case Success(flightData) =>
-          logger.warn("Dataset de vols vide après chargement")
+          println("Dataset de vols vide après chargement")
 
         case Failure(exception) =>
-          logger.error(s"Erreur lors du chargement des données: ${exception.getMessage}")
+          println(s"Erreur lors du chargement des données: ${exception.getMessage}")
           throw exception
       }
 
@@ -53,11 +51,11 @@ object FlightDelayPredictionApp {
 
     } catch {
       case ex: Exception =>
-        logger.error(s"Erreur dans l'application: ${ex.getMessage}")
+        println(s"Erreur dans l'application: ${ex.getMessage}")
         ex.printStackTrace()
     } finally {
       spark.stop()
-      logger.info("--> FlightDelayPrediction App Stopped ...")
+      println("--> FlightDelayPrediction App Stopped ...")
     }
   }
 }

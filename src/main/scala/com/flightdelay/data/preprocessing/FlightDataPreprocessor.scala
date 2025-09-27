@@ -27,37 +27,41 @@ object FlightDataPreprocessor extends DataPreprocessor {
    * @return DataFrame préprocessé et enrichi
    */
   override def preprocess(rawFlightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    logger.info("Début du preprocessing des données de vols")
+    println("--> Starting Flight data preprocessing ...")
 
     val originalCount = rawFlightData.count()
-    logger.info(s"Nombre de vols en entrée: $originalCount")
+    println(s"Original Flight count: $originalCount")
 
     // Étape 1: Nettoyage de base
+    println("--> Cleaning Duplicates and Null Values ...")
     val cleaned = basicCleaning(rawFlightData)
+    val cleanedCount = cleaned.count()
+    println("--> Cleaning Duplicates and Null Values : "+ (originalCount-cleanedCount) + " cleaned.")
 
     // Étape 2: Filtrage des vols annulés et détournés (selon l'article TIST)
-    val filtered = filterCancelledAndDiverted(cleaned)
+    //val filtered = filterCancelledAndDiverted(cleaned)
 
     // Étape 3: Conversion et validation des types de données
-    val typedData = convertFlightDataTypes(filtered)
+    //val typedData = convertFlightDataTypes(filtered)
 
     // Étape 4: Enrichissement avec les colonnes calculées
-    val enriched = addFlightFeatures(typedData)
+    //val enriched = addFlightFeatures(typedData)
 
     // Étape 5: Création des labels de classification selon différents seuils
-    val labeled = addDelayClassificationLabels(enriched)
+    //val labeled = addDelayClassificationLabels(enriched)
 
     // Étape 6: Filtrage des retards liés à la météo (selon l'article)
-    val weatherRelated = filterWeatherRelatedDelays(labeled)
+    //val weatherRelated = filterWeatherRelatedDelays(labeled)
 
     // Étape 7: Nettoyage final et validation
-    val finalData = finalCleaning(weatherRelated)
+    //val finalData = finalCleaning(weatherRelated)
 
     // Résumé du preprocessing
-    logPreprocessingSummary(rawFlightData, finalData)
-    validateFlightData(finalData)
+    val finalData = cleaned
+    //logPreprocessingSummary(rawFlightData, finalData)
+    //validateFlightData(finalData)
 
-    logger.info("Preprocessing des données de vols terminé avec succès")
+    logger.info("--> Flight data preprocessed ...")
     finalData
   }
 

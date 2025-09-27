@@ -8,4 +8,5 @@ spark-submit \
   --executor-cores=2 \
   --executor-memory=6G \
   --conf spark.executor.memoryOverhead=512m \
-  /apps/Emiasd-Flight-Data-Analysis.jar
+  /apps/Emiasd-Flight-Data-Analysis.jar \
+  local
