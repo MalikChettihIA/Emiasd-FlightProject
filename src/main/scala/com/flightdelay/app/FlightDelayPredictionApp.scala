@@ -1,48 +1,63 @@
 package com.flightdelay.app
 
-import com.flightdelay.config.AppConfig
-import com.flightdelay.data.loaders.{FlightDataLoader, WeatherDataLoader}
-import com.flightdelay.data.joiners.FlightWeatherJoiner
-import com.flightdelay.features.FeatureExtractor
-import com.flightdelay.ml.pipeline.MLPipeline
-import com.flightdelay.utils.SparkSession
+import com.flightdelay.config.ConfigurationLoader
+import com.flightdelay.data.preprocessing.FlightDataPreprocessor
+import com.flightdelay.data.loaders.FlightDataLoader
 
 import org.apache.spark.sql.SparkSession
+import org.apache.log4j.Logger
+import scala.util.{Success, Failure}
 
 object FlightDelayPredictionApp {
-  
+
+  protected val logger: Logger = Logger.getLogger(this.getClass)
+
   def main(args: Array[String]): Unit = {
-    implicit val spark: SparkSession = SparkSession.getOrCreateSession()
-    
+
+    implicit val spark: SparkSession = SparkSession.builder()
+      .appName("Flight Data Loader App")
+      .master("local[*]")
+      .config("spark.sql.adaptive.enabled", "true")
+      .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+      .getOrCreate()
+
+    // Réduire les logs pour plus de clarté
+    spark.sparkContext.setLogLevel("WARN")
+
+    logger.info("--> FlightDelayPrediction App Starting ...")
+    val configuration = ConfigurationLoader.loadConfiguration(args)
+    logger.info("--> FlightDelayPrediction App Configuration "+ configuration.environment +" Loaded")
+
     try {
-      println("Starting Flight Delay Prediction Pipeline...")
-      
-      // 1. Data Loading
-      val flightData = FlightDataLoader.load(AppConfig.Data.flightDataPath)
-      val weatherData = WeatherDataLoader.load(AppConfig.Data.weatherDataPath)
-      
-      // 2. Data Joining
-      val joinedData = FlightWeatherJoiner.join(flightData, weatherData)
-      
-      // 3. Feature Extraction
-      val featuredData = FeatureExtractor.extract(joinedData)
-      
-      // 4. ML Pipeline
-      val pipeline = new MLPipeline()
-      val model = pipeline.train(featuredData)
-      
-      // 5. Model Evaluation
-      val results = pipeline.evaluate(model, featuredData)
-      
-      println("Pipeline completed successfully!")
-      results.show()
-      
+
+      FlightDataLoader.load(configuration) match {
+        case Success(flightData) if !flightData.isEmpty =>
+          logger.info(s"Données chargées: ${flightData.count()} lignes")
+
+          val processedFlightData = FlightDataPreprocessor.preprocess(flightData)
+
+          logger.info(s"Preprocessing terminé: ${processedFlightData.count()} lignes traitées")
+
+        // Continuer avec le processedFlightData...
+
+        case Success(flightData) =>
+          logger.warn("Dataset de vols vide après chargement")
+
+        case Failure(exception) =>
+          logger.error(s"Erreur lors du chargement des données: ${exception.getMessage}")
+          throw exception
+      }
+
+
+
+
     } catch {
       case ex: Exception =>
-        println(s"Error in pipeline: ${ex.getMessage}")
+        logger.error(s"Erreur dans l'application: ${ex.getMessage}")
         ex.printStackTrace()
     } finally {
       spark.stop()
+      logger.info("--> FlightDelayPrediction App Stopped ...")
     }
   }
 }

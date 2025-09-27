@@ -1,0 +1,10 @@
+# src/main/resources/lamsade-config.yml
+environment: "lamsade"
+data:
+  basePath: "/data"
+  flight :
+    path: "/data/FLIGHT-3Y/Flights/*.csv"
+  weather :
+    path : "/data/FLIGHT-3Y/Weather/*.csv"
+  airportMapping :
+    path : "/data/FLIGHT-3Y/wban*.csv"

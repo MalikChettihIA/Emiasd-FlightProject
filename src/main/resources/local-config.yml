@@ -1,0 +1,10 @@
+# src/main/resources/local-config.yml
+environment: "local"
+data:
+  basePath: "/data"
+  flight :
+    path: "/data/FLIGHT-3Y/Flights/*.csv"
+  weather :
+    path : "/data/FLIGHT-3Y/Weather/*.csv"
+  airportMapping :
+    path : "/data/FLIGHT-3Y/wban*.csv"

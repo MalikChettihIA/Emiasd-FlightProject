@@ -46,7 +46,7 @@ services:
     volumes:
       - ../work/data:/data
       - ../work/apps:/apps
-      - ../work/spark-tmp-1:/tmp/spark-local
+      - ../work/tmp/spark-tmp-1:/tmp/spark-local
     networks:
       - spark-network
 
@@ -70,7 +70,7 @@ services:
     volumes:
       - ../work/data:/data
       - ../work/apps:/apps
-      - ../work/spark-tmp-2:/tmp/spark-local
+      - ../work/tmp/spark-tmp-2:/tmp/spark-local
     networks:
       - spark-network
 
@@ -94,7 +94,7 @@ services:
     volumes:
       - ../work/data:/data
       - ../work/apps:/apps
-      - ../work/spark-tmp-3:/tmp/spark-local
+      - ../work/tmp/spark-tmp-3:/tmp/spark-local
     networks:
       - spark-network
 
@@ -118,7 +118,7 @@ services:
     volumes:
       - ../work/data:/data
       - ../work/apps:/apps
-      - ../work/spark-tmp-4:/tmp/spark-local
+      - ../work/tmp/spark-tmp-4:/tmp/spark-local
     networks:
       - spark-network
 

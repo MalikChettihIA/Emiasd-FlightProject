@@ -1,7 +1,9 @@
 package com.flightdelay.data.loaders
 
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
+
 import scala.util.Try
 
 /**
@@ -9,7 +11,15 @@ import scala.util.Try
  * @tparam T The type of domain object this loader produces
  */
 trait DataLoader[T] {
-  
+
+  /**
+   * Load and transform data into domain objects
+   * @param configuration The configuration of the application
+   * @param spark Implicit SparkSession
+   * @return DataFrame with properly typed domain objects
+   */
+  def load(configuration: AppConfiguration, validate: Boolean)(implicit spark: SparkSession): Try[DataFrame]
+
   /**
    * Load raw data from the specified path and return as DataFrame
    * @param path The path to the data source
@@ -17,24 +27,6 @@ trait DataLoader[T] {
    * @return DataFrame containing the raw data
    */
   def loadRaw(path: String)(implicit spark: SparkSession): Try[DataFrame]
-  
-  /**
-   * Load and transform data into domain objects
-   * @param path The path to the data source
-   * @param spark Implicit SparkSession
-   * @return DataFrame with properly typed domain objects
-   */
-  def load(path: String)(implicit spark: SparkSession): Try[DataFrame]
-  
-  /**
-   * Load data with additional filtering options
-   * @param path The path to the data source
-   * @param filters Map of column filters to apply
-   * @param spark Implicit SparkSession
-   * @return Filtered DataFrame
-   */
-  def loadWithFilters(path: String, filters: Map[String, Any])
-                     (implicit spark: SparkSession): Try[DataFrame]
   
   /**
    * Validate the loaded data structure
@@ -48,18 +40,6 @@ trait DataLoader[T] {
    * @return StructType representing the expected schema
    */
   def expectedSchema: StructType
-  
-  /**
-   * Clean and preprocess the raw data
-   * @param rawDf Raw DataFrame from data source
-   * @return Cleaned DataFrame
-   */
-  def cleanData(rawDf: DataFrame): DataFrame
-  
-  /**
-   * Get basic statistics about the loaded data
-   * @param df The DataFrame to analyze
-   * @return Map containing statistics
-   */
-  def getDataStatistics(df: DataFrame): Map[String, Any]
+
+
 }
