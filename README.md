@@ -38,10 +38,10 @@ Le projet utilise trois datasets principaux (https://www.dropbox.com/sh/iasq7frk
 ## Table des Matières
 
 - [Installation](docs/MD/1.installation_guide.md) - Guide complet d'installation et de configuration
-- [Architecture du Projet](doc/MD/2.Architecture_projet.md)
-- [Utilisation](#utilisation)
-- [Résultats](#résultats)
-- [Contribution](#contribution)
+- [Architecture du Projet](docs/MD/2.Architecture_projet.md) - Guide complet de l'architecture du projet
+- [Utilisation](#utilisation) - TO BE Done ...
+- [Résultats](#résultats) - TO BE Done ...
+- [Contribution](#contribution) - TO BE Done ...
 
 ## Démarrage Rapide
 
