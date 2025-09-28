@@ -33,26 +33,27 @@ object FlightDataGenerator extends DataPreprocessor {
     val withFlightFeatures = addFlightCharacteristics(withTemporalFeatures)
 
     // Étape 3: Ajout des indicateurs de période
-    val withPeriodIndicators = addPeriodIndicators(withFlightFeatures)
+    //val withPeriodIndicators = addPeriodIndicators(withFlightFeatures)
 
     // Étape 4: Ajout des caractéristiques géographiques
-    val withGeographicFeatures = addGeographicFeatures(withPeriodIndicators)
+    //val withGeographicFeatures = addGeographicFeatures(withPeriodIndicators)
 
     // Étape 5: Ajout des features agrégées
-    val withAggregatedFeatures = addAggregatedFeatures(withGeographicFeatures)
+    //val withAggregatedFeatures = addAggregatedFeatures(withGeographicFeatures)
 
     // Étape 6: Normalisation de certaines colonnes
-    val normalizedData = normalizeSelectedFeatures(withAggregatedFeatures)
+    //val normalizedData = normalizeSelectedFeatures(withAggregatedFeatures)
 
     // Résumé de l'enrichissement
-    logEnrichmentSummary(cleanedFlightData, normalizedData)
+    //logEnrichmentSummary(cleanedFlightData, normalizedData)
 
     println("--> [FlightDataGenerator] Flight Data Generator- End ...")
     println("----------------------------------------------------------------------------------------------------------")
     println("")
     println("")
-
-    normalizedData
+    
+    //normalizedData
+    withFlightFeatures
   }
 
   /**

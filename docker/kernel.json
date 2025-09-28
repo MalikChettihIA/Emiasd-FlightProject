@@ -15,7 +15,8 @@
     "PATH": "/usr/lib/jvm/java-1.11.0-openjdk-arm64/bin:/usr/share/scala/bin:/usr/local/spark/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "SPARK_MASTER": "spark://spark-master:7077",
     "PYTHONPATH": "/usr/local/spark/python/lib/pyspark.zip:/usr/local/spark/python/lib/py4j-*.zip",
-    "TOREE_SPARK_ARGS": "--master=spark://spark-master:7077 --driver-memory=1g --executor-memory=2g --executor-cores=2 --conf spark.sql.warehouse.dir=/tmp/hive --conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true --conf spark.serializer=org.apache.spark.serializer.KryoSerializer",
+    "SPARK_CLASSPATH": "/home/jovyan/work/apps/*",
+    "TOREE_SPARK_ARGS": "--master=spark://spark-master:7077 --driver-memory=1g --executor-memory=2g --executor-cores=2 --conf spark.sql.warehouse.dir=/tmp/hive --conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true --conf spark.serializer=org.apache.spark.serializer.KryoSerializer --jars /home/jovyan/work/apps/* --driver-class-path /home/jovyan/work/apps/* --conf spark.jars=/home/jovyan/work/apps/*",
     "CAPTURE_STANDARD_OUT": "true",
     "CAPTURE_STANDARD_ERR": "true"
   }
