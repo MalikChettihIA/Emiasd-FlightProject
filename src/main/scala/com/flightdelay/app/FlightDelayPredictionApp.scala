@@ -28,7 +28,7 @@ object FlightDelayPredictionApp {
 
     try {
 
-      val flightData = FlightDataLoader.load(configuration)
+      val flightData = FlightDataLoader.loadFromConfiguration(configuration)
       val processedFlightData = FlightPreprocessingPipeline.execute(flightData)
 
 

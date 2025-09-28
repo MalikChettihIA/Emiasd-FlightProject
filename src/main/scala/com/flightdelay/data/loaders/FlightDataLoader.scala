@@ -70,7 +70,19 @@ object FlightDataLoader extends DataLoader[Flight] {
    * @param spark Implicit SparkSession
    * @return Try[DataFrame] containing processed flight data
    */
-  override def load(configuration: AppConfiguration, validate: Boolean = false)(implicit spark: SparkSession): DataFrame = {
+  override def loadFromConfiguration(configuration: AppConfiguration, validate: Boolean = false)(implicit spark: SparkSession): DataFrame = {
+    val filePath = configuration.data.flight.path;
+    loadFromFilePath(filePath, validate)
+  }
+
+
+  /**
+   * Load flight data with full preprocessing and transformation
+   * @param configuration Configuration de l'application
+   * @param spark Implicit SparkSession
+   * @return Try[DataFrame] containing processed flight data
+   */
+  override def loadFromFilePath(filePath: String, validate: Boolean = false)(implicit spark: SparkSession): DataFrame = {
     println("")
     println("")
     println("----------------------------------------------------------------------------------------------------------")
@@ -82,7 +94,7 @@ object FlightDataLoader extends DataLoader[Flight] {
       .option("timestampFormat", DEFAULT_DATE_FORMAT)
       .option("multiline", "true")
       .option("escape", "\"")
-      .load(configuration.data.flight.path)
+      .load(filePath)
       .drop("_c12")
       .persist()
 
@@ -98,7 +110,6 @@ object FlightDataLoader extends DataLoader[Flight] {
     println("")
     rawDf
   }
-
 
   // ===========================================================================================
   // DATA VALIDATION AND CLEANING

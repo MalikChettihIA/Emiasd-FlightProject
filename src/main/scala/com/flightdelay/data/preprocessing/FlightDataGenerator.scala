@@ -61,6 +61,21 @@ object FlightDataGenerator extends DataPreprocessor {
   def addTemporalFeatures(df: DataFrame): DataFrame = {
     println("")
     println("Phase 1: Add Temporal Features")
+    println("- Add flight_timestamp")
+    println("- Add flight_year")
+    println("- Add flight_month")
+    println("- Add flight_quarter") // NOUVEAU
+    println("- Add flight_day_of_month")
+    println("- Add flight_day_of_week")
+    println("- Add flight_day_of_year")
+    println("- Add flight_week_of_year")
+    println("- Add departure_hour")
+    println("- Add departure_minute")
+    println("- Add departure_hour_decimal")
+    println("- Add departure_quarter_day")
+    println("- Add departure_quarter_name")
+    println("- Add departure_time_period")
+    println("- Add minutes_since_midnight")
 
     val columnExpressions = Map[String, Column](
       // Conversion de la date en timestamp
@@ -69,6 +84,19 @@ object FlightDataGenerator extends DataPreprocessor {
       // Extraction des composants temporels
       "flight_year" -> year(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")),
       "flight_month" -> month(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")),
+
+      // Trimestre de l'année (Q1, Q2, Q3, Q4)
+      "flight_quarter" -> when(month(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")).isin(1, 2, 3), 1)
+        .when(month(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")).isin(4, 5, 6), 2)
+        .when(month(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")).isin(7, 8, 9), 3)
+        .otherwise(4),
+
+      // Version textuelle du trimestre
+      "flight_quarter_name" -> when(month(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")).isin(1, 2, 3), "Q1")
+        .when(month(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")).isin(4, 5, 6), "Q2")
+        .when(month(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")).isin(7, 8, 9), "Q3")
+        .otherwise("Q4"),
+
       "flight_day_of_month" -> dayofmonth(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")),
       "flight_day_of_week" -> dayofweek(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")),
       "flight_day_of_year" -> dayofyear(to_timestamp(col("FL_DATE"), "yyyy-MM-dd")),
@@ -82,8 +110,27 @@ object FlightDataGenerator extends DataPreprocessor {
       "departure_hour_decimal" -> ((col("CRS_DEP_TIME") / lit(100)).cast(DoubleType) +
         ((col("CRS_DEP_TIME") % lit(100)).cast(DoubleType) / lit(60.0))),
 
-      // Quart de la journée (0-3 pour 6h, 12h, 18h, 24h)
-      "departure_quarter_day" -> ((col("CRS_DEP_TIME") / lit(100)) / lit(6)).cast(IntegerType),
+      // Quart de la journée (0-3 pour les 4 quarters de 6h)
+      "departure_quarter_day" -> when((col("CRS_DEP_TIME") / lit(100)) < lit(6), 0)
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(12), 1)
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(18), 2)
+        .otherwise(3),
+
+      // Nom du quarter pour lisibilité
+      "departure_quarter_name" -> when((col("CRS_DEP_TIME") / lit(100)) < lit(6), "Night")
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(12), "Morning")
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(18), "Afternoon")
+        .otherwise("Evening"),
+
+      // Période de temps plus granulaire (8 périodes de 3h)
+      "departure_time_period" -> when((col("CRS_DEP_TIME") / lit(100)) < lit(3), "Late_Night")
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(6), "Early_Morning")
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(9), "Morning")
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(12), "Late_Morning")
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(15), "Early_Afternoon")
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(18), "Late_Afternoon")
+        .when((col("CRS_DEP_TIME") / lit(100)) < lit(21), "Evening")
+        .otherwise("Night"),
 
       // Minutes depuis minuit
       "minutes_since_midnight" -> ((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)))
@@ -103,13 +150,13 @@ object FlightDataGenerator extends DataPreprocessor {
     println("")
     println("Phase 2: Add Flight Characteristics")
 
-    print("- Add flight_unique_id ")
-    print("- Add distance_category (short, medium, long, very_long) ")
-    print("- Add distance_score ")
-    print("- Add is_likely_domestic ")
-    print("- Add carrier_hash ")
-    print("- Add route_id ")
-    print("- Add is_roundtrip_candidate ")
+    println("- Add flight_unique_id ")
+    println("- Add distance_category (short, medium, long, very_long) ")
+    println("- Add distance_score ")
+    println("- Add is_likely_domestic ")
+    println("- Add carrier_hash ")
+    println("- Add route_id ")
+    println("- Add is_roundtrip_candidate ")
 
     val columnExpressions = Map(
       // Identifiant unique du vol
