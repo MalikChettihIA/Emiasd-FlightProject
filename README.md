@@ -1,92 +1,60 @@
-# Emiasd-FlightProject
+# Prédiction des Retards de Vols basée sur les Conditions Météorologiques
 
-## Env
-- Scala is 2.12.18
-- Java is 17.0.13
-- Spark is 3.5.5
+## Introduction
 
-## Env Installation
+Ce projet implémente un système de prédiction des retards de vols en utilisant Apache Spark et Scala, s'inspirant de l'article 
+académique "Using Scalable Data Mining for Predicting Flight Delays" (ACM TIST, 2016) 
+https://www.dropbox.com/s/4rqnjueuqi5e0uo/TIST-Flight-Delay-final.pdf. 
 
-Open a command windows and change directory to the root directory of then projetc.
-Make sure that scripts are executable. 
-```
-su chmod +x ./docker/setup.sh
-su chmod +x ./start-local-cluster.sh
-su chmod +x ./stop-local-cluster.sh
-su chmod +x ./run-on-docker.sh
-```
+L'objectif est de développer un modèle de Machine Learning capable de prédire avec précision les retards de vols causés 
+par les conditions météorologiques, en analysant à la fois les données historiques de vols et les observations météorologiques 
+aux aéroports d'origine et de destination.
 
-Build local Spark cluster using Docker
-```
-cd docker
-./setup.sh
-```
+Le système traite de manière scalable des datasets complexes en effectuant des jointures sophistiquées entre les données de 
+vols et les conditions météorologiques, en considérant plusieurs observations météorologiques jusqu'à 12 heures avant le 
+départ programmé. L'approche utilise Spark ML pour implémenter des algorithmes de classification (Random Forest et Decision Trees) 
+optimisés pour traiter des volumes importants de données en parallèle.
 
-Start and stop Cluster with:
-```
+L'objectif de performance visé est d'atteindre une précision de 85.8% et un recall de 86.9% pour la prédiction des retards 
+de plus de 60 minutes, reproduisant ainsi les résultats de l'étude de référence. Cette solution pourrait être intégrée 
+dans des systèmes de recommandation pour les passagers, les compagnies aériennes et les plateformes de réservation de vols, 
+permettant une meilleure gestion du trafic aérien et une optimisation des plannings.
+
+## Datasets
+
+Le projet utilise trois datasets principaux (https://www.dropbox.com/sh/iasq7frk6f58ptq/AAAzSmk6cusSNfqYNYsnLGIXa):
+
+- **Flights_samples.csv** : Données de vols avec informations sur les retards (1352 vols)
+- **Weather_samples.csv** : Observations météorologiques horaires détaillées (80 observations, 44 variables)
+- **wban_airport_timezone.csv** : Mapping entre aéroports et stations météorologiques (305 aéroports)
+
+## Technologies
+
+- **Scala 2.12.18** : Langage de programmation principal
+- **Apache Spark** : Framework de traitement Big Data
+- **Spark ML** : Bibliothèque de Machine Learning pour la modélisation
+- **MapReduce** : Paradigme pour le traitement parallèle des données
+
+## Table des Matières
+
+- [Installation](docs/MD/1.installation_guide.md) - Guide complet d'installation et de configuration
+- [Architecture du Projet](doc/MD/2.Architecture_projet.md)
+- [Utilisation](#utilisation)
+- [Résultats](#résultats)
+- [Contribution](#contribution)
+
+## Démarrage Rapide
+
+Pour commencer rapidement avec le projet :
+
+1. **📋 Prérequis** : Vérifiez que vous avez Scala 2.12.18, Java 17.0.13 et Spark 3.5.5
+2. **⚙️ Installation** : Suivez le [guide d'installation détaillé](INSTALLATION.md)
+3. **🚀 Exécution** : Lancez le cluster local et exécutez l'analyse
+
+```bash
+# Démarrage rapide pour l'environnement local
 ./start-local-cluster.sh
-./stop-local-cluster.sh
-```
-## Build and Run
-
-### On Local Docker Cluster
-Rebuild and submit the project on the local cluster:
-```
 ./run-on-docker.sh
 ```
 
-###  On Lamsade Cluster
-Avant tout copier votre fichier **id_ed25519_mchettih.key** à la racine du répertoire du projet.
-
-Dans un premier temps, envoyer les fichiers data et jar sur le serveur.
-Executer les commandes ci-dessous depuis le poste de développement.
-```
-sbt package
-scp -P 5022 -i id_ed25519_mchettih.key ./work/data/FLIGHT-3Y.zip mchettih@ssh.lamsade.dauphine.fr:~/workspace
-scp -P 5022 -i id_ed25519_mchettih.key ./work/apps/Emiasd-Flight-Data-Analysis.jar mchettih@ssh.lamsade.dauphine.fr:~/workspace
-```
-
-Se connecter au serveur en ssh pour dézipper et copier les donner dans le répertoire data 
-```
-ssh -p 5022 -i id_ed25519_mchettih.key mchettih@ssh.lamsade.dauphine.fr
-```
-Puis dans la session ssh sur le cluster lamsade
-```
-cp FLIGHT-3Y.zip ./data/
-cd ./data
-unzip FLIGHT-3Y.zip
-rm FLIGHT-3Y.zip
-
-hdfs dfs -mkdir -p /students/p6emiasd2025/mchettih/data/FLIGHT-3Y
-hdfs dfs -mkdir -p /students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Flights
-hdfs dfs -mkdir -p /students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Weather
-
-hdfs dfs -put data/FLIGHT-3Y/wban_airport_timezone.csv /students/p6emiasd2025/mchettih/data/FLIGHT-3Y
-hdfs dfs -put data/FLIGHT-3Y/Flights/* /students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Flights
-hdfs dfs -put data/FLIGHT-3Y/Weather/* /students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Weather
-
-```
-
-
-Pour executer l'application faire depuis la racine 
-```
-cd /opt/cephfs/users/students/p6emiasd2025/mchettih/workspace
-
-spark-submit \
-  --deploy-mode client \
-  --class com.flightdelay.app.FlightDelayPredictionApp \
-  --executor-cores 4 \
-  --executor-memory 2G \
-  --num-executors 1 \
-  Emiasd-Flight-Data-Analysis.jar \
-  lamsade
-  
-```
-
-
-## Jupyter Server
-Jupyter Lab is accessible on http://localhost:8888 once the local cluster is tarted.
-
-## Data 
-Data is stored on ./work/data/FLIGHT-3Y. Accessible from Jupyter notebooks and spark jobs in the local spark cluster.
-
+> 📖 **Guide Complet** : Pour une installation détaillée sur cluster local ou Lamsade, consultez [INSTALLATION.md](INSTALLATION.md)

@@ -559,3 +559,4 @@ target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightLabelGenerato
 target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightLabelGenerator.class
 target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightPreprocessingPipeline$.class
 target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightPreprocessingPipeline.class
+target/scala-2.12/classes/logback.xml
