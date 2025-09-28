@@ -18,28 +18,6 @@ trait DataLoader[T] {
    * @param spark Implicit SparkSession
    * @return DataFrame with properly typed domain objects
    */
-  def load(configuration: AppConfiguration, validate: Boolean)(implicit spark: SparkSession): Try[DataFrame]
-
-  /**
-   * Load raw data from the specified path and return as DataFrame
-   * @param path The path to the data source
-   * @param spark Implicit SparkSession
-   * @return DataFrame containing the raw data
-   */
-  def loadRaw(path: String)(implicit spark: SparkSession): Try[DataFrame]
-  
-  /**
-   * Validate the loaded data structure
-   * @param df The DataFrame to validate
-   * @return True if data structure is valid
-   */
-  def validateSchema(df: DataFrame): Boolean
-  
-  /**
-   * Get the expected schema for this data type
-   * @return StructType representing the expected schema
-   */
-  def expectedSchema: StructType
-
+  def load(configuration: AppConfiguration, validate: Boolean)(implicit spark: SparkSession): DataFrame
 
 }

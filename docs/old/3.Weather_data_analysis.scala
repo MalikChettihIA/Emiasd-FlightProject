@@ -312,9 +312,9 @@ display(weather_original_metadata.orderBy($"name".asc))
 
 // COMMAND ----------
 
-print("Total records count without dropping duplicates:", weather_original_data.count())
+println("Total records count without dropping duplicates:", weather_original_data.count())
 val weather_data = weather_original_data.dropDuplicates()
-print("Total records count after dropping duplicates:", weather_data.count())
+println("Total records count after dropping duplicates:", weather_data.count())
 
 // COMMAND ----------
 

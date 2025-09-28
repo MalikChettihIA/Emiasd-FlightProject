@@ -551,3 +551,11 @@ project/target/config-classes/$cb2e4f53c68ac8415e38.cache
 project/target/config-classes/$cb2e4f53c68ac8415e38.class
 work/notebooks/.ipynb_checkpoints/FlightDataLoader_TestCase-checkpoint.ipynb
 work/data/FLIGHT-3Y.zip
+target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightDataCleaner$.class
+target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightDataCleaner.class
+target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightDataGenerator$.class
+target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightDataGenerator.class
+target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightLabelGenerator$.class
+target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightLabelGenerator.class
+target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightPreprocessingPipeline$.class
+target/scala-2.12/classes/com/flightdelay/data/preprocessing/FlightPreprocessingPipeline.class

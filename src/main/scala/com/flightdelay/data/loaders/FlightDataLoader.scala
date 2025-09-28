@@ -45,7 +45,7 @@ object FlightDataLoader extends DataLoader[Flight] {
   // SCHEMA DEFINITION
   // ===========================================================================================
 
-  override def expectedSchema: StructType = StructType(Array(
+  private def expectedSchema: StructType = StructType(Array(
     StructField("FL_DATE", StringType, nullable = false),
     StructField("OP_CARRIER_AIRLINE_ID", IntegerType, nullable = false),
     StructField("OP_CARRIER_FL_NUM", IntegerType, nullable = false),
@@ -65,42 +65,38 @@ object FlightDataLoader extends DataLoader[Flight] {
   // ===========================================================================================
 
   /**
-   * Load raw flight data from CSV files
-   * @param path Path to flight data files (can be directory or specific file)
-   * @param spark Implicit SparkSession
-   * @return Try[DataFrame] containing raw flight data
-   */
-  override def loadRaw(path: String)(implicit spark: SparkSession): Try[DataFrame] = {
-    Try {
-      spark.read.format("csv")
-        .option("header", "true")
-        .option("inferSchema", "true")
-        .option("timestampFormat", DEFAULT_DATE_FORMAT)
-        .option("multiline", "true")
-        .option("escape", "\"")
-        .load(path)
-        .drop("_c12")
-        .persist()
-    }.recoverWith {
-      case ex: Exception =>
-        println(s"Failed to load raw flight data from $path: ${ex.getMessage}")
-        Failure(ex)
-    }
-  }
-
-  /**
    * Load flight data with full preprocessing and transformation
    * @param configuration Configuration de l'application
    * @param spark Implicit SparkSession
    * @return Try[DataFrame] containing processed flight data
    */
-  override def load(configuration: AppConfiguration, validate: Boolean = false)(implicit spark: SparkSession): Try[DataFrame] = {
-    println("--> Flight Data Loading ...")
-    for {
-      rawDf <- loadRaw(configuration.data.flight.path)
-      //if validate
-      //  _ = if (!validateSchema(rawDf)) throw new IllegalStateException("Schema validation failed")
-    } yield rawDf
+  override def load(configuration: AppConfiguration, validate: Boolean = false)(implicit spark: SparkSession): DataFrame = {
+    println("")
+    println("")
+    println("----------------------------------------------------------------------------------------------------------")
+    println("--> [FlightDataLoader] Flight Data Loading - Start ...")
+
+    val rawDf = spark.read.format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .option("timestampFormat", DEFAULT_DATE_FORMAT)
+      .option("multiline", "true")
+      .option("escape", "\"")
+      .load(configuration.data.flight.path)
+      .drop("_c12")
+      .persist()
+
+    println("--> "+rawDf.count+" loaded ...")
+    rawDf.printSchema
+    rawDf.show(10)
+
+    if (validate && (!validateSchema(rawDf)))
+      println("Schema validation failed")
+    println("--> [FlightDataLoader] Flight Data Loading - End ...")
+    println("----------------------------------------------------------------------------------------------------------")
+    println("")
+    println("")
+    rawDf
   }
 
 
@@ -113,7 +109,7 @@ object FlightDataLoader extends DataLoader[Flight] {
    * @param df DataFrame to validate
    * @return Boolean indicating if schema is valid
    */
-  override def validateSchema(df: DataFrame): Boolean = {
+  private def validateSchema(df: DataFrame): Boolean = {
     val requiredColumns = Set(
         "FL_DATE",
         "OP_CARRIER_AIRLINE_ID",

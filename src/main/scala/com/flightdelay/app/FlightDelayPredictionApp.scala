@@ -1,7 +1,7 @@
 package com.flightdelay.app
 
 import com.flightdelay.config.ConfigurationLoader
-import com.flightdelay.data.preprocessing.FlightDataPreprocessor
+import com.flightdelay.data.preprocessing.FlightPreprocessingPipeline
 import com.flightdelay.data.loaders.FlightDataLoader
 import org.apache.spark.sql.SparkSession
 import org.slf4j.LoggerFactory
@@ -28,24 +28,8 @@ object FlightDelayPredictionApp {
 
     try {
 
-      FlightDataLoader.load(configuration) match {
-        case Success(flightData) if !flightData.isEmpty =>
-          println(s"Donnees chargees: ${flightData.count()} lignes")
-
-          val processedFlightData = FlightDataPreprocessor.preprocess(flightData)
-
-          println(s"Preprocessing termine: ${processedFlightData.count()} lignes traitees")
-
-        // Continuer avec le processedFlightData...
-
-        case Success(flightData) =>
-          println("Dataset de vols vide après chargement")
-
-        case Failure(exception) =>
-          println(s"Erreur lors du chargement des données: ${exception.getMessage}")
-          throw exception
-      }
-
+      val flightData = FlightDataLoader.load(configuration)
+      val processedFlightData = FlightPreprocessingPipeline.execute(flightData)
 
 
 

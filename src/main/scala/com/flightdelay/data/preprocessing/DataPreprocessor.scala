@@ -3,15 +3,12 @@ package com.flightdelay.data.preprocessing
 import org.apache.spark.sql.{DataFrame, SparkSession, Column}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.log4j.Logger
 
 /**
  * Classe abstraite définissant l'interface commune pour le preprocessing des données.
  *
  */
 abstract class DataPreprocessor {
-
-  protected val logger: Logger = Logger.getLogger(this.getClass)
 
   /**
    * Méthode principale de preprocessing
@@ -28,15 +25,12 @@ abstract class DataPreprocessor {
    * @return DataFrame sans doublons
    */
   protected def removeDuplicates(df: DataFrame, columns: Seq[String] = Seq.empty): DataFrame = {
-    logger.info(s"Suppression des doublons. Nombre de lignes avant: ${df.count()}")
-
     val result = if (columns.nonEmpty) {
       df.dropDuplicates(columns)
     } else {
       df.dropDuplicates()
     }
 
-    logger.info(s"Nombre de lignes après suppression des doublons: ${result.count()}")
     result
   }
 
@@ -47,14 +41,11 @@ abstract class DataPreprocessor {
    * @return DataFrame filtré
    */
   protected def removeNullValues(df: DataFrame, columns: Seq[String]): DataFrame = {
-    logger.info(s"Suppression des valeurs nulles pour les colonnes: ${columns.mkString(", ")}")
-    logger.info(s"Nombre de lignes avant: ${df.count()}")
 
     val result = columns.foldLeft(df) { (acc, columnName) =>
       acc.filter(col(columnName).isNotNull)
     }
 
-    logger.info(s"Nombre de lignes après suppression des nulls: ${result.count()}")
     result
   }
 
@@ -65,14 +56,14 @@ abstract class DataPreprocessor {
    * @return DataFrame filtré
    */
   protected def removeSpecificValues(df: DataFrame, exclusions: Map[String, Seq[Any]]): DataFrame = {
-    logger.info(s"Suppression des valeurs spécifiques: $exclusions")
-    logger.info(s"Nombre de lignes avant: ${df.count()}")
+    println(s"Suppression des valeurs spécifiques: $exclusions")
+    println(s"Nombre de lignes avant: ${df.count()}")
 
     val result = exclusions.foldLeft(df) { case (acc, (colName, values)) =>
       acc.filter(!col(colName).isin(values: _*))
     }
 
-    logger.info(s"Nombre de lignes après suppression des valeurs spécifiques: ${result.count()}")
+    println(s"Nombre de lignes après suppression des valeurs spécifiques: ${result.count()}")
     result
   }
 
@@ -83,13 +74,13 @@ abstract class DataPreprocessor {
    * @return DataFrame avec les types convertis
    */
   protected def convertDataTypes(df: DataFrame, typeMapping: Map[String, DataType]): DataFrame = {
-    logger.info(s"Conversion des types de données: ${typeMapping.keys.mkString(", ")}")
+    println(s"Conversion des types de données: ${typeMapping.keys.mkString(", ")}")
 
     typeMapping.foldLeft(df) { case (acc, (colName, dataType)) =>
       if (acc.columns.contains(colName)) {
         acc.withColumn(colName, col(colName).cast(dataType))
       } else {
-        logger.warn(s"Colonne '$colName' introuvable pour conversion de type")
+        println(s"Colonne '$colName' introuvable pour conversion de type")
         acc
       }
     }
@@ -102,7 +93,7 @@ abstract class DataPreprocessor {
    * @return DataFrame avec les nouvelles colonnes
    */
   protected def addCalculatedColumns(df: DataFrame, columnExpressions: Map[String, Column]): DataFrame = {
-    logger.info(s"Ajout de colonnes calculées: ${columnExpressions.keys.mkString(", ")}")
+    println(s"Ajout de colonnes calculées: ${columnExpressions.keys.mkString(", ")}")
 
     columnExpressions.foldLeft(df) { case (acc, (colName, expression)) =>
       acc.withColumn(colName, expression)
@@ -116,7 +107,7 @@ abstract class DataPreprocessor {
    * @return DataFrame avec colonnes normalisées
    */
   protected def normalizeColumns(df: DataFrame, columns: Seq[String]): DataFrame = {
-    logger.info(s"Normalisation des colonnes: ${columns.mkString(", ")}")
+    println(s"Normalisation des colonnes: ${columns.mkString(", ")}")
 
     columns.foldLeft(df) { (acc, colName) =>
       if (acc.columns.contains(colName)) {
@@ -128,11 +119,11 @@ abstract class DataPreprocessor {
         if (stddevVal > 0) {
           acc.withColumn(s"${colName}_normalized", (col(colName) - meanVal) / stddevVal)
         } else {
-          logger.warn(s"Écart-type nul pour la colonne '$colName', normalisation ignorée")
+          println(s"Écart-type nul pour la colonne '$colName', normalisation ignorée")
           acc
         }
       } else {
-        logger.warn(s"Colonne '$colName' introuvable pour normalisation")
+        println(s"Colonne '$colName' introuvable pour normalisation")
         acc
       }
     }
@@ -146,8 +137,8 @@ abstract class DataPreprocessor {
    * @return DataFrame sans outliers
    */
   protected def removeOutliers(df: DataFrame, columns: Seq[String], factor: Double = 1.5): DataFrame = {
-    logger.info(s"Suppression des outliers pour les colonnes: ${columns.mkString(", ")}")
-    logger.info(s"Nombre de lignes avant: ${df.count()}")
+    println(s"Suppression des outliers pour les colonnes: ${columns.mkString(", ")}")
+    println(s"Nombre de lignes avant: ${df.count()}")
 
     val result = columns.foldLeft(df) { (acc, colName) =>
       if (acc.columns.contains(colName)) {
@@ -160,12 +151,12 @@ abstract class DataPreprocessor {
 
         acc.filter(col(colName) >= lowerBound && col(colName) <= upperBound)
       } else {
-        logger.warn(s"Colonne '$colName' introuvable pour suppression des outliers")
+        println(s"Colonne '$colName' introuvable pour suppression des outliers")
         acc
       }
     }
 
-    logger.info(s"Nombre de lignes après suppression des outliers: ${result.count()}")
+    println(s"Nombre de lignes après suppression des outliers: ${result.count()}")
     result
   }
 
@@ -176,23 +167,23 @@ abstract class DataPreprocessor {
    * @return Boolean indiquant si les données sont valides
    */
   protected def validateDataQuality(df: DataFrame, requiredColumns: Seq[String]): Boolean = {
-    logger.info("Validation de la qualité des données...")
+    println("Validation de la qualité des données...")
 
     // Vérifier la présence des colonnes requises
     val missingColumns = requiredColumns.filterNot(df.columns.contains)
     if (missingColumns.nonEmpty) {
-      logger.error(s"Colonnes manquantes: ${missingColumns.mkString(", ")}")
+      println(s"Colonnes manquantes: ${missingColumns.mkString(", ")}")
       return false
     }
 
     // Vérifier que le DataFrame n'est pas vide
     val rowCount = df.count()
     if (rowCount == 0) {
-      logger.error("Le DataFrame est vide après preprocessing")
+      println("Le DataFrame est vide après preprocessing")
       return false
     }
 
-    logger.info(s"Validation réussie. Nombre de lignes: $rowCount, Nombre de colonnes: ${df.columns.length}")
+    println(s"Validation réussie. Nombre de lignes: $rowCount, Nombre de colonnes: ${df.columns.length}")
     true
   }
 
@@ -206,11 +197,11 @@ abstract class DataPreprocessor {
     val processedCount = processedDf.count()
     val reductionPercent = ((originalCount - processedCount).toDouble / originalCount * 100).round
 
-    logger.info("=== RÉSUMÉ DU PREPROCESSING ===")
-    logger.info(s"Lignes originales: $originalCount")
-    logger.info(s"Lignes après preprocessing: $processedCount")
-    logger.info(s"Réduction: $reductionPercent%")
-    logger.info(s"Colonnes originales: ${originalDf.columns.length}")
-    logger.info(s"Colonnes après preprocessing: ${processedDf.columns.length}")
+    println("=== RÉSUMÉ DU PREPROCESSING ===")
+    println(s"Lignes originales: $originalCount")
+    println(s"Lignes après preprocessing: $processedCount")
+    println(s"Réduction: $reductionPercent%")
+    println(s"Colonnes originales: ${originalDf.columns.length}")
+    println(s"Colonnes après preprocessing: ${processedDf.columns.length}")
   }
 }

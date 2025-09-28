@@ -225,9 +225,9 @@ display(flights_original_data.describe())
 
 // COMMAND ----------
 
-print("Total records count without dropping duplicates:", flights_data.count())
+println("Total records count without dropping duplicates:", flights_data.count())
 val flights_data = flights_data.dropDuplicates()
-print("Total records count after dropping duplicates:", flights_data.count())
+println("Total records count after dropping duplicates:", flights_data.count())
 
 // COMMAND ----------
 
