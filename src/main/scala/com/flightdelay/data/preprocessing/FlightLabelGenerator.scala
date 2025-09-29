@@ -25,7 +25,11 @@ object FlightLabelGenerator extends DataPreprocessor {
    * @return DataFrame avec tous les labels de classification
    */
   override def preprocess(enrichedFlightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    println("=== DÉMARRAGE DE LA GÉNÉRATION DES LABELS ===")
+    println("")
+    println("")
+    println("----------------------------------------------------------------------------------------------------------")
+    println("--> [FlightLabelGenerator] Flight Label Generator - Start ...")
+    println("----------------------------------------------------------------------------------------------------------")
 
     // Vérifier que les colonnes de retard nécessaires sont présentes
     validateRequiredColumns(enrichedFlightData)
@@ -48,7 +52,12 @@ object FlightLabelGenerator extends DataPreprocessor {
     // Étape 6: Validation et statistiques finales
     val finalData = validateAndLogLabelStatistics(withCompositeLabels)
 
-    println("=== GÉNÉRATION DES LABELS TERMINÉE ===")
+    println("")
+    println("--> [FlightDataGenerator] Flight Data Generator- End ...")
+    println("----------------------------------------------------------------------------------------------------------")
+    println("")
+    println("")
+
     finalData
   }
 
@@ -56,6 +65,10 @@ object FlightLabelGenerator extends DataPreprocessor {
    * Valide que les colonnes nécessaires sont présentes
    */
   private def validateRequiredColumns(df: DataFrame): Unit = {
+
+    println("")
+    println("Phase 1: Validate Required Columns")
+
     val requiredColumns = Seq("ARR_DELAY_NEW", "WEATHER_DELAY", "NAS_DELAY")
     val missingColumns = requiredColumns.filterNot(df.columns.contains)
 
@@ -64,14 +77,15 @@ object FlightLabelGenerator extends DataPreprocessor {
       throw new RuntimeException(s"Colonnes requises manquantes: ${missingColumns.mkString(", ")}")
     }
 
-    println("Validation des colonnes requises: OK")
+    println("- Validation of required columns: OK")
   }
 
   /**
    * Gestion des valeurs manquantes pour les colonnes de retard
    */
   private def handleDelayMissingValues(df: DataFrame): DataFrame = {
-    println("Gestion des valeurs manquantes pour les retards")
+    println("")
+    println("Phase 2: Handling missing values for delays")
 
     val columnExpressions = Map(
       // Remplacer les valeurs nulles par 0 (interprétées comme "pas de retard de ce type")
@@ -92,7 +106,20 @@ object FlightLabelGenerator extends DataPreprocessor {
    * Ajoute les labels de base pour différents seuils de retard
    */
   private def addBasicDelayLabels(df: DataFrame): DataFrame = {
-    println("Ajout des labels de base pour différents seuils")
+    println("")
+    println("Phase 2: Adding basic labels for different thresholds")
+    println("- Add is_delayed_15min")
+    println("- Add is_delayed_30min")
+    println("- Add is_delayed_45min")
+    println("- Add is_delayed_60min")
+    println("- Add is_delayed_90min")
+    println("- Add has_weather_delay")
+    println("- Add has_nas_delay")
+    println("- Add has_any_weather_nas_delay")
+    println("- Add total_weather_nas_delay")
+    println("- Add is_on_time")
+    println("- Add is_early")
+
 
     val columnExpressions = Map[String, Column](
       // Labels binaires pour différents seuils (selon article TIST)
@@ -125,6 +152,21 @@ object FlightLabelGenerator extends DataPreprocessor {
    * Implémente exactement les définitions de l'article
    */
   private def addTISTStrategyLabels(df: DataFrame): DataFrame = {
+    println("")
+    println("Phase 3: Adding labels according to TIST strategies (D1, D2, D3, D4)")
+    println("- Add label_d1_15min")
+    println("- Add label_d1_60min")
+    println("- Add label_d2_15min")
+    println("- Add label_d2_60min")
+    println("- Add label_d3_15min")
+    println("- Add label_d3_60min")
+    println("- Add label_d4_15min")
+    println("- Add label_d4_60min")
+    println("- Add label_d1_30min")
+    println("- Add label_d2_30min")
+    println("- Add label_d3_30min")
+    println("- Add label_d4_30min")
+
     println("Ajout des labels selon les stratégies TIST (D1, D2, D3, D4)")
 
     val columnExpressions = Map(
@@ -191,7 +233,14 @@ object FlightLabelGenerator extends DataPreprocessor {
    * Ajoute les labels de sévérité et catégories de retard
    */
   private def addSeverityLabels(df: DataFrame): DataFrame = {
-    println("Ajout des labels de sévérité et catégories")
+    println("")
+    println("Phase 4: Adding severity labels and categories")
+    println("- Add delay_category")
+    println("- Add delay_severity_score")
+    println("- Add weather_delay_category")
+    println("- Add nas_delay_category")
+    println("- Add weather_dominance_score")
+    println("- Add dominant_delay_type")
 
     val columnExpressions = Map(
       // Catégories de retard selon la sévérité
@@ -236,7 +285,14 @@ object FlightLabelGenerator extends DataPreprocessor {
    * Ajoute des labels composites et d'interaction
    */
   private def addCompositeLabels(df: DataFrame): DataFrame = {
-    println("Ajout des labels composites et d'interaction")
+    println("")
+    println("Phase 5: Adding composite and interaction labels")
+    println("- Add tist_strategy_15min")
+    println("- Add weather_risk_label")
+    println("- Add balanced_15min_candidate")
+    println("- Add predictable_delay_15min")
+    println("- Add temporal_split_group")
+
 
     val columnExpressions = Map(
       // Labels composites pour ML multi-classe
@@ -279,7 +335,8 @@ object FlightLabelGenerator extends DataPreprocessor {
    * Valide les labels générés et affiche des statistiques détaillées
    */
   private def validateAndLogLabelStatistics(df: DataFrame): DataFrame = {
-    println("Validation et statistiques des labels générés")
+    println("")
+    println("Phase 6: Validate And Log Label Statistics")
 
     val totalFlights = df.count()
 
@@ -289,12 +346,11 @@ object FlightLabelGenerator extends DataPreprocessor {
     val weatherDelayStats = df.filter(col("has_weather_delay") === 1).count()
     val nasDelayStats = df.filter(col("has_nas_delay") === 1).count()
 
-    println("=== STATISTIQUES DES LABELS GÉNÉRÉS ===")
-    println(s"Total des vols: $totalFlights")
-    println(s"Retards ≥15min: $delayed15Stats (${(delayed15Stats.toDouble/totalFlights*100).round}%)")
-    println(s"Retards ≥60min: $delayed60Stats (${(delayed60Stats.toDouble/totalFlights*100).round}%)")
-    println(s"Retards météo: $weatherDelayStats (${(weatherDelayStats.toDouble/totalFlights*100).round}%)")
-    println(s"Retards NAS: $nasDelayStats (${(nasDelayStats.toDouble/totalFlights*100).round}%)")
+    println(s"- Total of Flights: $totalFlights")
+    println(s"- Delay ≥15min: $delayed15Stats (${(delayed15Stats.toDouble/totalFlights*100).round}%)")
+    println(s"- Delay ≥60min: $delayed60Stats (${(delayed60Stats.toDouble/totalFlights*100).round}%)")
+    println(s"- Delay météo: $weatherDelayStats (${(weatherDelayStats.toDouble/totalFlights*100).round}%)")
+    println(s"- Delay NAS: $nasDelayStats (${(nasDelayStats.toDouble/totalFlights*100).round}%)")
 
     // Statistiques des stratégies TIST
     logTISTStrategyStatistics(df, totalFlights)
@@ -309,7 +365,8 @@ object FlightLabelGenerator extends DataPreprocessor {
    * Affiche les statistiques détaillées des stratégies TIST
    */
   private def logTISTStrategyStatistics(df: DataFrame, totalFlights: Long): Unit = {
-    println("=== STATISTIQUES DES STRATÉGIES TIST ===")
+    println("")
+    println("Phase 7: Log TIST Strategy Statistics")
 
     val strategies = Seq("d1", "d2", "d3", "d4")
     val thresholds = Seq("15min", "60min")
@@ -319,12 +376,14 @@ object FlightLabelGenerator extends DataPreprocessor {
       if (df.columns.contains(colName)) {
         val count = df.filter(col(colName) === 1).count()
         val percentage = (count.toDouble / totalFlights * 100).round
-        println(s"Stratégie ${strategy.toUpperCase} ($threshold): $count vols ($percentage%)")
+        println(s"Strategy ${strategy.toUpperCase} ($threshold): $count vols ($percentage%)")
       }
     }
 
     // Analyse de la distribution par catégorie
-    println("=== DISTRIBUTION PAR CATÉGORIE DE RETARD ===")
+    println("")
+    println("Phase 8: Log Distribution by delay category")
+
     val categoryStats = df.groupBy("delay_category").count().collect()
     categoryStats.foreach { row =>
       val category = row.getString(0)
@@ -338,7 +397,8 @@ object FlightLabelGenerator extends DataPreprocessor {
    * Valide la cohérence logique des labels générés
    */
   private def validateLabelConsistency(df: DataFrame): Unit = {
-    println("Validation de la cohérence des labels")
+    println("")
+    println("Phase 9: Validate Label Consistency")
 
     // Vérification 1: D1 ⊆ D2 ⊆ D3
     val d1Count = df.filter(col("label_d1_15min") === 1).count()
@@ -346,10 +406,10 @@ object FlightLabelGenerator extends DataPreprocessor {
     val d3Count = df.filter(col("label_d3_15min") === 1).count()
 
     if (d1Count > d2Count || d2Count > d3Count) {
-      println("Incohérence dans la hiérarchie D1 ⊆ D2 ⊆ D3")
+      println("Inconsistency in the hierarchy D1 ⊆ D2 ⊆ D3")
     }
 
-    println("Validation de cohérence terminée")
+    println("Consistency validation completed")
   }
 
   /**

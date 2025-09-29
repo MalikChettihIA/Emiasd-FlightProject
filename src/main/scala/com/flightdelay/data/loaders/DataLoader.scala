@@ -18,7 +18,7 @@ trait DataLoader[T] {
    * @param spark Implicit SparkSession
    * @return DataFrame with properly typed domain objects
    */
-  def loadFromConfiguration(configuration: AppConfiguration, validate: Boolean)(implicit spark: SparkSession): DataFrame
+  def loadFromConfiguration(validate: Boolean = false)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame
 
   /**
    * Load and transform data into domain objects

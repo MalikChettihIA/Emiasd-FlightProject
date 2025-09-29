@@ -23,6 +23,7 @@ object FlightDataCleaner extends DataPreprocessor {
     println("")
     println("----------------------------------------------------------------------------------------------------------")
     println("--> [FlightDataCleaner] Flight Data Cleaner - Start ...")
+    println("----------------------------------------------------------------------------------------------------------")
 
     val originalCount = rawFlightData.count()
     println(s"Data Original Count: $originalCount")

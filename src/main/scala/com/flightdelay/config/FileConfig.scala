@@ -1,5 +1,5 @@
 package com.flightdelay.config
 
-case class DataFileConfig(
+case class FileConfig(
   path: String
 )

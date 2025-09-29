@@ -22,6 +22,7 @@ object FlightDataGenerator extends DataPreprocessor {
     println("")
     println("----------------------------------------------------------------------------------------------------------")
     println("--> [FlightDataGenerator] Flight Data Generator - Start ...")
+    println("----------------------------------------------------------------------------------------------------------")
 
     val originalColumns = cleanedFlightData.columns.length
     println(s"Original Column Counts: $originalColumns")
@@ -33,27 +34,28 @@ object FlightDataGenerator extends DataPreprocessor {
     val withFlightFeatures = addFlightCharacteristics(withTemporalFeatures)
 
     // Étape 3: Ajout des indicateurs de période
-    //val withPeriodIndicators = addPeriodIndicators(withFlightFeatures)
+    val withPeriodIndicators = addPeriodIndicators(withFlightFeatures)
 
     // Étape 4: Ajout des caractéristiques géographiques
-    //val withGeographicFeatures = addGeographicFeatures(withPeriodIndicators)
+    val withGeographicFeatures = addGeographicFeatures(withPeriodIndicators)
 
     // Étape 5: Ajout des features agrégées
-    //val withAggregatedFeatures = addAggregatedFeatures(withGeographicFeatures)
+    val withAggregatedFeatures = addAggregatedFeatures(withGeographicFeatures)
 
     // Étape 6: Normalisation de certaines colonnes
-    //val normalizedData = normalizeSelectedFeatures(withAggregatedFeatures)
+    val normalizedData = normalizeSelectedFeatures(withAggregatedFeatures)
 
     // Résumé de l'enrichissement
-    //logEnrichmentSummary(cleanedFlightData, normalizedData)
+    logEnrichmentSummary(cleanedFlightData, normalizedData)
 
+    println("")
     println("--> [FlightDataGenerator] Flight Data Generator- End ...")
     println("----------------------------------------------------------------------------------------------------------")
     println("")
     println("")
-    
-    //normalizedData
-    withFlightFeatures
+
+    normalizedData
+
   }
 
   /**
@@ -140,7 +142,6 @@ object FlightDataGenerator extends DataPreprocessor {
     val result = addCalculatedColumns(df, columnExpressions)
     println(s"Temporal features added: ${columnExpressions.size}")
     result.printSchema
-    result.show(10)
     result
   }
 
@@ -197,9 +198,6 @@ object FlightDataGenerator extends DataPreprocessor {
 
     val result = addCalculatedColumns(df, columnExpressions)
     println(s"Added Flight features: ${columnExpressions.size}")
-
-    result.printSchema
-    result.show(10)
     result
   }
 
@@ -207,7 +205,21 @@ object FlightDataGenerator extends DataPreprocessor {
    * Ajoute les indicateurs de période (rush hours, week-end, saisons, etc.)
    */
   def addPeriodIndicators(df: DataFrame): DataFrame = {
-    println("Ajout des indicateurs de période")
+
+    println("")
+    println("Phase 3: Add Period <indicator")
+
+    println("- Add is_weekend, is_friday, is_monday")
+    println("- Add is_summer, is_winter, is_spring, is_fall ")
+    println("- Add is_holiday_season (approximative)")
+    println("- Add is_early_morning ")
+    println("- Add is_morning_rush ")
+    println("- Add is_business_hours ")
+    println("- Add is_evening_rush ")
+    println("- Add is_night_flight ")
+    println("- Add is_month_start ")
+    println("- Add is_month_end ")
+    println("- Add is_extended_weekend ")
 
     val columnExpressions = Map(
       // Indicateurs de fin de semaine
@@ -250,7 +262,7 @@ object FlightDataGenerator extends DataPreprocessor {
     )
 
     val result = addCalculatedColumns(df, columnExpressions)
-    println(s"Indicateurs de période ajoutés: ${columnExpressions.size}")
+    println(s"Added Flight features: ${columnExpressions.size}")
     result
   }
 
@@ -258,9 +270,22 @@ object FlightDataGenerator extends DataPreprocessor {
    * Ajoute les caractéristiques géographiques et de réseau
    */
   def addGeographicFeatures(df: DataFrame): DataFrame = {
-    println("Ajout des caractéristiques géographiques")
+    println("")
+    println("Phase 4: Add Geographical Features")
 
-    val columnExpressions = Map(
+    println("- Add origin_is_major_hub (10397, 11298, 12266, 13930, 14107, 14771, 15016  // Principaux hubs US)")
+    println("- Add dest_is_major_hub  (10397, 11298, 12266, 13930, 14107, 14771, 15016  // Principaux hubs US)")
+    println("- Add is_hub_to_hub")
+    println("- Add flight_quarter") // NOUVEAU
+    println("- Add origin_complexity_score")
+    println("- Add dest_complexity_score")
+    println("- Add timezone_diff_proxy")
+    println("- Add flight_week_of_year")
+    println("- Add is_eastbound")
+    println("- Add is_westbound")
+
+
+    val columnExpressions1 = Map(
       // Indicateurs de hub (aéroports avec beaucoup de trafic)
       "origin_is_major_hub" -> when(
         col("ORIGIN_AIRPORT_ID").isin(
@@ -272,11 +297,6 @@ object FlightDataGenerator extends DataPreprocessor {
         col("DEST_AIRPORT_ID").isin(
           10397, 11298, 12266, 13930, 14107, 14771, 15016
         ), 1
-      ).otherwise(0),
-
-      // Indicateur de vol hub-to-hub
-      "is_hub_to_hub" -> when(
-        col("origin_is_major_hub") === 1 && col("dest_is_major_hub") === 1, 1
       ).otherwise(0),
 
       // Score de complexité de l'aéroport (proxy basé sur l'ID)
@@ -293,16 +313,33 @@ object FlightDataGenerator extends DataPreprocessor {
       "is_westbound" -> when(col("ORIGIN_AIRPORT_ID") > col("DEST_AIRPORT_ID"), 1).otherwise(0)
     )
 
-    val result = addCalculatedColumns(df, columnExpressions)
-    println(s"Caractéristiques géographiques ajoutées: ${columnExpressions.size}")
-    result
+    val columnExpressions2 = Map(
+      // Indicateur de vol hub-to-hub
+      "is_hub_to_hub" -> when(
+        col("origin_is_major_hub") === 1 && col("dest_is_major_hub") === 1, 1
+      ).otherwise(0)
+    )
+
+    val result1 = addCalculatedColumns(df, columnExpressions1)
+    val result2 = addCalculatedColumns(result1, columnExpressions2)
+    println(s"Added Flight features: ${columnExpressions1.size + columnExpressions2.size}")
+    result2
   }
 
   /**
    * Ajoute des features agrégées calculées par session Spark
    */
   def addAggregatedFeatures(df: DataFrame): DataFrame = {
-    println("Ajout des caractéristiques agrégées")
+    println("")
+    println("Phase 5 : Add Aggregated Features")
+
+    println("- Add flights_on_route")
+    println("- Add carrier_flight_count")
+    println("- Add origin_airport_traffic")
+    println("- Add route_popularity_score")
+    println("- Add carrier_size_category")
+
+
 
     import org.apache.spark.sql.expressions.Window
 
@@ -328,7 +365,7 @@ object FlightDataGenerator extends DataPreprocessor {
           .otherwise("small")
       )
 
-    println("Caractéristiques agrégées ajoutées: 5")
+    println("Added Flight features: 5")
     result
   }
 
@@ -336,7 +373,14 @@ object FlightDataGenerator extends DataPreprocessor {
    * Normalise certaines features numériques pour améliorer les performances ML
    */
   def normalizeSelectedFeatures(df: DataFrame): DataFrame = {
-    println("Normalisation des features sélectionnées")
+    println("")
+    println("Phase 6 : Features Normalization")
+
+    println("- Normalize CRS_ELAPSED_TIME")
+    println("- Normalize departure_hour_decimal")
+    println("- Normalize distance_score")
+    println("- Normalize origin_complexity_score")
+    println("- Normalize dest_complexity_score")
 
     val columnsToNormalize = Seq(
       "CRS_ELAPSED_TIME",
@@ -350,7 +394,7 @@ object FlightDataGenerator extends DataPreprocessor {
     val availableColumns = columnsToNormalize.filter(df.columns.contains)
     val result = normalizeColumns(df, availableColumns)
 
-    println(s"Colonnes normalisées: ${availableColumns.size}")
+    println(s"Normalized Columns: ${availableColumns.size}")
     result
   }
 
@@ -422,14 +466,17 @@ object FlightDataGenerator extends DataPreprocessor {
     val enrichedColumns = enrichedDf.columns.length
     val addedColumns = enrichedColumns - originalColumns
 
-    println("=== RÉSUMÉ DE L'ENRICHISSEMENT DES DONNÉES ===")
-    println(s"Colonnes originales: $originalColumns")
-    println(s"Colonnes après enrichissement: $enrichedColumns")
-    println(s"Nouvelles colonnes ajoutées: $addedColumns")
-    println(s"Nombre de lignes conservées: ${enrichedDf.count()}")
+    println("")
+    println("")
+    println("=== Enrichment Summary ===")
+    println(s"Original Columns: $originalColumns")
+    println(s"Columns after enrichment: $enrichedColumns")
+    println(s"Enriched Columns: $addedColumns")
+    println(s"Dataset size: ${enrichedDf.count()}")
+    println("")
 
     // Lister les nouvelles colonnes par catégorie
     val newColumns = enrichedDf.columns.filterNot(originalDf.columns.contains)
-    println(s"Nouvelles features créées: ${newColumns.mkString(", ")}")
+    println(s"New Features Created : \n${newColumns.mkString(",\n")}")
   }
 }

@@ -93,7 +93,7 @@ abstract class DataPreprocessor {
    * @return DataFrame avec les nouvelles colonnes
    */
   protected def addCalculatedColumns(df: DataFrame, columnExpressions: Map[String, Column]): DataFrame = {
-    println(s"Ajout de colonnes calculées: ${columnExpressions.keys.mkString(", ")}")
+    //println(s"Ajout de colonnes calculées: ${columnExpressions.keys.mkString(", ")}")
 
     columnExpressions.foldLeft(df) { case (acc, (colName, expression)) =>
       acc.withColumn(colName, expression)
@@ -107,7 +107,6 @@ abstract class DataPreprocessor {
    * @return DataFrame avec colonnes normalisées
    */
   protected def normalizeColumns(df: DataFrame, columns: Seq[String]): DataFrame = {
-    println(s"Normalisation des colonnes: ${columns.mkString(", ")}")
 
     columns.foldLeft(df) { (acc, colName) =>
       if (acc.columns.contains(colName)) {

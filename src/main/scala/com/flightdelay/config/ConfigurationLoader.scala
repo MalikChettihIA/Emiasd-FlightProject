@@ -58,14 +58,26 @@ object ConfigurationLoader {
 
     val dataConfig = DataConfig(
       basePath = dataData("basePath").toString,
-      flight = DataFileConfig(path = flightData("path").toString),
-      weather = DataFileConfig(path = weatherData("path").toString),
-      airportMapping = DataFileConfig(path = airportData("path").toString)
+      flight = FileConfig(path = flightData("path").toString),
+      weather = FileConfig(path = weatherData("path").toString),
+      airportMapping = FileConfig(path = airportData("path").toString)
+    )
+
+    // Parse Output config
+    val outputData = data("output").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    val outputDataData = outputData("data").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    val outputDataModel = outputData("model").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+
+    val outputConfig = OutputConfig(
+      basePath = outputData("basePath").toString,
+      data = FileConfig(path = outputDataData("path").toString),
+      model = FileConfig(path = outputDataModel("path").toString)
     )
 
     AppConfiguration(
       environment = data("environment").toString,
-      data = dataConfig
+      data = dataConfig,
+      output = outputConfig
     )
   }
 }

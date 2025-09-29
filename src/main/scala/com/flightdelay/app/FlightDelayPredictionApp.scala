@@ -1,6 +1,6 @@
 package com.flightdelay.app
 
-import com.flightdelay.config.ConfigurationLoader
+import com.flightdelay.config.{AppConfiguration, ConfigurationLoader}
 import com.flightdelay.data.preprocessing.FlightPreprocessingPipeline
 import com.flightdelay.data.loaders.FlightDataLoader
 import org.apache.spark.sql.SparkSession
@@ -23,12 +23,12 @@ object FlightDelayPredictionApp {
     spark.sparkContext.setLogLevel("WARN")
 
     println("--> FlightDelayPrediction App Starting ...")
-    val configuration = ConfigurationLoader.loadConfiguration(args)
+    implicit val configuration: AppConfiguration = ConfigurationLoader.loadConfiguration(args)
     println("--> FlightDelayPrediction App Configuration "+ configuration.environment +" Loaded")
 
     try {
 
-      val flightData = FlightDataLoader.loadFromConfiguration(configuration)
+      val flightData = FlightDataLoader.loadFromConfiguration()
       val processedFlightData = FlightPreprocessingPipeline.execute(flightData)
 
 

@@ -8,3 +8,9 @@ data:
     path : "/data/FLIGHT-3Y/Weather/201201hourly.txt"
   airportMapping :
     path : "/data/FLIGHT-3Y/wban_airport_timezone.csv"
+output:
+  basePath : "/output"
+  data:
+    path: "/output/data"
+  model:
+    path: "/output/model"

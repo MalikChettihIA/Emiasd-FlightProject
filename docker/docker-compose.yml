@@ -16,7 +16,8 @@ services:
     volumes:
       - ../work/notebooks:/notebooks
       - ../work/data:/data
-      - ../work/apps:/apps    
+      - ../work/apps:/apps
+      - ../work/output:/output
     networks:
       - spark-network
     healthcheck:
@@ -46,6 +47,7 @@ services:
     volumes:
       - ../work/data:/data
       - ../work/apps:/apps
+      - ../work/output:/output
       - ../work/tmp/spark-tmp-1:/tmp/spark-local
     networks:
       - spark-network
@@ -70,6 +72,7 @@ services:
     volumes:
       - ../work/data:/data
       - ../work/apps:/apps
+      - ../work/output:/output
       - ../work/tmp/spark-tmp-2:/tmp/spark-local
     networks:
       - spark-network
@@ -94,6 +97,7 @@ services:
     volumes:
       - ../work/data:/data
       - ../work/apps:/apps
+      - ../work/output:/output
       - ../work/tmp/spark-tmp-3:/tmp/spark-local
     networks:
       - spark-network
@@ -118,6 +122,7 @@ services:
     volumes:
       - ../work/data:/data
       - ../work/apps:/apps
+      - ../work/output:/output
       - ../work/tmp/spark-tmp-4:/tmp/spark-local
     networks:
       - spark-network
@@ -133,9 +138,10 @@ services:
       - JAVA_HOME=/opt/bitnami/java
     volumes:
       - ../work/data:/data
-      - ../work/apps:/apps              # Pour vos applications Spark
-      - ../work/scripts:/scripts        # Pour vos scripts de soumission
-      - ../work/libs:/libs             # Pour les JARs externes si nécessaire
+      - ../work/apps:/apps
+      - ../work/output:/output
+      - ../work/scripts:/scripts
+      - ../work/libs:/libs
     depends_on:
       spark-master:
         condition: service_healthy

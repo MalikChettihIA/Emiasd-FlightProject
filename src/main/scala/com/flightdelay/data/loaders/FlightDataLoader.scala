@@ -70,7 +70,7 @@ object FlightDataLoader extends DataLoader[Flight] {
    * @param spark Implicit SparkSession
    * @return Try[DataFrame] containing processed flight data
    */
-  override def loadFromConfiguration(configuration: AppConfiguration, validate: Boolean = false)(implicit spark: SparkSession): DataFrame = {
+  override def loadFromConfiguration(validate: Boolean = false)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
     val filePath = configuration.data.flight.path;
     loadFromFilePath(filePath, validate)
   }
