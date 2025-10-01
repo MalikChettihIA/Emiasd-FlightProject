@@ -24,8 +24,6 @@ object FlightPreprocessingPipeline {
     val generatedFightData = FlightDataGenerator.preprocess(cleanedFlightData)
     val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFightData)
 
-    CsvWriter.write(generatedFightDataWithLabels, configuration.output.data.path)
-
 
     println("")
     println("----------------------------------------------------------------------------------------------------------")

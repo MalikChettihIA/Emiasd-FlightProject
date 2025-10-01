@@ -37,8 +37,10 @@ Le projet utilise trois datasets principaux (https://www.dropbox.com/sh/iasq7frk
 
 ## Table des Matières
 
-- [Installation](docs/MD/1.installation_guide.md) - Guide complet d'installation et de configuration
-- [Architecture du Projet](docs/MD/2.Architecture_projet.md) - Guide complet de l'architecture du projet
+- [Installation](docs/MD/1.installation_guide.md) - Installation et configuration
+- [Architecture du Projet](docs/MD/2.Architecture_projet.md) - Architecture du projet
+- [Dataset - Structure](docs/MD/3.datasets_description.md) - Structure des 3 datasets
+- [Dataset - Relartions](docs/MD/4.dataset_relations_guide.md) - Relations entres les trois datasets
 - [Utilisation](#utilisation) - TO BE Done ...
 - [Résultats](#résultats) - TO BE Done ...
 - [Contribution](#contribution) - TO BE Done ...
