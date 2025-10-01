@@ -41,16 +41,16 @@ object FlightLabelGenerator extends DataPreprocessor {
     val withBasicLabels = addBasicDelayLabels(withFilledDelays)
 
     // Étape 3: Création des labels selon les stratégies TIST (D1, D2, D3, D4)
-    val withTISTLabels = addTISTStrategyLabels(withBasicLabels)
+    //val withTISTLabels = addTISTStrategyLabels(withBasicLabels)
 
     // Étape 4: Ajout des labels de sévérité et catégories
-    val withSeverityLabels = addSeverityLabels(withTISTLabels)
+    //val withSeverityLabels = addSeverityLabels(withTISTLabels)
 
     // Étape 5: Ajout des labels composites et d'interaction
-    val withCompositeLabels = addCompositeLabels(withSeverityLabels)
+    //val withCompositeLabels = addCompositeLabels(withSeverityLabels)
 
     // Étape 6: Validation et statistiques finales
-    val finalData = validateAndLogLabelStatistics(withCompositeLabels)
+    //val finalData = validateAndLogLabelStatistics(withCompositeLabels)
 
     println("")
     println("--> [FlightDataGenerator] Flight Data Generator- End ...")
@@ -58,7 +58,7 @@ object FlightLabelGenerator extends DataPreprocessor {
     println("")
     println("")
 
-    finalData
+    withBasicLabels
   }
 
   /**
@@ -89,14 +89,14 @@ object FlightLabelGenerator extends DataPreprocessor {
 
     val columnExpressions = Map(
       // Remplacer les valeurs nulles par 0 (interprétées comme "pas de retard de ce type")
-      "arr_delay_filled" -> when(col("ARR_DELAY_NEW").isNull, 0.0).otherwise(col("ARR_DELAY_NEW")),
-      "weather_delay_filled" -> when(col("WEATHER_DELAY").isNull, 0.0).otherwise(col("WEATHER_DELAY")),
-      "nas_delay_filled" -> when(col("NAS_DELAY").isNull, 0.0).otherwise(col("NAS_DELAY")),
+      "label_arr_delay_filled" -> when(col("ARR_DELAY_NEW").isNull, 0.0).otherwise(col("ARR_DELAY_NEW")),
+      "label_weather_delay_filled" -> when(col("WEATHER_DELAY").isNull, 0.0).otherwise(col("WEATHER_DELAY")),
+      "label_nas_delay_filled" -> when(col("NAS_DELAY").isNull, 0.0).otherwise(col("NAS_DELAY")),
 
       // Indicateurs de valeurs manquantes (features pour ML)
-      "arr_delay_was_missing" -> when(col("ARR_DELAY_NEW").isNull, 1).otherwise(0),
-      "weather_delay_was_missing" -> when(col("WEATHER_DELAY").isNull, 1).otherwise(0),
-      "nas_delay_was_missing" -> when(col("NAS_DELAY").isNull, 1).otherwise(0)
+      "label_arr_delay_was_missing" -> when(col("ARR_DELAY_NEW").isNull, 1).otherwise(0),
+      "label_weather_delay_was_missing" -> when(col("WEATHER_DELAY").isNull, 1).otherwise(0),
+      "label_nas_delay_was_missing" -> when(col("NAS_DELAY").isNull, 1).otherwise(0)
     )
 
     addCalculatedColumns(df, columnExpressions)
@@ -108,40 +108,40 @@ object FlightLabelGenerator extends DataPreprocessor {
   private def addBasicDelayLabels(df: DataFrame): DataFrame = {
     println("")
     println("Phase 2: Adding basic labels for different thresholds")
-    println("- Add is_delayed_15min")
-    println("- Add is_delayed_30min")
-    println("- Add is_delayed_45min")
-    println("- Add is_delayed_60min")
-    println("- Add is_delayed_90min")
-    println("- Add has_weather_delay")
-    println("- Add has_nas_delay")
-    println("- Add has_any_weather_nas_delay")
-    println("- Add total_weather_nas_delay")
-    println("- Add is_on_time")
-    println("- Add is_early")
+    println("- Add label_is_delayed_15min")
+    println("- Add label_is_delayed_30min")
+    println("- Add label_is_delayed_45min")
+    println("- Add label_is_delayed_60min")
+    println("- Add label_is_delayed_90min")
+    println("- Add label_has_weather_delay")
+    println("- Add label_has_nas_delay")
+    println("- Add label_has_any_weather_nas_delay")
+    println("- Add label_total_weather_nas_delay")
+    println("- Add label_is_on_time")
+    println("- Add label_is_early")
 
 
     val columnExpressions = Map[String, Column](
       // Labels binaires pour différents seuils (selon article TIST)
-      "is_delayed_15min" -> when(col("arr_delay_filled") >= DELAY_THRESHOLD_15_MIN, 1).otherwise(0),
-      "is_delayed_30min" -> when(col("arr_delay_filled") >= DELAY_THRESHOLD_30_MIN, 1).otherwise(0),
-      "is_delayed_45min" -> when(col("arr_delay_filled") >= DELAY_THRESHOLD_45_MIN, 1).otherwise(0),
-      "is_delayed_60min" -> when(col("arr_delay_filled") >= DELAY_THRESHOLD_60_MIN, 1).otherwise(0),
-      "is_delayed_90min" -> when(col("arr_delay_filled") >= DELAY_THRESHOLD_90_MIN, 1).otherwise(0),
+      "label_is_delayed_15min" -> when(col("label_arr_delay_filled") >= DELAY_THRESHOLD_15_MIN, 1).otherwise(0),
+      "label_is_delayed_30min" -> when(col("label_arr_delay_filled") >= DELAY_THRESHOLD_30_MIN, 1).otherwise(0),
+      "label_is_delayed_45min" -> when(col("label_arr_delay_filled") >= DELAY_THRESHOLD_45_MIN, 1).otherwise(0),
+      "label_is_delayed_60min" -> when(col("label_arr_delay_filled") >= DELAY_THRESHOLD_60_MIN, 1).otherwise(0),
+      "label_is_delayed_90min" -> when(col("label_arr_delay_filled") >= DELAY_THRESHOLD_90_MIN, 1).otherwise(0),
 
       // Labels pour les retards spécifiques
-      "has_weather_delay" -> when(col("weather_delay_filled") > 0, 1).otherwise(0),
-      "has_nas_delay" -> when(col("nas_delay_filled") > 0, 1).otherwise(0),
-      "has_any_weather_nas_delay" -> when(
-        col("weather_delay_filled") > 0 || col("nas_delay_filled") > 0, 1
+      "label_has_weather_delay" -> when(col("label_weather_delay_filled") > 0, 1).otherwise(0),
+      "label_has_nas_delay" -> when(col("label_nas_delay_filled") > 0, 1).otherwise(0),
+      "label_has_any_weather_nas_delay" -> when(
+        col("label_weather_delay_filled") > 0 || col("label_nas_delay_filled") > 0, 1
       ).otherwise(0),
 
       // Retard total combiné weather + NAS
-      "total_weather_nas_delay" -> (col("weather_delay_filled") + col("nas_delay_filled")),
+      "label_total_weather_nas_delay" -> (col("label_weather_delay_filled") + col("label_nas_delay_filled")),
 
       // Indicateur de vol à l'heure (aucun retard)
-      "is_on_time" -> when(col("arr_delay_filled") <= 0, 1).otherwise(0),
-      "is_early" -> when(col("arr_delay_filled") < 0, 1).otherwise(0)
+      "label_is_on_time" -> when(col("label_arr_delay_filled") <= 0, 1).otherwise(0),
+      "label_is_early" -> when(col("label_arr_delay_filled") < 0, 1).otherwise(0)
     )
 
     addCalculatedColumns(df, columnExpressions)

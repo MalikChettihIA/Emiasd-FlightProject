@@ -7,10 +7,10 @@ import org.apache.spark.sql.functions.col
 
 object DataQualityMetrics {
 
-  private val _text    = "textual"
-  private val _numeric = "numeric"
-  private val _date    = "date"
-  private val _other   = "other"
+  val _text    = "textual"
+  val _numeric = "numeric"
+  val _date    = "date"
+  val _other   = "other"
 
   case class MetaData(name: String, origType: String, colType: String, compRatio: Float, nbDistinctValues: Long)
 
@@ -18,7 +18,7 @@ object DataQualityMetrics {
   private def whichType(origType: String) = origType match {
     case "StringType" => _text
     case "IntegerType"|"DoubleType" => _numeric
-    case "DateType" => _date
+    case "DateType"|"TimestampType" => _date
     case _ => _other
   }
 
@@ -39,17 +39,17 @@ object DataQualityMetrics {
 
         MetaData(
           name   = colName,
-          origType    = colType,              // ex: "StringType"
-          colType  = whichType(colType),   // ta fonction de mapping
+          origType    = colType,
+          colType  = whichType(colType),
           compRatio = nonNullCount.toFloat / math.max(1L, totalCount).toFloat,
           nbDistinctValues = distinctCnt
         )
     }
 
     val metadata = res.toDS().toDF()
-    metadata.persist()   // optionnel
-    metadata.count()     // matérialise le cache (optionnel)
-    metadata             // pas de `return` en Scala
+    metadata.persist()
+    metadata.count()
+    metadata
   }
 
   def SetMDColType(metaData: DataFrame, name: String, colType: String): DataFrame = {

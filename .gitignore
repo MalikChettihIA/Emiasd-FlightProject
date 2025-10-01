@@ -658,3 +658,11 @@ work/output/data/part-00016-8346d898-af35-4403-9d6f-f1820f6b13d8-c000.csv
 target/global-logging/sbt-global-log14204540123062795610.log
 target/global-logging/sbt-global-log14245221888211032216.log
 target/scala-2.12/classes/com/flightdelay/data/utils/DataQualityMetrics$.class
+target/scala-2.12/classes/com/flightdelay/features/FlightFeatureExtractor$.class
+work/notebooks/Flights/.ipynb_checkpoints/3.0.FL_FeatureExtractor_TestCase-checkpoint.ipynb
+work/notebooks/Flights/.ipynb_checkpoints/2.3.FL_Prepro_LabelGenerator_TestCase-checkpoint.ipynb
+work/notebooks/Flights/.ipynb_checkpoints/2.2.FL_Prepro_DataGenerator_TestCase-checkpoint.ipynb
+work/notebooks/Flights/.ipynb_checkpoints/2.1.FL_Prepro_DataCleaner_TestCase-checkpoint.ipynb
+work/notebooks/Flights/.ipynb_checkpoints/2.1.FL_FlightsDataCleaner_TestCase-checkpoint.ipynb
+work/notebooks/Flights/.ipynb_checkpoints/2.0.FL_Preprocessor_TestCase-checkpoint.ipynb
+work/notebooks/Flights/.ipynb_checkpoints/2.0.FL_Preprocessor_TestCase-checkpoint.ipynb
