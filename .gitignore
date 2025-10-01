@@ -655,3 +655,6 @@ work/output/data/part-00013-8346d898-af35-4403-9d6f-f1820f6b13d8-c000.csv
 work/output/data/part-00014-8346d898-af35-4403-9d6f-f1820f6b13d8-c000.csv
 work/output/data/part-00015-8346d898-af35-4403-9d6f-f1820f6b13d8-c000.csv
 work/output/data/part-00016-8346d898-af35-4403-9d6f-f1820f6b13d8-c000.csv
+target/global-logging/sbt-global-log14204540123062795610.log
+target/global-logging/sbt-global-log14245221888211032216.log
+target/scala-2.12/classes/com/flightdelay/data/utils/DataQualityMetrics$.class

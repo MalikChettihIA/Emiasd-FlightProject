@@ -132,8 +132,6 @@ object FlightDataCleaner extends DataPreprocessor {
       "DEST_AIRPORT_ID" -> IntegerType,
       "CRS_DEP_TIME" -> IntegerType,
       "ARR_DELAY_NEW" -> DoubleType,
-      "CANCELLED" -> DoubleType,
-      "DIVERTED" -> DoubleType,
       "CRS_ELAPSED_TIME" -> DoubleType,
       "WEATHER_DELAY" -> DoubleType,
       "NAS_DELAY" -> DoubleType

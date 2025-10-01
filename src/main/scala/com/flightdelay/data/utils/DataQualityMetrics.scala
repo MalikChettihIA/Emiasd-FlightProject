@@ -5,7 +5,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
 
 
-class DataQualityMetrics {
+object DataQualityMetrics {
 
   private val _text    = "textual"
   private val _numeric = "numeric"
@@ -23,7 +23,7 @@ class DataQualityMetrics {
   }
 
 
-  def MDCompletenessDV(data: DataFrame): DataFrame = {
+  def metrics(data: DataFrame): DataFrame = {
     // imports nécessaires pour col(), toDS(), etc.
     import data.sparkSession.implicits._
 

@@ -62,9 +62,10 @@ abstract class DataPreprocessor {
     val result = exclusions.foldLeft(df) { case (acc, (colName, values)) =>
       acc.filter(!col(colName).isin(values: _*))
     }
+    val droppedResult = result.drop(exclusions.keys.toSeq: _*)  // le `:_*` “déplie” la séquence
 
-    println(s"Nombre de lignes après suppression des valeurs spécifiques: ${result.count()}")
-    result
+    println(s"Nombre de lignes après suppression des valeurs spécifiques: ${droppedResult.count()}")
+    droppedResult
   }
 
   /**

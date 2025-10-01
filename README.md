@@ -59,4 +59,4 @@ Pour commencer rapidement avec le projet :
 ./run-on-docker.sh
 ```
 
-> 📖 **Guide Complet** : Pour une installation détaillée sur cluster local ou Lamsade, consultez [INSTALLATION.md](INSTALLATION.md)
+> 📖 **Guide Complet** : Pour une installation détaillée sur cluster local ou Lamsade, consultez [INSTALLATION.md]((docs/MD/1.installation_guide.md))
