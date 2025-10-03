@@ -16,19 +16,18 @@ object FlightPreprocessingPipeline {
    */
   def execute()(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
-    println("")
-    println("")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("--> [FlightPreprocessingPipeline] Flight Preprocessing Pipeline - Start ...")
-    println("----------------------------------------------------------------------------------------------------------")
+    println("\n" + "=" * 80)
+    println("[Preprocessing] Flight Data Preprocessing Pipeline - Start")
+    println("=" * 80)
 
     val processedParquetPath = s"${configuration.output.data.path}/processed_flights.parquet"
 
     // Load raw data from parquet
     val rawParquetPath = s"${configuration.output.data.path}/raw_flights.parquet"
-    println(s"--> Loading raw data from parquet: $rawParquetPath")
+    println(s"\nLoading raw data from parquet:")
+    println(s"  → Path: $rawParquetPath")
     val originalDf = spark.read.parquet(rawParquetPath)
-    println(s"--> ✓ Loaded ${originalDf.count()} raw records from parquet")
+    println(s"  ✓ Loaded ${originalDf.count()} raw records")
 
     // Execute preprocessing pipeline
     val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
@@ -40,17 +39,17 @@ object FlightPreprocessingPipeline {
     validatePreprocessedSchema(finalCleanedData)
 
     // Save processed data to parquet
-    println(s"--> Saving preprocessed data to parquet: $processedParquetPath")
+    println(s"\nSaving preprocessed data to parquet:")
+    println(s"  → Path: $processedParquetPath")
     finalCleanedData.write
       .mode("overwrite")
       .option("compression", "snappy")
       .parquet(processedParquetPath)
-    println(s"--> ✓ Saved ${finalCleanedData.count()} preprocessed records to parquet")
+    println(s"  ✓ Saved ${finalCleanedData.count()} preprocessed records")
 
-    println("")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("--> [FlightPreprocessingPipeline] Flight Preprocessing Pipeline - End ...")
-    println("----------------------------------------------------------------------------------------------------------")
+    println("\n" + "=" * 80)
+    println("[Preprocessing] Flight Data Preprocessing Pipeline - End")
+    println("=" * 80 + "\n")
 
     finalCleanedData
   }
@@ -60,10 +59,9 @@ object FlightPreprocessingPipeline {
    * Ensures all required columns exist with correct data types
    */
   private def validatePreprocessedSchema(df: DataFrame): Unit = {
-    println("")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("--> Schema Validation")
-    println("----------------------------------------------------------------------------------------------------------")
+    println("\n" + "=" * 80)
+    println("Schema Validation")
+    println("=" * 80)
 
     // Required base columns (from raw data)
     // Note: ARR_DELAY_NEW, WEATHER_DELAY, NAS_DELAY are removed by FlightDataLeakageCleaner
@@ -104,7 +102,7 @@ object FlightPreprocessingPipeline {
     var validationPassed = true
 
     // Validate base columns with types
-    println("\n✓ Validating base columns:")
+    println("\nValidating base columns:")
     requiredBaseColumns.foreach { case (colName, expectedType) =>
       if (!availableColumns.contains(colName)) {
         println(s"  ✗ Missing column: $colName")
@@ -121,7 +119,7 @@ object FlightPreprocessingPipeline {
     }
 
     // Validate generated columns
-    println("\n✓ Validating generated columns:")
+    println("\nValidating generated columns:")
     requiredGeneratedColumns.foreach { colName =>
       if (!availableColumns.contains(colName)) {
         println(s"  ✗ Missing column: $colName")
@@ -132,7 +130,7 @@ object FlightPreprocessingPipeline {
     }
 
     // Validate label columns
-    println("\n✓ Validating label columns:")
+    println("\nValidating label columns:")
     requiredLabelColumns.foreach { colName =>
       if (!availableColumns.contains(colName)) {
         println(s"  ✗ Missing column: $colName")
@@ -143,7 +141,7 @@ object FlightPreprocessingPipeline {
     }
 
     // Validate that leakage columns have been removed
-    println("\n✓ Validating leakage columns removal:")
+    println("\nValidating leakage columns removal:")
     val leakageColumns = Seq("ARR_DELAY_NEW", "WEATHER_DELAY", "NAS_DELAY")
     leakageColumns.foreach { colName =>
       if (availableColumns.contains(colName)) {
@@ -155,19 +153,14 @@ object FlightPreprocessingPipeline {
     }
 
     // Summary
-    println("\n----------------------------------------------------------------------------------------------------------")
+    println("\n" + "=" * 80)
     if (validationPassed) {
-      println(s"✓ Schema validation PASSED - ${df.columns.length} columns validated")
+      println(s"✓ Schema Validation PASSED - ${df.columns.length} columns validated")
     } else {
-      println("✗ Schema validation FAILED")
+      println("✗ Schema Validation FAILED")
       throw new RuntimeException("Schema validation failed. Check logs for details.")
     }
-    println("----------------------------------------------------------------------------------------------------------")
-    println("")
-
-    // Print schema for reference
-    println("Full schema:")
-    df.printSchema()
+    println("=" * 80)
   }
 
 }

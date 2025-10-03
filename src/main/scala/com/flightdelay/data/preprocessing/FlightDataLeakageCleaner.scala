@@ -35,46 +35,45 @@ object FlightDataLeakageCleaner extends DataPreprocessor {
    * @return DataFrame nettoyé sans colonnes de leakage
    */
   override def preprocess(enrichedData: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    println("")
-    println("")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("--> [FlightDataLeakageCleaner] Flight Data Leakage Cleaner - Start ...")
-    println("----------------------------------------------------------------------------------------------------------")
+    println("\n" + "=" * 80)
+    println("[LeakageCleaner] Data Leakage Removal - Start")
+    println("=" * 80)
 
     val originalColumns = enrichedData.columns.length
-    println(s"Original Column Count: $originalColumns")
+    println(s"\nOriginal columns: $originalColumns")
 
-    // Identifier les colonnes à supprimer qui existent réellement
+    // Identify columns to remove that actually exist
     val columnsToRemove = LEAKAGE_COLUMNS.filter(enrichedData.columns.contains)
 
     if (columnsToRemove.isEmpty) {
-      println("\n✓ No leakage columns found - Data is clean!")
+      println("  ✓ No leakage columns found - Data is clean!")
     } else {
       println(s"\n⚠ Found ${columnsToRemove.length} leakage columns to remove:")
-      columnsToRemove.foreach(col => println(s"  - $col"))
+      columnsToRemove.foreach(col => println(s"  → $col"))
     }
 
-    // Supprimer les colonnes de leakage
+    // Remove leakage columns
     val cleanedData = enrichedData.drop(columnsToRemove: _*)
 
     val finalColumns = cleanedData.columns.length
     val removedColumns = originalColumns - finalColumns
 
-    println(s"\n=== Leakage Cleaning Summary ===")
-    println(s"Original Columns: $originalColumns")
-    println(s"Final Columns: $finalColumns")
-    println(s"Removed Columns: $removedColumns")
-    println(s"Dataset size: ${cleanedData.count()}")
+    println(s"\n" + "=" * 50)
+    println("Leakage Removal Summary")
+    println("=" * 50)
+    println(f"Original columns:    $originalColumns%3d")
+    println(f"Final columns:       $finalColumns%3d")
+    println(f"Removed columns:     $removedColumns%3d")
+    println(f"Dataset size:        ${cleanedData.count()}%,10d records")
 
-    // Vérifier que les labels sont toujours présents
+    // Verify labels are still present
     val labelColumns = cleanedData.columns.filter(_.startsWith("label_"))
-    println(s"\n✓ Kept ${labelColumns.length} label columns for ML training")
+    println(f"\n✓ Kept ${labelColumns.length}%3d label columns for ML training")
+    println("=" * 50)
 
-    println("")
-    println("--> [FlightDataLeakageCleaner] Flight Data Leakage Cleaner - End ...")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("")
-    println("")
+    println("\n" + "=" * 80)
+    println("[LeakageCleaner] Data Leakage Removal - End")
+    println("=" * 80 + "\n")
 
     cleanedData
   }

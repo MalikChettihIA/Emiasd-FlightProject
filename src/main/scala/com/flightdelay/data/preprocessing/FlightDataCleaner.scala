@@ -19,14 +19,12 @@ object FlightDataCleaner extends DataPreprocessor {
    */
   override def preprocess(rawFlightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
 
-    println("")
-    println("")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("--> [FlightDataCleaner] Flight Data Cleaner - Start ...")
-    println("----------------------------------------------------------------------------------------------------------")
+    println("\n" + "=" * 80)
+    println("[DataCleaner] Flight Data Cleaning - Start")
+    println("=" * 80)
 
     val originalCount = rawFlightData.count()
-    println(s"Data Original Count: $originalCount")
+    println(s"\nOriginal dataset: $originalCount records")
 
     // Étape 1: Nettoyage de base (doublons et valeurs nulles)
     val cleanedData = performBasicCleaning(rawFlightData)
@@ -43,13 +41,12 @@ object FlightDataCleaner extends DataPreprocessor {
     // Étape 5: Validation finale
     val finalData = performFinalValidation(cleanedOutliers)
 
-    // Résumé du nettoyage
+    // Cleaning summary
     logCleaningSummary(rawFlightData, finalData)
 
-    println("--> [FlightDataCleaner] Flight Data Cleaner- End ...")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("")
-    println("")
+    println("\n" + "=" * 80)
+    println("[DataCleaner] Flight Data Cleaning - End")
+    println("=" * 80 + "\n")
 
     finalData
   }
@@ -58,8 +55,7 @@ object FlightDataCleaner extends DataPreprocessor {
    * Nettoyage de base : suppression des doublons et valeurs nulles critiques
    */
   private def performBasicCleaning(df: DataFrame): DataFrame = {
-    println("")
-    println("Phase 1: Basic Cleaning - Remove Duplicates")
+    println("\nPhase 1: Basic Cleaning")
 
     // Colonnes clés pour identifier les doublons
     val keyColumns = Seq(
@@ -75,10 +71,10 @@ object FlightDataCleaner extends DataPreprocessor {
       "FL_DATE", "ORIGIN_AIRPORT_ID", "DEST_AIRPORT_ID", "CRS_DEP_TIME"
     )
 
-    // Supprimer les lignes avec des valeurs null critiques
+    // Remove rows with critical null values
     val result = removeNullValues(deduplicated, criticalColumns)
 
-    println(s"Current Count : ${result.count()}")
+    println(s"  ✓ Current count: ${result.count()} records")
     result
   }
 
@@ -86,41 +82,36 @@ object FlightDataCleaner extends DataPreprocessor {
    * Filtrage des vols invalides selon l'article TIST
    */
   private def filterInvalidFlights(df: DataFrame): DataFrame = {
-    println("")
-    println("Phase 2: Filter Flights")
-    println("- Filter Cancelled and Diverted Flights")
+    println("\nPhase 2: Filter Invalid Flights")
+    println("  → Filtering cancelled and diverted flights")
 
-    // Remplacer les NULL par 0 pour CANCELLED et DIVERTED
+    // Replace NULL with 0 for CANCELLED and DIVERTED
     val dfWithDefaults = df
       .withColumn("CANCELLED", coalesce(col("CANCELLED"), lit(0)))
       .withColumn("DIVERTED", coalesce(col("DIVERTED"), lit(0)))
 
-    println(s"DEBUG: Distribution après remplacement des NULL:")
-    dfWithDefaults.groupBy("CANCELLED", "DIVERTED").count().show()
-
-    // Selon l'article TIST, on exclut les vols annulés et détournés
-    // Filtrer directement au lieu d'utiliser removeSpecificValues
+    // Filter cancelled and diverted flights (TIST article methodology)
     val filteredCancelledDiverted = dfWithDefaults
       .filter(col("CANCELLED") === 0 && col("DIVERTED") === 0)
       .drop("CANCELLED", "DIVERTED")
 
-    // Filtrer les vols avec des heures de départ invalides
-    println("- Filter Invalid departure time")
+    // Filter invalid departure times
+    println("  → Filtering invalid departure times")
     val validDepartureTimes = filteredCancelledDiverted.filter(
       col("CRS_DEP_TIME").isNotNull &&
         col("CRS_DEP_TIME") >= 0 &&
         col("CRS_DEP_TIME") <= 2359
     )
 
-    // Filtrer les IDs d'aéroports invalides (doivent être positifs)
-    println("- Filter Invalid airports")
+    // Filter invalid airport IDs
+    println("  → Filtering invalid airports")
     val validAirports = validDepartureTimes.filter(
       col("ORIGIN_AIRPORT_ID") > 0 &&
         col("DEST_AIRPORT_ID") > 0 &&
         col("ORIGIN_AIRPORT_ID") =!= col("DEST_AIRPORT_ID")
     )
 
-    println(s"Current Count : ${validAirports.count()}")
+    println(s"  ✓ Current count: ${validAirports.count()} records")
     validAirports
   }
 
@@ -128,8 +119,7 @@ object FlightDataCleaner extends DataPreprocessor {
    * Conversion et validation des types de données
    */
   private def convertAndValidateDataTypes(df: DataFrame): DataFrame = {
-    println("")
-    println("Phase 3: Types Conversion")
+    println("\nPhase 3: Data Type Conversion")
 
     val typeMapping = Map(
       "FL_DATE" -> DateType,
@@ -146,11 +136,11 @@ object FlightDataCleaner extends DataPreprocessor {
 
     val convertedData = convertDataTypes(df, typeMapping)
 
-    // Validation du format de date (vérifier que la date n'est pas nulle)
-    println("- Filter Invalid flight dates")
+    // Validate date format
+    println("  → Filtering invalid flight dates")
     val validDates = convertedData.filter(col("FL_DATE").isNotNull)
 
-    println(s"Current Count : ${validDates.count()}")
+    println(s"  ✓ Current count: ${validDates.count()} records")
     validDates
   }
 
@@ -158,31 +148,23 @@ object FlightDataCleaner extends DataPreprocessor {
    * Nettoyage des valeurs aberrantes spécifiques aux vols
    */
   private def cleanFlightOutliers(df: DataFrame): DataFrame = {
-    println("")
-    println("Phase 4: Filter Outliers")
+    println("\nPhase 4: Outlier Filtering")
 
-    // Filtrer les retards extrêmes (> 10 heures = 600 minutes)
-    println("- Filter delay > 10 hours = 600 minutes")
+    // Filter extreme delays (> 10 hours = 600 minutes)
+    println("  → Filtering delays > 600 minutes")
     val reasonableDelays = df.filter(
       col("ARR_DELAY_NEW").isNull ||
         col("ARR_DELAY_NEW") <= 600
     )
 
-    // Filtrer les temps de vol invalides (entre 10 minutes et 24 heures)
-    println("- Filter filght time > entre 10 minutes et 24 hours")
+    // Filter invalid flight times (between 10 minutes and 24 hours)
+    println("  → Filtering flight times (10 min - 24 hours)")
     val validFlightTimes = reasonableDelays.filter(
       col("CRS_ELAPSED_TIME").isNull ||
         (col("CRS_ELAPSED_TIME") >= 10 && col("CRS_ELAPSED_TIME") <= 1440)
     )
 
-
-    // Filtrer les retards météo/NAS aberrants
-    //val validWeatherDelays = validFlightTimes.filter(
-    // (col("WEATHER_DELAY").isNull || col("WEATHER_DELAY") >= 0) &&
-    //    (col("NAS_DELAY").isNull || col("NAS_DELAY") >= 0)
-    //)
-
-    println(s"Current Count : ${validFlightTimes.count()}")
+    println(s"  ✓ Current count: ${validFlightTimes.count()} records")
     validFlightTimes
   }
 
@@ -190,8 +172,7 @@ object FlightDataCleaner extends DataPreprocessor {
    * Validation finale des données nettoyées
    */
   private def performFinalValidation(df: DataFrame): DataFrame = {
-    println("")
-    println("Phase 5: Final Validation")
+    println("\nPhase 5: Final Validation")
 
     // Vérifier les colonnes essentielles
     val requiredColumns = Seq(
@@ -201,14 +182,12 @@ object FlightDataCleaner extends DataPreprocessor {
 
     val missingColumns = requiredColumns.filterNot(df.columns.contains)
     if (missingColumns.nonEmpty) {
-      println(s"Missing columns after cleaning: ${missingColumns.mkString(", ")}")
-      throw new RuntimeException(s"Mandatory columns missing : ${missingColumns.mkString(", ")}")
+      println(s"  ✗ Missing columns: ${missingColumns.mkString(", ")}")
+      throw new RuntimeException(s"Mandatory columns missing: ${missingColumns.mkString(", ")}")
     }
 
-    // Vérifier qu'il reste suffisamment de données
     val finalCount = df.count()
-
-    println(s"Final Validation succeeded: ${finalCount} flights")
+    println(s"  ✓ Validation passed: $finalCount records")
     df
   }
 
@@ -216,7 +195,7 @@ object FlightDataCleaner extends DataPreprocessor {
    * Gestion des valeurs manquantes pour les colonnes de retard
    */
   def handleMissingDelayValues(df: DataFrame): DataFrame = {
-    println("Gestion des valeurs manquantes pour les retards")
+    println("Handling missing delay values")
 
     val columnExpressions = Map(
       // Remplacer les valeurs nulles par 0 pour les retards
@@ -241,16 +220,17 @@ object FlightDataCleaner extends DataPreprocessor {
     val cleanedCount = cleanedDf.count()
     val reductionPercent = ((originalCount - cleanedCount).toDouble / originalCount * 100).round
 
-    println("")
-    println("=== Flight Cleaning Summary ===")
-    println(s"Original Count: $originalCount")
-    println(s"Final Count: $cleanedCount")
-    println(s"Cleaned: ${originalCount - cleanedCount}")
-    println(s"Reduction Percentage: $reductionPercent%")
+    println("\n" + "=" * 50)
+    println("Cleaning Summary")
+    println("=" * 50)
+    println(f"Original records:    $originalCount%,10d")
+    println(f"Final records:       $cleanedCount%,10d")
+    println(f"Removed records:     ${originalCount - cleanedCount}%,10d")
+    println(f"Reduction:           $reductionPercent%3d%%")
 
     if (reductionPercent > 50) {
-      println(s"[WARN] Import Reduction: $reductionPercent%")
+      println(f"\n⚠ WARNING: High reduction rate ($reductionPercent%%)")
     }
-    println("")
+    println("=" * 50)
   }
 }

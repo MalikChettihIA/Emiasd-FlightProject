@@ -1,6 +1,7 @@
 package com.flightdelay.ml.models
 
 import com.flightdelay.config.ModelConfig
+import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.{Pipeline, Transformer}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.sql.DataFrame
@@ -24,9 +25,10 @@ class RandomForestModel(config: ModelConfig) extends MLModel {
   /**
    * Train Random Forest classifier on flight delay data
    * @param data Training data with "features" and "label" columns
+   * @param featureImportancePath Optional path to save feature importances
    * @return Trained RandomForest model wrapped in a Pipeline
    */
-  override def train(data: DataFrame): Transformer = {
+  def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
     println("\n" + "=" * 80)
     println("Training Random Forest Model")
     println("=" * 80)
@@ -72,9 +74,21 @@ class RandomForestModel(config: ModelConfig) extends MLModel {
     val rfModel = model.stages(0).asInstanceOf[RandomForestClassificationModel]
     displayFeatureImportance(rfModel)
 
+    // Save feature importance if path provided
+    featureImportancePath.foreach { path =>
+      saveFeatureImportance(rfModel, path)
+    }
+
     println("=" * 80 + "\n")
 
     model
+  }
+
+  /**
+   * Override train from MLModel trait to call our extended version
+   */
+  override def train(data: DataFrame): Transformer = {
+    train(data, None)
   }
 
   /**
@@ -95,6 +109,19 @@ class RandomForestModel(config: ModelConfig) extends MLModel {
       }
 
     println("-" * 50)
+  }
+
+  /**
+   * Save feature importances to CSV file
+   */
+  private def saveFeatureImportance(model: RandomForestClassificationModel, outputPath: String): Unit = {
+    val importances = model.featureImportances.toArray
+    val importancesWithIndex = importances.zipWithIndex.map { case (imp, idx) => (idx, imp) }
+
+    MetricsWriter.writeFeatureImportance(importancesWithIndex, outputPath) match {
+      case scala.util.Success(_) => // Already logged by MetricsWriter
+      case scala.util.Failure(ex) => println(s"  ✗ Failed to save feature importances: ${ex.getMessage}")
+    }
   }
 }
 

@@ -41,9 +41,7 @@ Le projet utilise trois datasets principaux (https://www.dropbox.com/sh/iasq7frk
 - [Architecture du Projet](docs/MD/2.Architecture_projet.md) - Architecture du projet
 - [Dataset - Structure](docs/MD/3.datasets_description.md) - Structure des 3 datasets
 - [Dataset - Relartions](docs/MD/4.dataset_relations_guide.md) - Relations entres les trois datasets
-- [Utilisation](#utilisation) - TO BE Done ...
-- [Résultats](#résultats) - TO BE Done ...
-- [Contribution](#contribution) - TO BE Done ...
+- [Visualisation des Métriques](docs/MD/5.random_forst_metrics_visualisation) - Visualisation et analyse des résultats d'entraînement
 
 ## Démarrage Rapide
 
@@ -59,4 +57,4 @@ Pour commencer rapidement avec le projet :
 ./run-on-docker.sh
 ```
 
-> 📖 **Guide Complet** : Pour une installation détaillée sur cluster local ou Lamsade, consultez [INSTALLATION.md]((docs/MD/1.installation_guide.md))
+> 📖 **Guide Complet** : Pour une installation détaillée sur cluster local ou Lamsade, consultez [1.installation_guide.md]((docs/MD/1.installation_guide.md))

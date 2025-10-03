@@ -57,9 +57,12 @@ object FlightDelayPredictionApp {
       // STEP 1: Load Flight Data
       // =====================================================================================
       if (tasks.contains("load")) {
-        println("\n[STEP 1] Loading flight data...")
+        println("\n" + "=" * 80)
+        println("[STEP 1] Loading Flight Data")
+        println("=" * 80)
         val flightData = FlightDataLoader.loadFromConfiguration()
-        println(s"✓ Loaded ${flightData.count()} flight records")
+        println(f"\n✓ Loaded ${flightData.count()}%,d flight records")
+        println("=" * 80 + "\n")
       } else {
         println("\n[STEP 1] Loading flight data... SKIPPED")
       }
@@ -68,9 +71,12 @@ object FlightDelayPredictionApp {
       // STEP 2: Preprocess and Feature Engineering
       // =====================================================================================
       if (tasks.contains("preprocess")) {
-        println("\n[STEP 2] Preprocessing and feature engineering...")
+        println("\n" + "=" * 80)
+        println("[STEP 2] Preprocessing and Feature Engineering")
+        println("=" * 80)
         val processedFlightData = FlightPreprocessingPipeline.execute()
-        println(s"✓ Generated ${processedFlightData.columns.length} columns (features + labels)")
+        println(f"\n✓ Generated ${processedFlightData.columns.length}%3d columns (features + labels)")
+        println("=" * 80 + "\n")
       } else {
         println("\n[STEP 2] Preprocessing and feature engineering... SKIPPED")
       }
@@ -79,40 +85,45 @@ object FlightDelayPredictionApp {
       // STEP 3: Feature Extraction with Optional PCA
       // =====================================================================================
       if (tasks.contains("feature-extraction")) {
-        println(s"\n[STEP 3] Feature extraction (PCA: ${if (configuration.featureExtraction.pca) "ENABLED" else "DISABLED"})...")
+        println("\n" + "=" * 80)
+        println(s"[STEP 3] Feature Extraction")
+        println("=" * 80)
+        println(s"PCA: ${if (configuration.featureExtraction.pca) "ENABLED" else "DISABLED"}")
 
         // Load preprocessed data from parquet
         val processedParquetPath = s"${configuration.output.data.path}/processed_flights.parquet"
-        println(s"Loading preprocessed data from: $processedParquetPath")
+        println(s"\nLoading preprocessed data:")
+        println(s"  → Path: $processedParquetPath")
         val processedFlightData = spark.read.parquet(processedParquetPath)
-        println(s"✓ Loaded ${processedFlightData.count()} preprocessed records")
+        println(f"  ✓ Loaded ${processedFlightData.count()}%,d preprocessed records")
 
         if (configuration.featureExtraction.pca) {
           // Extract features with PCA
-          val (extractedData, pcaModel, analysis) = FlightFeatureExtractor.extractWithPCA(
+          FlightFeatureExtractor.extractWithPCA(
             processedFlightData,
             target = configuration.model.target,
             varianceThreshold = configuration.featureExtraction.pcaVarianceThreshold
           )
-
         } else {
           // Extract features without PCA
-          val extractedData = FlightFeatureExtractor.extract(
+          FlightFeatureExtractor.extract(
             processedFlightData,
             target = configuration.model.target
           )
-
-
         }
+
+        println("=" * 80 + "\n")
       } else {
-        println(s"\n[STEP 3] Feature extraction... SKIPPED")
+        println("\n[STEP 3] Feature extraction... SKIPPED")
       }
 
       // =====================================================================================
       // STEP 4: Train Model
       // =====================================================================================
       if (tasks.contains("train")) {
-        println("\n[STEP 4] Training model...")
+        println("\n" + "=" * 80)
+        println("[STEP 4] Model Training")
+        println("=" * 80)
 
         // Determine which features to load based on PCA configuration
         val featuresPath = if (configuration.featureExtraction.pca) {
@@ -121,18 +132,26 @@ object FlightDelayPredictionApp {
           s"${configuration.output.basePath}/features/base_features_${configuration.model.target}"
         }
 
-        println(s"Loading features from: $featuresPath")
+        println(s"\nLoading features:")
+        println(s"  → Path: $featuresPath")
         val featuresData = spark.read.parquet(featuresPath)
-        println(s"✓ Loaded ${featuresData.count()} feature records")
+        println(f"  ✓ Loaded ${featuresData.count()}%,d feature records")
 
         // Train model using ModelTrainer
         val trainingResult = ModelTrainer.train(featuresData)
 
-        println(s"\n✓ Model training completed successfully!")
-        println(s"   - Model saved to: ${configuration.output.model.path}/${configuration.model.name}_${configuration.model.modelType}")
-        println(f"   - Test Accuracy: ${trainingResult.testMetrics.accuracy * 100}%.2f%%")
-        println(f"   - Test F1-Score: ${trainingResult.testMetrics.f1Score * 100}%.2f%%")
-        println(f"   - Test AUC-ROC: ${trainingResult.testMetrics.areaUnderROC}%.4f")
+        println("\n" + "=" * 50)
+        println("Training Results")
+        println("=" * 50)
+        println(s"Model: ${configuration.model.name}_${configuration.model.modelType}")
+        println(s"Path:  ${configuration.output.model.path}/${configuration.model.name}_${configuration.model.modelType}")
+        println(f"\nTest Accuracy:  ${trainingResult.testMetrics.accuracy * 100}%6.2f%%")
+        println(f"Test Precision: ${trainingResult.testMetrics.precision * 100}%6.2f%%")
+        println(f"Test Recall:    ${trainingResult.testMetrics.recall * 100}%6.2f%%")
+        println(f"Test F1-Score:  ${trainingResult.testMetrics.f1Score * 100}%6.2f%%")
+        println(f"Test AUC-ROC:   ${trainingResult.testMetrics.areaUnderROC}%6.4f")
+        println("=" * 50)
+        println("=" * 80 + "\n")
 
       } else {
         println("\n[STEP 4] Training model... SKIPPED")

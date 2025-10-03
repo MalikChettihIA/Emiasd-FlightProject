@@ -6,8 +6,8 @@
 #TASKS="${1:-load}"
 #TASKS="${1:-load,preprocess}"
 #TASKS="${1:-load,preprocess,feature-extraction}"
-TASKS="${1:-load,preprocess,feature-extraction,train}"
-#TASKS="${1:-load,preprocess,feature-extraction,train,evaluate}"
+#TASKS="${1:-load,preprocess,feature-extraction,train}"
+TASKS="${1:-load,preprocess,feature-extraction,train,evaluate}"
 
 spark-submit \
   --master "$SPARK_MASTER_URL" \

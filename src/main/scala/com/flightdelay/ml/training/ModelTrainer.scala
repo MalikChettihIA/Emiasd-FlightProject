@@ -42,21 +42,30 @@ object ModelTrainer {
     println(s"  - Training set: ${trainData.count()} samples (${config.model.trainRatio * 100}%.0f%%)")
     println(s"  - Test set:     ${testData.count()} samples (${(1 - config.model.trainRatio) * 100}%.0f%%)")
 
+    // Create metrics output directory
+    val metricsBasePath = s"${config.output.basePath}/metrics/${config.model.name}_${config.model.modelType}"
+
     // Create model based on configuration
     val mlModel = createModel(config.model)
 
-    // Train the model
-    val trainedModel = mlModel.train(trainData)
+    // Train the model with feature importance saving
+    val trainedModel = mlModel match {
+      case rf: RandomForestModel =>
+        rf.train(trainData, Some(s"$metricsBasePath/feature_importance.csv"))
+      case other =>
+        other.train(trainData)
+    }
 
     // Make predictions on train and test sets
     println("\n[Making Predictions]")
     val trainPredictions = mlModel.predict(trainedModel, trainData)
     val testPredictions = mlModel.predict(trainedModel, testData)
 
-    // Evaluate model
+    // Evaluate model with metrics saving
     val (trainMetrics, testMetrics) = ModelEvaluator.evaluateTrainTest(
       trainPredictions,
-      testPredictions
+      testPredictions,
+      Some(metricsBasePath)
     )
 
     // Save model

@@ -1,5 +1,6 @@
 package com.flightdelay.ml.evaluation
 
+import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, MulticlassClassificationEvaluator}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
@@ -36,9 +37,10 @@ object ModelEvaluator {
   /**
    * Evaluate model predictions and return comprehensive metrics
    * @param predictions DataFrame with "label" and "prediction" columns
+   * @param metricsOutputPath Optional path to save metrics to CSV
    * @return EvaluationMetrics object with all computed metrics
    */
-  def evaluate(predictions: DataFrame): EvaluationMetrics = {
+  def evaluate(predictions: DataFrame, metricsOutputPath: Option[String] = None): EvaluationMetrics = {
     println("\n" + "=" * 80)
     println("Model Evaluation")
     println("=" * 80)
@@ -90,6 +92,11 @@ object ModelEvaluator {
     // Display metrics
     displayMetrics(metrics)
 
+    // Save metrics to file if path provided
+    metricsOutputPath.foreach { basePath =>
+      saveMetricsToFile(metrics, basePath)
+    }
+
     metrics
   }
 
@@ -123,11 +130,13 @@ object ModelEvaluator {
    * Evaluate and compare train/test performance
    * @param trainPredictions Predictions on training set
    * @param testPredictions Predictions on test set
+   * @param metricsOutputPath Optional base path to save metrics
    * @return Tuple of (train metrics, test metrics)
    */
   def evaluateTrainTest(
     trainPredictions: DataFrame,
-    testPredictions: DataFrame
+    testPredictions: DataFrame,
+    metricsOutputPath: Option[String] = None
   ): (EvaluationMetrics, EvaluationMetrics) = {
 
     println("\n" + "=" * 80)
@@ -158,6 +167,88 @@ object ModelEvaluator {
 
     println("=" * 80 + "\n")
 
+    // Save train/test comparison if path provided
+    metricsOutputPath.foreach { basePath =>
+      saveTrainTestComparison(trainMetrics, testMetrics, basePath)
+    }
+
     (trainMetrics, testMetrics)
+  }
+
+  /**
+   * Save metrics to CSV files
+   */
+  private def saveMetricsToFile(metrics: EvaluationMetrics, basePath: String): Unit = {
+    // Save main metrics
+    val metricsMap = Map(
+      "accuracy" -> metrics.accuracy,
+      "precision" -> metrics.precision,
+      "recall" -> metrics.recall,
+      "f1_score" -> metrics.f1Score,
+      "auc_roc" -> metrics.areaUnderROC,
+      "auc_pr" -> metrics.areaUnderPR,
+      "specificity" -> metrics.specificity,
+      "false_positive_rate" -> metrics.falsePositiveRate
+    )
+
+    val headers = Seq("metric", "value")
+    val rows = metricsMap.map { case (name, value) => Seq(name, f"$value%.6f") }.toSeq
+
+    MetricsWriter.writeCsv(headers, rows, s"$basePath/metrics.csv")
+
+    // Save confusion matrix
+    MetricsWriter.writeConfusionMatrix(
+      metrics.truePositives,
+      metrics.trueNegatives,
+      metrics.falsePositives,
+      metrics.falseNegatives,
+      s"$basePath/confusion_matrix.csv"
+    )
+  }
+
+  /**
+   * Save train/test comparison to CSV
+   */
+  private def saveTrainTestComparison(
+    trainMetrics: EvaluationMetrics,
+    testMetrics: EvaluationMetrics,
+    basePath: String
+  ): Unit = {
+    val trainMap = Map(
+      "accuracy" -> trainMetrics.accuracy,
+      "precision" -> trainMetrics.precision,
+      "recall" -> trainMetrics.recall,
+      "f1_score" -> trainMetrics.f1Score,
+      "auc_roc" -> trainMetrics.areaUnderROC,
+      "auc_pr" -> trainMetrics.areaUnderPR
+    )
+
+    val testMap = Map(
+      "accuracy" -> testMetrics.accuracy,
+      "precision" -> testMetrics.precision,
+      "recall" -> testMetrics.recall,
+      "f1_score" -> testMetrics.f1Score,
+      "auc_roc" -> testMetrics.areaUnderROC,
+      "auc_pr" -> testMetrics.areaUnderPR
+    )
+
+    MetricsWriter.writeTrainTestMetrics(trainMap, testMap, s"$basePath/train_test_comparison.csv")
+
+    // Save separate confusion matrices
+    MetricsWriter.writeConfusionMatrix(
+      trainMetrics.truePositives,
+      trainMetrics.trueNegatives,
+      trainMetrics.falsePositives,
+      trainMetrics.falseNegatives,
+      s"$basePath/confusion_matrix_train.csv"
+    )
+
+    MetricsWriter.writeConfusionMatrix(
+      testMetrics.truePositives,
+      testMetrics.trueNegatives,
+      testMetrics.falsePositives,
+      testMetrics.falseNegatives,
+      s"$basePath/confusion_matrix_test.csv"
+    )
   }
 }
