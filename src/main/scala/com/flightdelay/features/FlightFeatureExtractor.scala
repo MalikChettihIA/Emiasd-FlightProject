@@ -1,6 +1,7 @@
 package com.flightdelay.features
 
-import org.apache.spark.sql.DataFrame
+import com.flightdelay.config.AppConfiguration
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.col
 import com.flightdelay.data.utils.DataQualityMetrics
 import com.flightdelay.features.pipelines.{BasicFlightFeaturePipeline, EnhancedFlightFeaturePipeline}
@@ -45,7 +46,7 @@ object FlightFeatureExtractor {
    * @param target Target column name
    * @return DataFrame with features and label columns
    */
-  def extract(data: DataFrame, target: String): DataFrame = {
+  def extract(data: DataFrame, target: String)(implicit configuration: AppConfiguration): DataFrame = {
     extractInternal(data, target, usePCA = false, None)._1
   }
 
@@ -56,7 +57,7 @@ object FlightFeatureExtractor {
    * @param outputPath Path to save the extracted features
    * @return DataFrame with features and label columns
    */
-  def extractAndSave(data: DataFrame, target: String, outputPath: String): DataFrame = {
+  def extractAndSave(data: DataFrame, target: String, outputPath: String)(implicit configuration: AppConfiguration): DataFrame = {
     val extracted = extract(data, target)
 
     println(s"\n[FlightFeatureExtractor] Saving extracted features to: $outputPath")
@@ -77,7 +78,7 @@ object FlightFeatureExtractor {
     data: DataFrame,
     target: String,
     varianceThreshold: Double = defaultVarianceThreshold
-  ): (DataFrame, PCAModel, VarianceAnalysis) = {
+  )(implicit configuration: AppConfiguration): (DataFrame, PCAModel, VarianceAnalysis) = {
     require(
       varianceThreshold > 0.0 && varianceThreshold <= 1.0,
       s"Variance threshold must be between 0.0 and 1.0, got $varianceThreshold"
@@ -91,6 +92,31 @@ object FlightFeatureExtractor {
       usePCA = true,
       Some(varianceThreshold)
     )
+
+    println("\n" + "=" * 80)
+    println("Feature Extraction Summary (with PCA)")
+    println("=" * 80)
+    println(f"Original Features    : ${analysis.originalDimension}")
+    println(f"PCA Components       : ${analysis.numComponents}")
+    println(f"Variance Explained   : ${analysis.totalVarianceExplained * 100}%.2f%%")
+    println(f"Dimensionality Reduction: ${(1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100}%.1f%%")
+    println("=" * 80)
+
+    // Display sample data
+    println("\nSample of extracted features:")
+    df.show(5, truncate = false)
+
+    // Save PCA model
+    val pcaModelPath = s"${configuration.output.basePath}/models/pca_${configuration.featureExtraction.pcaVarianceThreshold}_${configuration.model.target}"
+    println(s"\nSaving PCA model to: $pcaModelPath")
+    pcaModel.write.overwrite().save(pcaModelPath)
+    println("✓ PCA model saved")
+
+    // Save extracted features
+    val featuresPath = s"${configuration.output.basePath}/features/pca_features_${configuration.model.target}"
+    println(s"Saving extracted features to: $featuresPath")
+    df.write.mode("overwrite").parquet(featuresPath)
+    println("✓ Features saved")
 
     (df, pcaModel, analysis)
   }
@@ -110,7 +136,7 @@ object FlightFeatureExtractor {
     varianceThreshold: Double = defaultVarianceThreshold,
     featuresOutputPath: String,
     modelOutputPath: String
-  ): (DataFrame, PCAModel, VarianceAnalysis) = {
+  )(implicit configuration: AppConfiguration): (DataFrame, PCAModel, VarianceAnalysis) = {
 
     val (extracted, pcaModel, analysis) = extractWithPCA(data, target, varianceThreshold)
 
@@ -135,7 +161,7 @@ object FlightFeatureExtractor {
     target: String,
     usePCA: Boolean,
     varianceThreshold: Option[Double]
-  ): (DataFrame, Option[PCAModel], Option[VarianceAnalysis]) = {
+  )(implicit configuration: AppConfiguration): (DataFrame, Option[PCAModel], Option[VarianceAnalysis]) = {
 
     println(s"\n[FlightFeatureExtractor] Starting feature extraction for target: $target")
 
@@ -207,6 +233,23 @@ object FlightFeatureExtractor {
 
       (finalData, Some(pcaModel), Some(analysis))
     } else {
+
+      println("\n" + "=" * 80)
+      println("Feature Extraction Summary (without PCA)")
+      println("=" * 80)
+      println(s"Features: ${baseFeatures.columns.length} columns")
+      println("=" * 80)
+
+      // Display sample data
+      println("\nSample of extracted features:")
+      baseFeatures.show(5, truncate = false)
+
+      // Save extracted features
+      val featuresPath = s"${configuration.output.basePath}/features/base_features_${configuration.model.target}"
+      println(s"\nSaving extracted features to: $featuresPath")
+      baseFeatures.write.mode("overwrite").parquet(featuresPath)
+      println("✓ Features saved")
+
       (baseFeatures, None, None)
     }
   }
@@ -222,7 +265,7 @@ object FlightFeatureExtractor {
     data: DataFrame,
     target: String,
     maxK: Int = 50
-  ): VarianceAnalysis = {
+  )(implicit configuration: AppConfiguration): VarianceAnalysis = {
     println(s"\n[FlightFeatureExtractor] Exploring PCA variance with maxK=$maxK")
 
     // Get base features without PCA
