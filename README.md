@@ -41,7 +41,7 @@ Le projet utilise trois datasets principaux (https://www.dropbox.com/sh/iasq7frk
 - [Architecture du Projet](docs/MD/2.Architecture_projet.md) - Architecture du projet
 - [Dataset - Structure](docs/MD/3.datasets_description.md) - Structure des 3 datasets
 - [Dataset - Relartions](docs/MD/4.dataset_relations_guide.md) - Relations entres les trois datasets
-- [Visualisation des Métriques](docs/MD/5.random_forst_metrics_visualisation) - Visualisation et analyse des résultats d'entraînement
+- [Visualisation des Métriques](docs/MD/5.random_forst_metrics_visualisation.md) - Visualisation et analyse des résultats d'entraînement
 
 ## Démarrage Rapide
 
