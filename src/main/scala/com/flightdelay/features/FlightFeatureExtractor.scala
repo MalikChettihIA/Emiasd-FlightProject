@@ -3,32 +3,245 @@ package com.flightdelay.features
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
 import com.flightdelay.data.utils.DataQualityMetrics
-import com.flightdelay.features.pipelines.BasicAutoPipeline
-import org.apache.spark.ml.Pipeline
+import com.flightdelay.features.pipelines.{BasicFlightFeaturePipeline, EnhancedFlightFeaturePipeline}
+import com.flightdelay.features.pca.{PCAFeatureExtractor, VarianceAnalysis}
+import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.ml.feature.PCAModel
 
+/**
+ * Flight Feature Extractor - Main entry point for feature engineering pipeline.
+ *
+ * This object provides feature extraction with optional PCA dimensionality reduction:
+ * 1. Automatic column type detection (text vs numeric)
+ * 2. Feature vectorization and indexing
+ * 3. Optional PCA with variance-based component selection
+ *
+ * @example
+ * {{{
+ *   // Without PCA (default)
+ *   val data = FlightFeatureExtractor.extract(df, target = "label_is_delayed_15min")
+ *
+ *   // With PCA (60% variance)
+ *   val (data, pcaModel, analysis) = FlightFeatureExtractor.extractWithPCA(
+ *     df,
+ *     target = "label_is_delayed_15min",
+ *     varianceThreshold = 0.60
+ *   )
+ * }}}
+ */
 object FlightFeatureExtractor {
 
   private val maxCat = 32
   private val handleInvalid = "skip"
+  private val defaultVarianceThreshold = 0.70 // 70% minimum variance
 
   private val _featuresVec = "featuresVec"
   private val _featuresVecIndex = "features"
+  private val _pcaFeatures = "pcaFeatures"
 
+  /**
+   * Extract features without PCA (original behavior)
+   * @param data Input DataFrame with flight data
+   * @param target Target column name
+   * @return DataFrame with features and label columns
+   */
   def extract(data: DataFrame, target: String): DataFrame = {
+    extractInternal(data, target, usePCA = false, None)._1
+  }
 
-    //Supprimons tous les labels sauf la colonne target
+  /**
+   * Extract features without PCA and save to parquet
+   * @param data Input DataFrame with flight data
+   * @param target Target column name
+   * @param outputPath Path to save the extracted features
+   * @return DataFrame with features and label columns
+   */
+  def extractAndSave(data: DataFrame, target: String, outputPath: String): DataFrame = {
+    val extracted = extract(data, target)
+
+    println(s"\n[FlightFeatureExtractor] Saving extracted features to: $outputPath")
+    extracted.write.mode("overwrite").parquet(outputPath)
+    println(s"[FlightFeatureExtractor] ✓ Features saved successfully")
+
+    extracted
+  }
+
+  /**
+   * Extract features with PCA dimensionality reduction
+   * @param data Input DataFrame with flight data
+   * @param target Target column name
+   * @param varianceThreshold Minimum cumulative variance to retain (default: 0.60 for 60%)
+   * @return Tuple of (transformed DataFrame, PCAModel, VarianceAnalysis)
+   */
+  def extractWithPCA(
+    data: DataFrame,
+    target: String,
+    varianceThreshold: Double = defaultVarianceThreshold
+  ): (DataFrame, PCAModel, VarianceAnalysis) = {
+    require(
+      varianceThreshold > 0.0 && varianceThreshold <= 1.0,
+      s"Variance threshold must be between 0.0 and 1.0, got $varianceThreshold"
+    )
+
+    println(s"\n[FlightFeatureExtractor] PCA enabled with ${varianceThreshold * 100}% variance threshold")
+
+    val (df, Some(pcaModel), Some(analysis)) = extractInternal(
+      data,
+      target,
+      usePCA = true,
+      Some(varianceThreshold)
+    )
+
+    (df, pcaModel, analysis)
+  }
+
+  /**
+   * Extract features with PCA and save both features and model
+   * @param data Input DataFrame with flight data
+   * @param target Target column name
+   * @param varianceThreshold Minimum cumulative variance to retain
+   * @param featuresOutputPath Path to save the extracted features
+   * @param modelOutputPath Path to save the PCA model
+   * @return Tuple of (transformed DataFrame, PCAModel, VarianceAnalysis)
+   */
+  def extractWithPCAAndSave(
+    data: DataFrame,
+    target: String,
+    varianceThreshold: Double = defaultVarianceThreshold,
+    featuresOutputPath: String,
+    modelOutputPath: String
+  ): (DataFrame, PCAModel, VarianceAnalysis) = {
+
+    val (extracted, pcaModel, analysis) = extractWithPCA(data, target, varianceThreshold)
+
+    // Save features
+    println(s"\n[FlightFeatureExtractor] Saving PCA features to: $featuresOutputPath")
+    extracted.write.mode("overwrite").parquet(featuresOutputPath)
+    println(s"[FlightFeatureExtractor] ✓ PCA features saved successfully")
+
+    // Save PCA model
+    println(s"[FlightFeatureExtractor] Saving PCA model to: $modelOutputPath")
+    pcaModel.write.overwrite().save(modelOutputPath)
+    println(s"[FlightFeatureExtractor] ✓ PCA model saved successfully")
+
+    (extracted, pcaModel, analysis)
+  }
+
+  /**
+   * Internal extraction method with optional PCA
+   */
+  private def extractInternal(
+    data: DataFrame,
+    target: String,
+    usePCA: Boolean,
+    varianceThreshold: Option[Double]
+  ): (DataFrame, Option[PCAModel], Option[VarianceAnalysis]) = {
+
+    println(s"\n[FlightFeatureExtractor] Starting feature extraction for target: $target")
+
+    // Step 1: Drop unused labels (keep only target)
     val labelsToDrop = data.columns
       .filter(colName => colName.startsWith("label_") && colName != target)
     val flightData = data.drop(labelsToDrop: _*)
 
-    val filghtDataMetric = DataQualityMetrics.metrics(flightData)
-    val textCols = filghtDataMetric.filter(col("colType").contains(DataQualityMetrics._text)).select("name").rdd.flatMap(x=>x.toSeq).map(x=>x.toString).collect
-    val numericCols = filghtDataMetric.filter(col("colType").contains(DataQualityMetrics._numeric)).filter(!col("name").contains(target))
-      .select("name").rdd.flatMap(x=>x.toSeq).map(x=>x.toString).collect
+    println(s"[FlightFeatureExtractor] Dropped ${labelsToDrop.length} unused label columns")
 
-    val pipeline = new BasicAutoPipeline(textCols,numericCols,target,maxCat,handleInvalid)
-    val extractedData = pipeline.fit(flightData)
-    extractedData
+    // Step 2: Detect column types using DataQualityMetrics
+    val flightDataMetric = DataQualityMetrics.metrics(flightData)
+    val textCols = flightDataMetric
+      .filter(col("colType").contains(DataQualityMetrics._text))
+      .select("name")
+      .rdd.flatMap(x => x.toSeq).map(x => x.toString).collect
+
+    val numericCols = flightDataMetric
+      .filter(col("colType").contains(DataQualityMetrics._numeric))
+      .filter(!col("name").contains(target))
+      .select("name")
+      .rdd.flatMap(x => x.toSeq).map(x => x.toString).collect
+
+    println(s"[FlightFeatureExtractor] Detected ${textCols.length} text columns and ${numericCols.length} numeric columns")
+
+    // Step 3: Apply feature pipeline (with or without scaling based on PCA usage)
+    val baseFeatures = if (usePCA) {
+      // Use EnhancedFlightFeaturePipeline with StandardScaler for PCA
+      println(s"[FlightFeatureExtractor] Using EnhancedFlightFeaturePipeline with StandardScaler for PCA")
+      val enhancedPipeline = new EnhancedFlightFeaturePipeline(
+        textCols = textCols,
+        numericCols = numericCols,
+        target = target,
+        maxCat = maxCat,
+        handleInvalid = handleInvalid,
+        scalerType = Some("standard")  // Critical for PCA
+      )
+      val (model, transformed) = enhancedPipeline.fitTransform(flightData)
+      transformed
+    } else {
+      // Use BasicFlightFeaturePipeline without scaling for tree-based models
+      println(s"[FlightFeatureExtractor] Using BasicFlightFeaturePipeline without scaling")
+      val basicPipeline = new BasicFlightFeaturePipeline(textCols, numericCols, target, maxCat, handleInvalid)
+      basicPipeline.fit(flightData)
+    }
+
+    println(s"[FlightFeatureExtractor] Feature pipeline completed")
+
+    // Step 4: Apply PCA if enabled
+    if (usePCA && varianceThreshold.isDefined) {
+      val pca = PCAFeatureExtractor.varianceBased(
+        threshold = varianceThreshold.get,
+        inputCol = "features",
+        outputCol = _pcaFeatures
+      )
+
+      val (pcaModel, pcaData, analysis) = pca.fitTransform(baseFeatures)
+
+      // Print PCA summary
+      println(s"\n[FlightFeatureExtractor] PCA Summary:")
+      println(s"  - Original features: ${analysis.originalDimension}")
+      println(s"  - PCA components: ${analysis.numComponents}")
+      println(s"  - Variance explained: ${(analysis.totalVarianceExplained * 100).round}%")
+      println(s"  - Dimensionality reduction: ${((1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100).round}%")
+
+      // Select final columns: pcaFeatures -> features, label
+      val finalData = pcaData
+        .select(col(_pcaFeatures).alias("features"), col("label"))
+
+      (finalData, Some(pcaModel), Some(analysis))
+    } else {
+      (baseFeatures, None, None)
+    }
   }
 
+  /**
+   * Explore optimal PCA variance threshold
+   * @param data Input DataFrame
+   * @param target Target column
+   * @param maxK Maximum number of components to test (default: 50)
+   * @return VarianceAnalysis for exploration
+   */
+  def explorePCAVariance(
+    data: DataFrame,
+    target: String,
+    maxK: Int = 50
+  ): VarianceAnalysis = {
+    println(s"\n[FlightFeatureExtractor] Exploring PCA variance with maxK=$maxK")
+
+    // Get base features without PCA
+    val (baseFeatures, _, _) = extractInternal(data, target, usePCA = false, None)
+
+    // Perform variance analysis
+    val analysis = PCAFeatureExtractor.exploreVariance(
+      baseFeatures,
+      inputCol = "features",
+      maxK = maxK
+    )
+
+    // Print recommendations
+    println(s"\nPCA Variance Exploration Results:")
+    println(s"  - For 60% variance: ${analysis.getMinComponentsForVariance(0.60)} components")
+    println(s"  - For 75% variance: ${analysis.getMinComponentsForVariance(0.75)} components")
+    println(s"  - For 90% variance: ${analysis.getMinComponentsForVariance(0.90)} components")
+    println(s"  - For 95% variance: ${analysis.getMinComponentsForVariance(0.95)} components")
+
+    analysis
+  }
 }

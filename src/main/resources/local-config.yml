@@ -8,6 +8,12 @@ data:
     path : "/data/FLIGHT-3Y/Weather/201201hourly.txt"
   airportMapping :
     path : "/data/FLIGHT-3Y/wban_airport_timezone.csv"
+featureExtraction:
+  pca : true
+  pcaVarianceThreshold : 0.7
+model:
+  name: "RandomForest"
+  target : "label_is_delayed_15min"
 output:
   basePath : "/output"
   data:

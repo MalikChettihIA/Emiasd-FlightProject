@@ -76,7 +76,7 @@ Le DataFrame transformé contient **uniquement 2 colonnes** :
 
 ```scala
 import org.apache.spark.sql.SparkSession
-import com.flightdelay.features.pipelines.BasicAutoPipeline
+import com.flightdelay.features.pipelines.BasicFlightFeaturePipeline
 
 val spark = SparkSession.builder()
   .appName("BasicAutoPipeline Example")
@@ -96,13 +96,13 @@ val flightData = Seq(
   ("AA", "ORD", "SFO", 180, 22, 200, "Delayed"),
   ("DL", "JFK", "ORD", 130, 16, 160, "OnTime")
 ).toDF(
-  "carrier",        // Catégoriel: compagnie aérienne
-  "origin",         // Catégoriel: aéroport de départ
-  "dest",           // Catégoriel: aéroport d'arrivée
-  "dep_delay",      // Numérique: retard au départ (minutes)
-  "taxi_out",       // Numérique: temps de roulage (minutes)
-  "air_time",       // Numérique: temps de vol (minutes)
-  "flight_status"   // Cible: statut du vol
+  "carrier", // Catégoriel: compagnie aérienne
+  "origin", // Catégoriel: aéroport de départ
+  "dest", // Catégoriel: aéroport d'arrivée
+  "dep_delay", // Numérique: retard au départ (minutes)
+  "taxi_out", // Numérique: temps de roulage (minutes)
+  "air_time", // Numérique: temps de vol (minutes)
+  "flight_status" // Cible: statut du vol
 )
 
 flightData.show(false)

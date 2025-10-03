@@ -8,3 +8,9 @@ data:
     path : "/students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Weather/*.txt"
   airportMapping :
     path : "/students/p6emiasd2025/mchettih/data/FLIGHT-3Y/wban_airport_timezone.csv"
+output:
+  basePath : "/students/p6emiasd2025/mchettih/output"
+  data:
+    path: "/students/p6emiasd2025/mchettih/output/data"
+  model:
+    path: "/students/p6emiasd2025/mchettih/output/model"

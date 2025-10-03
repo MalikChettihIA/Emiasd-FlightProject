@@ -49,35 +49,54 @@ object ConfigurationLoader {
    * Parse la map YAML en case classes Scala
    */
   private def parseConfiguration(data: Map[String, Any]): AppConfiguration = {
-
-    // Parse Data config
-    val dataData = data("data").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
-    val flightData = dataData("flight").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
-    val weatherData = dataData("weather").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
-    val airportData = dataData("airportMapping").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    // --- Data ---
+    val dataData     = data("data").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    val flightData   = dataData("flight").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    val weatherData  = dataData("weather").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    val airportData  = dataData("airportMapping").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
 
     val dataConfig = DataConfig(
-      basePath = dataData("basePath").toString,
-      flight = FileConfig(path = flightData("path").toString),
-      weather = FileConfig(path = weatherData("path").toString),
+      basePath       = dataData("basePath").toString,
+      flight         = FileConfig(path = flightData("path").toString),
+      weather        = FileConfig(path = weatherData("path").toString),
       airportMapping = FileConfig(path = airportData("path").toString)
     )
 
-    // Parse Output config
-    val outputData = data("output").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
-    val outputDataData = outputData("data").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    // --- Feature Extraction ---
+    val featureExtractionData =
+      data("featureExtraction").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+
+    val featureExtractionConfig = FeatureExtractionConfig(
+      pca                  = featureExtractionData.get("pca").exists(_.toString.toBoolean),
+      pcaVarianceThreshold = featureExtractionData.get("pcaVarianceThreshold")
+        .map(_.toString.toFloat)
+        .getOrElse(0.95f) // valeur par défaut raisonnable
+    )
+
+    // --- Model ---
+    val modelData = data("model").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    val modelConfig = ModelConfig(
+      name = modelData("name").toString,
+      target = modelData("target").toString
+    )
+
+    // --- Output ---
+    val outputData      = data("output").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    val outputDataData  = outputData("data").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
     val outputDataModel = outputData("model").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
 
     val outputConfig = OutputConfig(
       basePath = outputData("basePath").toString,
-      data = FileConfig(path = outputDataData("path").toString),
+      data  = FileConfig(path = outputDataData("path").toString),
       model = FileConfig(path = outputDataModel("path").toString)
     )
 
     AppConfiguration(
-      environment = data("environment").toString,
-      data = dataConfig,
-      output = outputConfig
+      environment       = data("environment").toString,
+      data              = dataConfig,
+      featureExtraction = featureExtractionConfig,
+      model             = modelConfig,
+      output            = outputConfig
     )
   }
 }

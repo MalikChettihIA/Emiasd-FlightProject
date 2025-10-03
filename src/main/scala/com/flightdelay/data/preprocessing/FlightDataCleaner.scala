@@ -125,9 +125,9 @@ object FlightDataCleaner extends DataPreprocessor {
     println("Phase 3: Types Conversion")
 
     val typeMapping = Map(
-      "FL_DATE" -> StringType,
+      "FL_DATE" -> DateType,
       "OP_CARRIER_AIRLINE_ID" -> IntegerType,
-      "OP_CARRIER_FL_NUM" -> StringType,
+      "OP_CARRIER_FL_NUM" -> IntegerType,
       "ORIGIN_AIRPORT_ID" -> IntegerType,
       "DEST_AIRPORT_ID" -> IntegerType,
       "CRS_DEP_TIME" -> IntegerType,
@@ -139,11 +139,9 @@ object FlightDataCleaner extends DataPreprocessor {
 
     val convertedData = convertDataTypes(df, typeMapping)
 
-    // Validation du format de date
-    println("- Filter Invalid flight date formats")
-    val validDates = convertedData.filter(
-      col("FL_DATE").rlike("^\\d{4}-\\d{2}-\\d{2}$")
-    )
+    // Validation du format de date (vérifier que la date n'est pas nulle)
+    println("- Filter Invalid flight dates")
+    val validDates = convertedData.filter(col("FL_DATE").isNotNull)
 
     println(s"Current Count : ${validDates.count()}")
     validDates

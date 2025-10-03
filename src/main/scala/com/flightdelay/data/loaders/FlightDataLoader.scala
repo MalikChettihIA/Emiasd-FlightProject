@@ -71,44 +71,86 @@ object FlightDataLoader extends DataLoader[Flight] {
    * @return Try[DataFrame] containing processed flight data
    */
   override def loadFromConfiguration(validate: Boolean = false)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
-    val filePath = configuration.data.flight.path;
-    loadFromFilePath(filePath, validate)
+    val filePath = configuration.data.flight.path
+    val outputPath = s"${configuration.output.data.path}/raw_flights.parquet"
+    loadFromFilePath(filePath, validate, Some(outputPath))
   }
 
 
   /**
    * Load flight data with full preprocessing and transformation
-   * @param configuration Configuration de l'application
+   * @param filePath Path to CSV input file
+   * @param validate Whether to validate schema
+   * @param outputPath Optional path to save Parquet file
    * @param spark Implicit SparkSession
-   * @return Try[DataFrame] containing processed flight data
+   * @return DataFrame containing processed flight data
    */
-  override def loadFromFilePath(filePath: String, validate: Boolean = false)(implicit spark: SparkSession): DataFrame = {
+  override def loadFromFilePath(filePath: String, validate: Boolean = false, outputPath: Option[String] = None)(implicit spark: SparkSession): DataFrame = {
     println("")
     println("")
     println("----------------------------------------------------------------------------------------------------------")
     println("--> [FlightDataLoader] Flight Data Loading - Start ...")
 
-    val rawDf = spark.read.format("csv")
-      .option("header", "true")
-      .option("inferSchema", "true")
-      .option("timestampFormat", DEFAULT_DATE_FORMAT)
-      .option("multiline", "true")
-      .option("escape", "\"")
-      .load(filePath)
-      .drop("_c12")
-      .persist()
+    // Check if Parquet file exists and load from it if available
+    val rawDf = outputPath match {
+      case Some(parquetPath) if parquetFileExists(parquetPath) =>
+        println(s"--> Loading from existing Parquet file: $parquetPath")
+        val df = spark.read.parquet(parquetPath)
+        val count = df.count
+        println(s"--> ✓ Loaded $count records from Parquet (optimized)")
+        df
 
-    println("--> "+rawDf.count+" loaded ...")
+      case _ =>
+        println(s"--> Loading from CSV file: $filePath")
+        val df = spark.read.format("csv")
+          .option("header", "true")
+          .schema(expectedSchema)
+          .option("timestampFormat", DEFAULT_DATE_FORMAT)
+          .option("multiline", "true")
+          .option("escape", "\"")
+          .load(filePath)
+          .withColumn("FL_DATE", to_date(col("FL_DATE"), DEFAULT_DATE_FORMAT))
+
+        val count = df.count
+        println(s"--> $count records loaded from CSV")
+
+        // Save as Parquet for future use
+        outputPath.foreach { path =>
+          println(s"--> Saving data to Parquet format: $path")
+          df.write
+            .mode("overwrite")
+            .option("compression", "snappy")
+            .parquet(path)
+          println(s"--> ✓ Saved $count records to Parquet")
+        }
+
+        df
+    }
+
     rawDf.printSchema
     rawDf.show(10)
 
     if (validate && (!validateSchema(rawDf)))
       println("Schema validation failed")
+
     println("--> [FlightDataLoader] Flight Data Loading - End ...")
     println("----------------------------------------------------------------------------------------------------------")
     println("")
     println("")
     rawDf
+  }
+
+  /**
+   * Check if Parquet file exists
+   */
+  private def parquetFileExists(path: String)(implicit spark: SparkSession): Boolean = {
+    try {
+      val fs = org.apache.hadoop.fs.FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val exists = fs.exists(new org.apache.hadoop.fs.Path(path))
+      exists
+    } catch {
+      case _: Exception => false
+    }
   }
 
   // ===========================================================================================
