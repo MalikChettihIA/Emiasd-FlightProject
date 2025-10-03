@@ -94,31 +94,6 @@ object FlightDelayPredictionApp {
             varianceThreshold = configuration.featureExtraction.pcaVarianceThreshold
           )
 
-          println("\n" + "=" * 80)
-          println("Feature Extraction Summary (with PCA)")
-          println("=" * 80)
-          println(f"Original Features    : ${analysis.originalDimension}")
-          println(f"PCA Components       : ${analysis.numComponents}")
-          println(f"Variance Explained   : ${analysis.totalVarianceExplained * 100}%.2f%%")
-          println(f"Dimensionality Reduction: ${(1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100}%.1f%%")
-          println("=" * 80)
-
-          // Display sample data
-          println("\nSample of extracted features:")
-          extractedData.show(5, truncate = false)
-
-          // Save PCA model
-          val pcaModelPath = s"${configuration.output.basePath}/models/pca_${configuration.featureExtraction.pcaVarianceThreshold}_${configuration.model.target}"
-          println(s"\nSaving PCA model to: $pcaModelPath")
-          pcaModel.write.overwrite().save(pcaModelPath)
-          println("✓ PCA model saved")
-
-          // Save extracted features
-          val featuresPath = s"${configuration.output.basePath}/features/pca_features_${configuration.model.target}"
-          println(s"Saving extracted features to: $featuresPath")
-          extractedData.write.mode("overwrite").parquet(featuresPath)
-          println("✓ Features saved")
-
         } else {
           // Extract features without PCA
           val extractedData = FlightFeatureExtractor.extract(
@@ -126,21 +101,7 @@ object FlightDelayPredictionApp {
             target = configuration.model.target
           )
 
-          println("\n" + "=" * 80)
-          println("Feature Extraction Summary (without PCA)")
-          println("=" * 80)
-          println(s"Features: ${extractedData.columns.length} columns")
-          println("=" * 80)
 
-          // Display sample data
-          println("\nSample of extracted features:")
-          extractedData.show(5, truncate = false)
-
-          // Save extracted features
-          val featuresPath = s"${configuration.output.basePath}/features/base_features_${configuration.model.target}"
-          println(s"\nSaving extracted features to: $featuresPath")
-          extractedData.write.mode("overwrite").parquet(featuresPath)
-          println("✓ Features saved")
         }
       } else {
         println(s"\n[STEP 3] Feature extraction... SKIPPED")
