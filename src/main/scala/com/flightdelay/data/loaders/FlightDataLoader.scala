@@ -53,8 +53,8 @@ object FlightDataLoader extends DataLoader[Flight] {
     StructField("DEST_AIRPORT_ID", IntegerType, nullable = false),
     StructField("CRS_DEP_TIME", IntegerType, nullable = false),
     StructField("ARR_DELAY_NEW", DoubleType, nullable = true),
-    StructField("CANCELLED", IntegerType, nullable = false),
-    StructField("DIVERTED", IntegerType, nullable = false),
+    StructField("CANCELLED", IntegerType, nullable = true),
+    StructField("DIVERTED", IntegerType, nullable = true),
     StructField("CRS_ELAPSED_TIME", DoubleType, nullable = true),
     StructField("WEATHER_DELAY", DoubleType, nullable = true),
     StructField("NAS_DELAY", DoubleType, nullable = true)

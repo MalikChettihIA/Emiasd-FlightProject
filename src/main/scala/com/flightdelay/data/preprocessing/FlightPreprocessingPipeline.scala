@@ -34,24 +34,25 @@ object FlightPreprocessingPipeline {
     val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
     val generatedFightData = FlightDataGenerator.preprocess(cleanedFlightData)
     val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFightData)
+    val finalCleanedData = FlightDataLeakageCleaner.preprocess(generatedFightDataWithLabels)
 
     // Validate schema
-    validatePreprocessedSchema(generatedFightDataWithLabels)
+    validatePreprocessedSchema(finalCleanedData)
 
     // Save processed data to parquet
     println(s"--> Saving preprocessed data to parquet: $processedParquetPath")
-    generatedFightDataWithLabels.write
+    finalCleanedData.write
       .mode("overwrite")
       .option("compression", "snappy")
       .parquet(processedParquetPath)
-    println(s"--> ✓ Saved ${generatedFightDataWithLabels.count()} preprocessed records to parquet")
+    println(s"--> ✓ Saved ${finalCleanedData.count()} preprocessed records to parquet")
 
     println("")
     println("----------------------------------------------------------------------------------------------------------")
     println("--> [FlightPreprocessingPipeline] Flight Preprocessing Pipeline - End ...")
     println("----------------------------------------------------------------------------------------------------------")
 
-    generatedFightDataWithLabels
+    finalCleanedData
   }
 
   /**
@@ -65,6 +66,7 @@ object FlightPreprocessingPipeline {
     println("----------------------------------------------------------------------------------------------------------")
 
     // Required base columns (from raw data)
+    // Note: ARR_DELAY_NEW, WEATHER_DELAY, NAS_DELAY are removed by FlightDataLeakageCleaner
     val requiredBaseColumns = Map(
       "FL_DATE" -> DateType,
       "OP_CARRIER_AIRLINE_ID" -> IntegerType,
@@ -72,7 +74,6 @@ object FlightPreprocessingPipeline {
       "ORIGIN_AIRPORT_ID" -> IntegerType,
       "DEST_AIRPORT_ID" -> IntegerType,
       "CRS_DEP_TIME" -> IntegerType,
-      "ARR_DELAY_NEW" -> DoubleType,
       "CRS_ELAPSED_TIME" -> DoubleType
     )
 
@@ -138,6 +139,18 @@ object FlightPreprocessingPipeline {
         validationPassed = false
       } else {
         println(s"  ✓ $colName")
+      }
+    }
+
+    // Validate that leakage columns have been removed
+    println("\n✓ Validating leakage columns removal:")
+    val leakageColumns = Seq("ARR_DELAY_NEW", "WEATHER_DELAY", "NAS_DELAY")
+    leakageColumns.foreach { colName =>
+      if (availableColumns.contains(colName)) {
+        println(s"  ✗ LEAKAGE DETECTED: $colName should have been removed!")
+        validationPassed = false
+      } else {
+        println(s"  ✓ $colName removed (no leakage)")
       }
     }
 

@@ -2,8 +2,12 @@
 
 # Tasks to execute (comma-separated): load,preprocess,feature-extraction,train,evaluate
 # Default: all tasks
+
+#TASKS="${1:-load}"
+#TASKS="${1:-load,preprocess}"
+#TASKS="${1:-load,preprocess,feature-extraction}"
+TASKS="${1:-load,preprocess,feature-extraction,train}"
 #TASKS="${1:-load,preprocess,feature-extraction,train,evaluate}"
-TASKS="${1:-feature-extraction}"
 
 spark-submit \
   --master "$SPARK_MASTER_URL" \

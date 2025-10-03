@@ -4,6 +4,7 @@ import com.flightdelay.config.{AppConfiguration, ConfigurationLoader}
 import com.flightdelay.data.preprocessing.FlightPreprocessingPipeline
 import com.flightdelay.data.loaders.FlightDataLoader
 import com.flightdelay.features.FlightFeatureExtractor
+import com.flightdelay.ml.training.ModelTrainer
 import org.apache.spark.sql.SparkSession
 import org.slf4j.LoggerFactory
 
@@ -108,11 +109,31 @@ object FlightDelayPredictionApp {
       }
 
       // =====================================================================================
-      // STEP 4: Train Model (TODO)
+      // STEP 4: Train Model
       // =====================================================================================
       if (tasks.contains("train")) {
         println("\n[STEP 4] Training model...")
-        println("⚠ Training not yet implemented")
+
+        // Determine which features to load based on PCA configuration
+        val featuresPath = if (configuration.featureExtraction.pca) {
+          s"${configuration.output.basePath}/features/pca_features_${configuration.model.target}"
+        } else {
+          s"${configuration.output.basePath}/features/base_features_${configuration.model.target}"
+        }
+
+        println(s"Loading features from: $featuresPath")
+        val featuresData = spark.read.parquet(featuresPath)
+        println(s"✓ Loaded ${featuresData.count()} feature records")
+
+        // Train model using ModelTrainer
+        val trainingResult = ModelTrainer.train(featuresData)
+
+        println(s"\n✓ Model training completed successfully!")
+        println(s"   - Model saved to: ${configuration.output.model.path}/${configuration.model.name}_${configuration.model.modelType}")
+        println(f"   - Test Accuracy: ${trainingResult.testMetrics.accuracy * 100}%.2f%%")
+        println(f"   - Test F1-Score: ${trainingResult.testMetrics.f1Score * 100}%.2f%%")
+        println(f"   - Test AUC-ROC: ${trainingResult.testMetrics.areaUnderROC}%.4f")
+
       } else {
         println("\n[STEP 4] Training model... SKIPPED")
       }

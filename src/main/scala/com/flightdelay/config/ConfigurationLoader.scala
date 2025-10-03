@@ -77,7 +77,14 @@ object ConfigurationLoader {
     val modelData = data("model").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
     val modelConfig = ModelConfig(
       name = modelData("name").toString,
-      target = modelData("target").toString
+      target = modelData("target").toString,
+      modelType = modelData("modelType").toString,
+      trainRatio = modelData("trainRatio").toString.toDouble,
+      numTrees = modelData("numTrees").toString.toInt,
+      maxDepth = modelData("maxDepth").toString.toInt,
+      maxBins = modelData("maxBins").toString.toInt,
+      minInstancesPerNode = modelData("minInstancesPerNode").toString.toInt,
+      seed = modelData("seed").toString.toLong
     )
 
     // --- Output ---

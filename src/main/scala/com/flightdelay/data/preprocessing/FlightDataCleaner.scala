@@ -89,13 +89,20 @@ object FlightDataCleaner extends DataPreprocessor {
     println("")
     println("Phase 2: Filter Flights")
     println("- Filter Cancelled and Diverted Flights")
-    // Selon l'article TIST, on exclut les vols annulés et détournés
-    val exclusions = Map(
-      "CANCELLED" -> Seq(1.0),
-      "DIVERTED" -> Seq(1.0)
-    )
 
-    val filteredCancelledDiverted = removeSpecificValues(df, exclusions)
+    // Remplacer les NULL par 0 pour CANCELLED et DIVERTED
+    val dfWithDefaults = df
+      .withColumn("CANCELLED", coalesce(col("CANCELLED"), lit(0)))
+      .withColumn("DIVERTED", coalesce(col("DIVERTED"), lit(0)))
+
+    println(s"DEBUG: Distribution après remplacement des NULL:")
+    dfWithDefaults.groupBy("CANCELLED", "DIVERTED").count().show()
+
+    // Selon l'article TIST, on exclut les vols annulés et détournés
+    // Filtrer directement au lieu d'utiliser removeSpecificValues
+    val filteredCancelledDiverted = dfWithDefaults
+      .filter(col("CANCELLED") === 0 && col("DIVERTED") === 0)
+      .drop("CANCELLED", "DIVERTED")
 
     // Filtrer les vols avec des heures de départ invalides
     println("- Filter Invalid departure time")

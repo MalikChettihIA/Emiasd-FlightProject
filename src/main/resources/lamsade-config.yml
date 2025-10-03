@@ -8,6 +8,22 @@ data:
     path : "/students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Weather/*.txt"
   airportMapping :
     path : "/students/p6emiasd2025/mchettih/data/FLIGHT-3Y/wban_airport_timezone.csv"
+
+featureExtraction:
+  pca: true
+  pcaVarianceThreshold: 0.70
+
+model:
+  name: "flight_delay_rf"
+  target: "label_is_delayed_15min"
+  modelType: "randomforest"
+  trainRatio: 0.8
+  numTrees: 100
+  maxDepth: 10
+  maxBins: 32
+  minInstancesPerNode: 1
+  seed: 42
+
 output:
   basePath : "/students/p6emiasd2025/mchettih/output"
   data:
