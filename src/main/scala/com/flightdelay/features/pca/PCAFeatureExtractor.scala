@@ -1,5 +1,6 @@
 package com.flightdelay.features.pca
 
+import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.feature.{PCA, PCAModel}
 import org.apache.spark.ml.linalg.{DenseVector, Vector}
@@ -213,6 +214,141 @@ class PCAFeatureExtractor(
         println(f"PC-$idx%-10d ${individual}%-15.6f ${cumulative}%-15.6f ${cumulative * 100}%-15.2f%%")
     }
     println("=" * 80 + "\n")
+  }
+
+  /**
+   * Save PCA variance analysis to CSV for visualization
+   * @param analysis VarianceAnalysis object
+   * @param outputPath Path to save CSV file
+   */
+  def saveVarianceAnalysis(analysis: VarianceAnalysis, outputPath: String): Unit = {
+    val headers = Seq("component", "explained_variance", "cumulative_variance", "cumulative_variance_pct")
+    val rows = analysis.componentIndices.zip(analysis.explainedVariance).zip(analysis.cumulativeVariance).map {
+      case ((idx, individual), cumulative) =>
+        Seq(idx, f"$individual%.6f", f"$cumulative%.6f", f"${cumulative * 100}%.2f")
+    }.toSeq
+
+    MetricsWriter.writeCsv(headers, rows, outputPath) match {
+      case scala.util.Success(_) => // Already prints success message
+      case scala.util.Failure(ex) =>
+        println(s"  ⚠ Failed to save PCA variance analysis: ${ex.getMessage}")
+    }
+  }
+
+  /**
+   * Save PCA projections (first 2 components) for biplot visualization
+   * @param transformedData DataFrame with PCA features
+   * @param outputPath Path to save CSV file
+   * @param labelCol Optional label column to include
+   * @param maxSamples Maximum number of samples to save (default: 5000)
+   */
+  def savePCAProjections(
+    transformedData: DataFrame,
+    outputPath: String,
+    labelCol: Option[String] = None,
+    maxSamples: Int = 5000
+  ): Unit = {
+    import transformedData.sparkSession.implicits._
+
+    // Extract first 2 PCA components
+    val projectionData = transformedData.select(
+      col(outputCol),
+      labelCol.map(col).getOrElse(lit(0.0).as("label"))
+    ).rdd.map { row =>
+      val pcaVec = row.getAs[Vector](0)
+      val label = if (labelCol.isDefined) row.getDouble(1) else 0.0
+      (pcaVec(0), if (pcaVec.size > 1) pcaVec(1) else 0.0, label)
+    }.toDF("pc1", "pc2", "label")
+
+    // Sample if too large
+    val sampledData = if (projectionData.count() > maxSamples) {
+      projectionData.sample(withReplacement = false, maxSamples.toDouble / projectionData.count())
+    } else {
+      projectionData
+    }
+
+    // Save to CSV
+    sampledData.coalesce(1)
+      .write
+      .mode("overwrite")
+      .option("header", "true")
+      .csv(s"${outputPath}_temp")
+
+    // Move the part file to final location
+    try {
+      val fs = org.apache.hadoop.fs.FileSystem.get(transformedData.sparkSession.sparkContext.hadoopConfiguration)
+      val srcPath = new org.apache.hadoop.fs.Path(s"${outputPath}_temp")
+      val files = fs.listStatus(srcPath).filter(_.getPath.getName.startsWith("part-"))
+      if (files.nonEmpty) {
+        val partFile = files.head.getPath
+        val destPath = new org.apache.hadoop.fs.Path(outputPath)
+        fs.rename(partFile, destPath)
+        fs.delete(srcPath, true)
+        println(s"  - PCA projections saved to: $outputPath")
+      }
+    } catch {
+      case ex: Exception =>
+        println(s"  ⚠ Could not save PCA projections: ${ex.getMessage}")
+    }
+  }
+
+  /**
+   * Save PCA loadings (feature contributions to principal components)
+   * Loadings show how much each original feature contributes to each PC
+   * @param model Fitted PCAModel
+   * @param outputPath Path to save CSV file
+   * @param topN Number of top components to save (default: all)
+   * @param featureNames Optional feature names (if None, uses indices)
+   */
+  def savePCALoadings(
+    model: PCAModel,
+    outputPath: String,
+    topN: Option[Int] = None,
+    featureNames: Option[Array[String]] = None
+  ): Unit = {
+    val pc = model.pc // Principal components matrix (features x components)
+    val numFeatures = pc.numRows
+    val numComponents = pc.numCols
+    val componentsToSave = topN.getOrElse(numComponents).min(numComponents)
+
+    // Extract loadings for first N components
+    val headers = Seq("feature_index", "feature_name") ++ (1 to componentsToSave).map(i => s"PC$i")
+    val rows = (0 until numFeatures).map { featureIdx =>
+      val loadings = (0 until componentsToSave).map { compIdx =>
+        val loading = pc(featureIdx, compIdx)
+        f"$loading%.6f"
+      }
+      val featureName = featureNames.flatMap(names =>
+        if (featureIdx < names.length) Some(names(featureIdx))
+        else None
+      ).getOrElse(s"feature_$featureIdx")
+
+      Seq(featureIdx.toString, featureName) ++ loadings
+    }
+
+    MetricsWriter.writeCsv(headers, rows, outputPath) match {
+      case scala.util.Success(_) => // Already prints success message
+      case scala.util.Failure(ex) =>
+        println(s"  ⚠ Failed to save PCA loadings: ${ex.getMessage}")
+    }
+  }
+
+  /**
+   * Save feature names mapping
+   * @param featureNames Array of feature names
+   * @param outputPath Path to save CSV file
+   */
+  def saveFeatureNames(featureNames: Array[String], outputPath: String): Unit = {
+    val headers = Seq("feature_index", "feature_name")
+    val rows = featureNames.zipWithIndex.map { case (name, idx) =>
+      Seq(idx.toString, name)
+    }
+
+    MetricsWriter.writeCsv(headers, rows, outputPath) match {
+      case scala.util.Success(_) => // Already prints success message
+      case scala.util.Failure(ex) =>
+        println(s"  ⚠ Failed to save feature names: ${ex.getMessage}")
+    }
   }
 
   /**

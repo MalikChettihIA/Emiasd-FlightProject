@@ -42,11 +42,20 @@ object ModelEvaluator {
    */
   def evaluate(predictions: DataFrame, metricsOutputPath: Option[String] = None): EvaluationMetrics = {
     println("\n" + "=" * 80)
-    println("Model Evaluation")
+    println("[STEP 4] Model Evaluation")
     println("=" * 80)
 
+    // Check if already cached to avoid double caching
+    val cachedPredictions = if (predictions.storageLevel.useMemory) {
+      predictions
+    } else {
+      val cached = predictions.cache()
+      cached.count() // Force materialization
+      cached
+    }
+
     // Compute confusion matrix
-    val confusionMatrix = predictions
+    val confusionMatrix = cachedPredictions
       .groupBy("label", "prediction")
       .count()
       .collect()
@@ -63,18 +72,18 @@ object ModelEvaluator {
       .setLabelCol("label")
       .setPredictionCol("prediction")
 
-    val accuracy = multiclassEval.setMetricName("accuracy").evaluate(predictions)
-    val precision = multiclassEval.setMetricName("weightedPrecision").evaluate(predictions)
-    val recall = multiclassEval.setMetricName("weightedRecall").evaluate(predictions)
-    val f1 = multiclassEval.setMetricName("f1").evaluate(predictions)
+    val accuracy = multiclassEval.setMetricName("accuracy").evaluate(cachedPredictions)
+    val precision = multiclassEval.setMetricName("weightedPrecision").evaluate(cachedPredictions)
+    val recall = multiclassEval.setMetricName("weightedRecall").evaluate(cachedPredictions)
+    val f1 = multiclassEval.setMetricName("f1").evaluate(cachedPredictions)
 
     // Binary classification metrics evaluator
     val binaryEval = new BinaryClassificationEvaluator()
       .setLabelCol("label")
       .setRawPredictionCol("rawPrediction")
 
-    val auc = binaryEval.setMetricName("areaUnderROC").evaluate(predictions)
-    val aupr = binaryEval.setMetricName("areaUnderPR").evaluate(predictions)
+    val auc = binaryEval.setMetricName("areaUnderROC").evaluate(cachedPredictions)
+    val aupr = binaryEval.setMetricName("areaUnderPR").evaluate(cachedPredictions)
 
     val metrics = EvaluationMetrics(
       accuracy = accuracy,
@@ -95,6 +104,11 @@ object ModelEvaluator {
     // Save metrics to file if path provided
     metricsOutputPath.foreach { basePath =>
       saveMetricsToFile(metrics, basePath)
+    }
+
+    // Only unpersist if we cached it ourselves (not if it was already cached)
+    if (!predictions.storageLevel.useMemory) {
+      cachedPredictions.unpersist()
     }
 
     metrics
@@ -140,7 +154,7 @@ object ModelEvaluator {
   ): (EvaluationMetrics, EvaluationMetrics) = {
 
     println("\n" + "=" * 80)
-    println("Train/Test Evaluation")
+    println("[STEP 4] Train/Test Evaluation")
     println("=" * 80)
 
     println("\n[Training Set Evaluation]")
@@ -162,7 +176,7 @@ object ModelEvaluator {
     } else if (accuracyGap > 0.05 || f1Gap > 0.05) {
       println("⚠ Moderate overfitting detected (gap > 5%)")
     } else {
-      println("✓ Model generalizes well")
+      println("- Model generalizes well")
     }
 
     println("=" * 80 + "\n")
@@ -204,6 +218,60 @@ object ModelEvaluator {
       metrics.falseNegatives,
       s"$basePath/confusion_matrix.csv"
     )
+  }
+
+  /**
+   * Save predictions with probabilities for ROC curve generation
+   */
+  private def savePredictionsForROC(predictions: DataFrame, basePath: String, split: String): Unit = {
+    import predictions.sparkSession.implicits._
+
+    // Cache predictions if not already cached to avoid multiple broadcasts
+    val cachedPreds = if (predictions.storageLevel.useMemory) predictions else predictions.cache()
+
+    // Extract label, prediction, and probability of positive class
+    val rocData = cachedPreds.select("label", "prediction", "probability")
+      .rdd
+      .map { row =>
+        val label = row.getDouble(0)
+        val prediction = row.getDouble(1)
+        val probability = row.getAs[org.apache.spark.ml.linalg.Vector](2)
+        val probPositive = probability(1) // Probability of class 1 (delayed)
+        (label, prediction, probPositive)
+      }
+      .toDF("label", "prediction", "prob_positive")
+
+    // Sample data if too large (keep max 10000 points for ROC curve)
+    val count = rocData.count()
+    val sampledData = if (count > 10000) {
+      rocData.sample(withReplacement = false, 10000.0 / count)
+    } else {
+      rocData
+    }
+
+    // Save to CSV
+    sampledData.coalesce(1)
+      .write
+      .mode("overwrite")
+      .option("header", "true")
+      .csv(s"$basePath/roc_data_${split}_temp")
+
+    // Move the part file to final location
+    try {
+      val fs = org.apache.hadoop.fs.FileSystem.get(predictions.sparkSession.sparkContext.hadoopConfiguration)
+      val srcPath = new org.apache.hadoop.fs.Path(s"$basePath/roc_data_${split}_temp")
+      val files = fs.listStatus(srcPath).filter(_.getPath.getName.startsWith("part-"))
+      if (files.nonEmpty) {
+        val partFile = files.head.getPath
+        val destPath = new org.apache.hadoop.fs.Path(s"$basePath/roc_data_${split}.csv")
+        fs.rename(partFile, destPath)
+        fs.delete(srcPath, true)
+        println(s"  - ROC data saved to: $basePath/roc_data_${split}.csv")
+      }
+    } catch {
+      case ex: Exception =>
+        println(s"  ⚠ Could not rename ROC data file: ${ex.getMessage}")
+    }
   }
 
   /**
@@ -250,5 +318,18 @@ object ModelEvaluator {
       testMetrics.falseNegatives,
       s"$basePath/confusion_matrix_test.csv"
     )
+  }
+
+  /**
+   * Save train/test predictions for ROC curve
+   */
+  def saveROCData(
+    trainPredictions: DataFrame,
+    testPredictions: DataFrame,
+    basePath: String
+  ): Unit = {
+    println("\nSaving ROC curve data...")
+    savePredictionsForROC(trainPredictions, basePath, "train")
+    savePredictionsForROC(testPredictions, basePath, "test")
   }
 }

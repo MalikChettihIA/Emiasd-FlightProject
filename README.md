@@ -42,6 +42,7 @@ Le projet utilise trois datasets principaux (https://www.dropbox.com/sh/iasq7frk
 - [Dataset - Structure](docs/MD/3.datasets_description.md) - Structure des 3 datasets
 - [Dataset - Relartions](docs/MD/4.dataset_relations_guide.md) - Relations entres les trois datasets
 - [Visualisation des Métriques](docs/MD/5.random_forst_metrics_visualisation.md) - Visualisation et analyse des résultats d'entraînement
+- [Analyse PCA](docs/MD/6.pca_analysis_visualization.md) - Analyse en composantes principales et visualisations
 
 ## Démarrage Rapide
 
@@ -58,3 +59,11 @@ Pour commencer rapidement avec le projet :
 ```
 
 > 📖 **Guide Complet** : Pour une installation détaillée sur cluster local ou Lamsade, consultez [1.installation_guide.md]((docs/MD/1.installation_guide.md))
+
+## TODO List
+
+- Add Models like Gradient Boosted Trees, Decision Trees
+- ✅ Add Cross Validation (K-Fold implemented)
+- Add Hyperparameter fine-tunning (Grid Search infrastructure ready)
+- ✅ Add Model Evaluation (comprehensive metrics + visualization)
+- Add ML Flow ou wandb

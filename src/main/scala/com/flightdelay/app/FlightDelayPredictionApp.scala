@@ -1,11 +1,11 @@
 package com.flightdelay.app
 
-import com.flightdelay.config.{AppConfiguration, ConfigurationLoader}
+import com.flightdelay.config.{AppConfiguration, ConfigurationLoader, ExperimentConfig}
 import com.flightdelay.data.preprocessing.FlightPreprocessingPipeline
 import com.flightdelay.data.loaders.FlightDataLoader
 import com.flightdelay.features.FlightFeatureExtractor
-import com.flightdelay.ml.training.ModelTrainer
-import org.apache.spark.sql.SparkSession
+import com.flightdelay.ml.MLPipeline
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.slf4j.LoggerFactory
 
 import scala.util.{Failure, Success}
@@ -13,14 +13,15 @@ import scala.util.{Failure, Success}
 /**
  * Flight Delay Prediction Application - Main Entry Point
  *
- * Pipeline:
- * 1. Load raw flight data
- * 2. Preprocess and engineer features
- * 3. Extract features with optional PCA (60% variance)
- * 4. Save results for ML training
+ * Pipeline per experiment:
+ * 1. Load raw flight data (once, shared across experiments)
+ * 2. Preprocess and engineer features (once, shared across experiments)
+ * 3. For each enabled experiment:
+ *    - Extract features with optional PCA
+ *    - Train model
+ *    - Evaluate model
  */
 object FlightDelayPredictionApp {
-
 
   def main(args: Array[String]): Unit = {
 
@@ -41,6 +42,13 @@ object FlightDelayPredictionApp {
     implicit val configuration: AppConfiguration = ConfigurationLoader.loadConfiguration(args)
     println(s"Configuration '${configuration.environment}' loaded successfully")
 
+    // Get enabled experiments
+    val enabledExperiments = configuration.enabledExperiments
+    println(s"Found ${enabledExperiments.length} enabled experiments:")
+    enabledExperiments.foreach { exp =>
+      println(s"  - ${exp.name}: ${exp.description}")
+    }
+
     // Parse tasks to execute
     val tasks = if (args.length > 1) {
       args(1).split(",").map(_.trim.toLowerCase).toSet
@@ -54,121 +62,61 @@ object FlightDelayPredictionApp {
     try {
 
       // =====================================================================================
-      // STEP 1: Load Flight Data
+      // STEP 1: Load Flight Data (once for all experiments)
       // =====================================================================================
       if (tasks.contains("load")) {
         println("\n" + "=" * 80)
         println("[STEP 1] Loading Flight Data")
         println("=" * 80)
         val flightData = FlightDataLoader.loadFromConfiguration()
-        println(f"\n✓ Loaded ${flightData.count()}%,d flight records")
-        println("=" * 80 + "\n")
+        println(f"\n- Loaded ${flightData.count()}%,d flight records")
       } else {
         println("\n[STEP 1] Loading flight data... SKIPPED")
       }
 
       // =====================================================================================
-      // STEP 2: Preprocess and Feature Engineering
+      // STEP 2: Preprocess and Feature Engineering (once for all experiments)
       // =====================================================================================
       if (tasks.contains("preprocess")) {
         println("\n" + "=" * 80)
         println("[STEP 2] Preprocessing and Feature Engineering")
         println("=" * 80)
         val processedFlightData = FlightPreprocessingPipeline.execute()
-        println(f"\n✓ Generated ${processedFlightData.columns.length}%3d columns (features + labels)")
+        println(f"\n- Generated ${processedFlightData.columns.length}%3d columns (features + labels)")
         println("=" * 80 + "\n")
       } else {
         println("\n[STEP 2] Preprocessing and feature engineering... SKIPPED")
       }
 
       // =====================================================================================
-      // STEP 3: Feature Extraction with Optional PCA
+      // STEP 3: Process each enabled experiment sequentially
       // =====================================================================================
-      if (tasks.contains("feature-extraction")) {
+      enabledExperiments.zipWithIndex.foreach { case (experiment, index) =>
         println("\n" + "=" * 80)
-        println(s"[STEP 3] Feature Extraction")
+        println(s"EXPERIMENT ${index + 1}/${enabledExperiments.length}: ${experiment.name}")
         println("=" * 80)
-        println(s"PCA: ${if (configuration.featureExtraction.pca) "ENABLED" else "DISABLED"}")
-
-        // Load preprocessed data from parquet
-        val processedParquetPath = s"${configuration.output.data.path}/processed_flights.parquet"
-        println(s"\nLoading preprocessed data:")
-        println(s"  → Path: $processedParquetPath")
-        val processedFlightData = spark.read.parquet(processedParquetPath)
-        println(f"  ✓ Loaded ${processedFlightData.count()}%,d preprocessed records")
-
-        if (configuration.featureExtraction.pca) {
-          // Extract features with PCA
-          FlightFeatureExtractor.extractWithPCA(
-            processedFlightData,
-            target = configuration.model.target,
-            varianceThreshold = configuration.featureExtraction.pcaVarianceThreshold
-          )
-        } else {
-          // Extract features without PCA
-          FlightFeatureExtractor.extract(
-            processedFlightData,
-            target = configuration.model.target
-          )
-        }
-
-        println("=" * 80 + "\n")
-      } else {
-        println("\n[STEP 3] Feature extraction... SKIPPED")
-      }
-
-      // =====================================================================================
-      // STEP 4: Train Model
-      // =====================================================================================
-      if (tasks.contains("train")) {
-        println("\n" + "=" * 80)
-        println("[STEP 4] Model Training")
-        println("=" * 80)
-
-        // Determine which features to load based on PCA configuration
-        val featuresPath = if (configuration.featureExtraction.pca) {
-          s"${configuration.output.basePath}/features/pca_features_${configuration.model.target}"
-        } else {
-          s"${configuration.output.basePath}/features/base_features_${configuration.model.target}"
-        }
-
-        println(s"\nLoading features:")
-        println(s"  → Path: $featuresPath")
-        val featuresData = spark.read.parquet(featuresPath)
-        println(f"  ✓ Loaded ${featuresData.count()}%,d feature records")
-
-        // Train model using ModelTrainer
-        val trainingResult = ModelTrainer.train(featuresData)
-
-        println("\n" + "=" * 50)
-        println("Training Results")
-        println("=" * 50)
-        println(s"Model: ${configuration.model.name}_${configuration.model.modelType}")
-        println(s"Path:  ${configuration.output.model.path}/${configuration.model.name}_${configuration.model.modelType}")
-        println(f"\nTest Accuracy:  ${trainingResult.testMetrics.accuracy * 100}%6.2f%%")
-        println(f"Test Precision: ${trainingResult.testMetrics.precision * 100}%6.2f%%")
-        println(f"Test Recall:    ${trainingResult.testMetrics.recall * 100}%6.2f%%")
-        println(f"Test F1-Score:  ${trainingResult.testMetrics.f1Score * 100}%6.2f%%")
-        println(f"Test AUC-ROC:   ${trainingResult.testMetrics.areaUnderROC}%6.4f")
-        println("=" * 50)
+        println(s"Description: ${experiment.description}")
+        println(s"Target: ${experiment.target}")
+        println(s"Model Type: ${experiment.model.modelType}")
+        println(s"Feature Extraction: ${experiment.featureExtraction.featureType}")
         println("=" * 80 + "\n")
 
-      } else {
-        println("\n[STEP 4] Training model... SKIPPED")
-      }
-
-      // =====================================================================================
-      // STEP 5: Evaluate Model (TODO)
-      // =====================================================================================
-      if (tasks.contains("evaluate")) {
-        println("\n[STEP 5] Evaluating model...")
-        println("⚠ Evaluation not yet implemented")
-      } else {
-        println("\n[STEP 5] Evaluating model... SKIPPED")
+        try {
+          runExperiment(experiment, tasks)
+        } catch {
+          case ex: Exception =>
+            println("\n" + "=" * 80)
+            println(s"✗ ERROR in Experiment: ${experiment.name}")
+            println("=" * 80)
+            println(s"Error message: ${ex.getMessage}")
+            ex.printStackTrace()
+            println("=" * 80 + "\n")
+            println("Continuing with next experiment...\n")
+        }
       }
 
       println("\n" + "=" * 80)
-      println("✓ Flight Delay Prediction App Completed Successfully!")
+      println("- Flight Delay Prediction App Completed Successfully!")
       println("=" * 80 + "\n")
 
     } catch {
@@ -182,6 +130,80 @@ object FlightDelayPredictionApp {
     } finally {
       spark.stop()
       println("Spark session stopped.\n")
+    }
+  }
+
+  /**
+   * Run a single experiment
+   */
+  private def runExperiment(
+    experiment: ExperimentConfig,
+    tasks: Set[String]
+  )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
+
+    // =====================================================================================
+    // STEP 3: Feature Extraction with Optional PCA
+    // =====================================================================================
+    if (tasks.contains("feature-extraction")) {
+      println("\n" + "-" * 80)
+      println(s"[STEP 3] Feature Extraction for ${experiment.name}")
+      println("-" * 80)
+      println(s"Feature Type: ${experiment.featureExtraction.featureType}")
+
+      //Experiment output path
+      val processedParquetPath = s"${configuration.common.output.basePath}/common/data/processed_flights.parquet"
+      println(s"\nLoading preprocessed data:")
+      println(s"  - Path: $processedParquetPath")
+      val processedFlightData = spark.read.parquet(processedParquetPath)
+      println(f"  - Loaded ${processedFlightData.count()}%,d preprocessed records")
+
+      FlightFeatureExtractor.extract(processedFlightData, experiment)
+
+      println("-" * 80 + "\n")
+    } else {
+      println(s"\n[STEP 3] Feature extraction for ${experiment.name}... SKIPPED")
+    }
+
+    // =====================================================================================
+    // STEP 4: Train Model with K-Fold CV + Hold-out Test
+    // =====================================================================================
+    if (tasks.contains("train")) {
+      println("\n" + "-" * 80)
+      println(s"[STEP 4] Model Training for ${experiment.name}")
+      println("-" * 80)
+
+      // Load extracted features (unified path for both PCA and non-PCA)
+      val featuresPath = s"${configuration.common.output.basePath}/${experiment.name}/features/extracted_features"
+
+      println(s"\nLoading features:")
+      println(s"  - Path: $featuresPath")
+      val featuresData = spark.read.parquet(featuresPath)
+      println(f"  - Loaded ${featuresData.count()}%,d feature records")
+
+      // Train model using new MLPipeline (Option B: K-fold + Hold-out)
+      val mlResult = MLPipeline.train(featuresData, experiment)
+
+      // Display summary
+      println("\n" + "-" * 80)
+      println("Training Summary")
+      println("-" * 80)
+      println(f"CV F1-Score:       ${mlResult.cvMetrics.avgF1 * 100}%6.2f%% ± ${mlResult.cvMetrics.stdF1 * 100}%.2f%%")
+      println(f"Hold-out F1-Score: ${mlResult.holdOutMetrics.f1Score * 100}%6.2f%%")
+      println(f"Training time:     ${mlResult.trainingTimeSeconds}%.2f seconds")
+      println("-" * 80 + "\n")
+
+    } else {
+      println(s"\n[STEP 4] Training model for ${experiment.name}... SKIPPED")
+    }
+
+    // =====================================================================================
+    // STEP 5: Evaluate Model
+    // =====================================================================================
+    if (tasks.contains("evaluate")) {
+      println(s"\n[STEP 5] Evaluating model for ${experiment.name}...")
+      println("⚠ Evaluation not yet implemented")
+    } else {
+      println(s"\n[STEP 5] Evaluating model for ${experiment.name}... SKIPPED")
     }
   }
 

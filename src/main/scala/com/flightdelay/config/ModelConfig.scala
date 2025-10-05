@@ -5,12 +5,15 @@ package com.flightdelay.config
  * @param name Model name (e.g., "flight_delay_rf")
  * @param target Target column name (e.g., "label_is_delayed_15min")
  * @param modelType Type of ML model: "randomforest", "gbt", "logisticregression", "decisiontree"
- * @param trainRatio Ratio of data used for training (0.0 to 1.0)
+ * @param trainRatio Ratio of data used for training (0.0 to 1.0) - ignored if CV is enabled
  * @param numTrees Number of trees (for RandomForest and GBT)
  * @param maxDepth Maximum depth of trees
  * @param maxBins Maximum number of bins for discretizing continuous features
  * @param minInstancesPerNode Minimum instances per tree node
  * @param seed Random seed for reproducibility
+ * @param enableCrossValidation Enable K-Fold Cross-Validation (default: false)
+ * @param numFolds Number of folds for cross-validation (default: 5)
+ * @param enableGridSearch Enable hyperparameter tuning with Grid Search (default: false)
  */
 case class ModelConfig(
    name: String,
@@ -21,5 +24,8 @@ case class ModelConfig(
    maxDepth: Int,
    maxBins: Int,
    minInstancesPerNode: Int,
-   seed: Long
+   seed: Long,
+   enableCrossValidation: Boolean = false,
+   numFolds: Int = 5,
+   enableGridSearch: Boolean = false
 )

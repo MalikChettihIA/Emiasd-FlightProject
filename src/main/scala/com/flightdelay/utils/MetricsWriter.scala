@@ -31,7 +31,7 @@ object MetricsWriter {
         writer.println(row.mkString(","))
       }
 
-      println(s"  ✓ Metrics saved to: $outputPath")
+      println(s"  - Metrics saved to: $outputPath")
     } finally {
       writer.close()
     }

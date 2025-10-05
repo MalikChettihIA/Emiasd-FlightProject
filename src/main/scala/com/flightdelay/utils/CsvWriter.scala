@@ -59,7 +59,7 @@ object CsvWriter {
       .option("compression", config.compression)
       .csv(outputPath)
 
-    println(s"✓ DataFrame écrit avec succès dans: $outputPath")
+    println(s"- DataFrame written successfully to: $outputPath")
   }
 
   /**
@@ -89,7 +89,7 @@ object CsvWriter {
       .option("compression", config.compression)
       .csv(outputPath)
 
-    println(s"✓ DataFrame écrit dans un seul fichier: $outputPath")
+    println(s"- DataFrame written to single file: $outputPath")
   }
 
   /**
@@ -148,7 +148,7 @@ object CsvWriter {
 
       // Renommer
       fs.rename(partFile, destPath)
-      println(s"✓ Fichier écrit avec succès: $destPath")
+      println(s"- File written successfully: $destPath")
     }
 
     // Nettoyer le répertoire temporaire
@@ -174,7 +174,7 @@ object CsvWriter {
       write(df, path, config)
     }
 
-    println(s"✓ ${dataFrames.size} DataFrames écrits dans: $outputDir")
+    println(s"- ${dataFrames.size} DataFrames written to: $outputDir")
   }
 
   /**
@@ -206,7 +206,7 @@ object CsvWriter {
       .option("compression", config.compression)
       .csv(outputPath)
 
-    println(s"✓ DataFrame partitionné écrit dans: $outputPath")
-    println(s"  Colonnes de partitionnement: ${partitionCols.mkString(", ")}")
+    println(s"- Partitioned DataFrame written to: $outputPath")
+    println(s"  Partition columns: ${partitionCols.mkString(", ")}")
   }
 }

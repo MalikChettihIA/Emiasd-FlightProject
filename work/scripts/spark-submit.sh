@@ -7,7 +7,10 @@
 #TASKS="${1:-load,preprocess}"
 #TASKS="${1:-load,preprocess,feature-extraction}"
 #TASKS="${1:-load,preprocess,feature-extraction,train}"
-TASKS="${1:-load,preprocess,feature-extraction,train,evaluate}"
+#TASKS="${1:-load,preprocess,feature-extraction,train,evaluate}"
+
+TASKS="${1:-load,preprocess,feature-extraction,train}"
+
 
 spark-submit \
   --master "$SPARK_MASTER_URL" \
@@ -22,5 +25,6 @@ spark-submit \
   --conf spark.memory.fraction=0.8 \
   --conf spark.rpc.message.maxSize=128 \
   --conf spark.sql.debug.maxToStringFields=1000 \
+  --jars /apps/mlflow-client-3.4.0.jar,/apps/mlflow-spark_2.13-3.4.0.jar \
   /apps/Emiasd-Flight-Data-Analysis.jar \
   local "$TASKS"

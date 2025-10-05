@@ -36,7 +36,7 @@ object FlightDataLeakageCleaner extends DataPreprocessor {
    */
   override def preprocess(enrichedData: DataFrame)(implicit spark: SparkSession): DataFrame = {
     println("\n" + "=" * 80)
-    println("[LeakageCleaner] Data Leakage Removal - Start")
+    println("[STEP 2][LeakageCleaner] Data Leakage Removal - Start")
     println("=" * 80)
 
     val originalColumns = enrichedData.columns.length
@@ -46,10 +46,10 @@ object FlightDataLeakageCleaner extends DataPreprocessor {
     val columnsToRemove = LEAKAGE_COLUMNS.filter(enrichedData.columns.contains)
 
     if (columnsToRemove.isEmpty) {
-      println("  ✓ No leakage columns found - Data is clean!")
+      println("  - No leakage columns found - Data is clean!")
     } else {
-      println(s"\n⚠ Found ${columnsToRemove.length} leakage columns to remove:")
-      columnsToRemove.foreach(col => println(s"  → $col"))
+      println(s"\n  - Found ${columnsToRemove.length} leakage columns to remove:")
+      columnsToRemove.foreach(col => println(s"  - $col"))
     }
 
     // Remove leakage columns
@@ -68,7 +68,7 @@ object FlightDataLeakageCleaner extends DataPreprocessor {
 
     // Verify labels are still present
     val labelColumns = cleanedData.columns.filter(_.startsWith("label_"))
-    println(f"\n✓ Kept ${labelColumns.length}%3d label columns for ML training")
+    println(f"\n- Kept ${labelColumns.length}%3d label columns for ML training")
     println("=" * 50)
 
     println("\n" + "=" * 80)

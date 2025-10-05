@@ -1,14 +1,14 @@
 package com.flightdelay.features
 
-import com.flightdelay.config.AppConfiguration
+import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.col
 import com.flightdelay.data.utils.DataQualityMetrics
 import com.flightdelay.features.pipelines.{BasicFlightFeaturePipeline, EnhancedFlightFeaturePipeline}
 import com.flightdelay.features.pca.{PCAFeatureExtractor, VarianceAnalysis}
-import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.feature.PCAModel
 
+import scala.sys.process._
 /**
  * Flight Feature Extractor - Main entry point for feature engineering pipeline.
  *
@@ -46,25 +46,136 @@ object FlightFeatureExtractor {
    * @param target Target column name
    * @return DataFrame with features and label columns
    */
-  def extract(data: DataFrame, target: String)(implicit configuration: AppConfiguration): DataFrame = {
-    extractInternal(data, target, usePCA = false, None)._1
-  }
+  def extract(data: DataFrame, experiment: ExperimentConfig)(implicit configuration: AppConfiguration): DataFrame = {
 
-  /**
-   * Extract features without PCA and save to parquet
-   * @param data Input DataFrame with flight data
-   * @param target Target column name
-   * @param outputPath Path to save the extracted features
-   * @return DataFrame with features and label columns
-   */
-  def extractAndSave(data: DataFrame, target: String, outputPath: String)(implicit configuration: AppConfiguration): DataFrame = {
-    val extracted = extract(data, target)
+    val target = experiment.target
 
-    println(s"\n[FlightFeatureExtractor] Saving extracted features to: $outputPath")
-    extracted.write.mode("overwrite").parquet(outputPath)
-    println(s"[FlightFeatureExtractor] ✓ Features saved successfully")
+    // Step 1: Drop unused labels (keep only target)
+    val labelsToDrop = data.columns
+      .filter(colName => colName.startsWith("label_") && colName != target)
+    val flightData = data.drop(labelsToDrop: _*)
 
-    extracted
+    println(s"  - Dropped ${labelsToDrop.length} unused label columns")
+
+    println("\n" + "=" * 80)
+    println(s"[STEP 3][FeatureExtractor] Feature Extraction - Start")
+    println("=" * 80)
+    println(s"\nTarget column: $target")
+
+    // Step 2: Detect column types using DataQualityMetrics
+    val flightDataMetric = DataQualityMetrics.metrics(flightData)
+    val allTextCols = flightDataMetric
+      .filter(col("colType").contains(DataQualityMetrics._text))
+      .select("name")
+      .rdd.flatMap(x => x.toSeq).map(x => x.toString).collect
+
+    val allNumericCols = flightDataMetric
+      .filter(col("colType").contains(DataQualityMetrics._numeric))
+      .filter(!col("name").contains(target))
+      .select("name")
+      .rdd.flatMap(x => x.toSeq).map(x => x.toString).collect
+
+    println(s"  - Detected ${allTextCols.length} text columns and ${allNumericCols.length} numeric columns")
+
+    // Step 3: Apply feature selection if enabled
+    val (textCols, numericCols) = if (experiment.featureExtraction.isFeatureSelectionEnabled) {
+      experiment.featureExtraction.selectedFeatures match {
+        case Some(selectedFeatureNames) =>
+          val selectedSet = selectedFeatureNames.toSet
+          val filteredTextCols = allTextCols.filter(selectedSet.contains)
+          val filteredNumericCols = allNumericCols.filter(selectedSet.contains)
+
+          println(s"\n  [Feature Selection] Enabled")
+          println(s"  - Selected features: ${selectedFeatureNames.length}")
+          println(s"  - Filtered to ${filteredTextCols.length} text columns and ${filteredNumericCols.length} numeric columns")
+          println(s"  - Selected text columns: ${filteredTextCols.take(5).mkString(", ")}${if (filteredTextCols.length > 5) "..." else ""}")
+          println(s"  - Selected numeric columns: ${filteredNumericCols.take(5).mkString(", ")}${if (filteredNumericCols.length > 5) "..." else ""}")
+
+          (filteredTextCols, filteredNumericCols)
+        case None =>
+          println(s"  - Feature selection enabled but no selectedFeatures specified, using all features")
+          (allTextCols, allNumericCols)
+      }
+    } else {
+      (allTextCols, allNumericCols)
+    }
+
+    val (baseFeatures, featureNames) = {
+      // Determine scaler type based on feature extraction type
+      val scalerType = if (experiment.featureExtraction.isPcaEnabled) {
+        Some("standard")  // Critical for PCA
+      } else {
+        None  // No scaling for feature_selection or other types
+      }
+
+      val pipelineMode = if (experiment.featureExtraction.isPcaEnabled) "PCA mode"
+                         else if (experiment.featureExtraction.isFeatureSelectionEnabled) "Feature Selection mode"
+                         else "Standard mode"
+
+      println(s"\n  - Using EnhancedFlightFeaturePipeline${if (scalerType.isDefined) " with StandardScaler" else ""} ($pipelineMode)")
+
+      val enhancedPipeline = new EnhancedFlightFeaturePipeline(
+        textCols = textCols,
+        numericCols = numericCols,
+        target = target,
+        maxCat = maxCat,
+        handleInvalid = handleInvalid,
+        scalerType = scalerType
+      )
+      val (model, transformed) = enhancedPipeline.fitTransform(flightData)
+
+      // Build feature names: indexed text columns + numeric columns
+      val names = textCols.map("indexed_" + _) ++ numericCols
+      (transformed, names)
+    }
+
+    println(s"  - Feature pipeline completed")
+    println(s"  - Feature count: ${featureNames.length} features")
+    println(s"  - Sample feature names: ${featureNames.take(5).mkString(", ")}...")
+
+    val (transformedDF, pcaModel, varianceAnalysis) : (DataFrame, Option[PCAModel], Option[VarianceAnalysis])
+    = if (experiment.featureExtraction.isPcaEnabled) {
+      // Extract features with PCA
+      val (df, model, analysis) = FlightFeatureExtractor.applyPCA(
+        baseFeatures,
+        featureNames,
+        experiment
+      )
+      (df, Some(model), Some(analysis))
+    } else {
+      // Return Extracted Features Without PCA
+      (baseFeatures, None, None)
+    }
+
+    // Display sample data
+    println("\nSample of extracted features:")
+    transformedDF.show(5, truncate = false)
+
+    // Display summary based on extraction type
+    if (experiment.featureExtraction.isFeatureSelectionEnabled) {
+      println("\n" + "=" * 80)
+      println("[STEP 3] Feature Extraction Summary (Feature Selection)")
+      println("=" * 80)
+      println(f"Total Features Available : ${allTextCols.length + allNumericCols.length}")
+      println(f"Selected Features        : ${textCols.length + numericCols.length}")
+      println(f"Text Features            : ${textCols.length}")
+      println(f"Numeric Features         : ${numericCols.length}")
+      println("=" * 80)
+    } else if (!experiment.featureExtraction.isPcaEnabled) {
+      println("\n" + "=" * 80)
+      println("[STEP 3] Feature Extraction Summary (All Features)")
+      println("=" * 80)
+      println(f"Text Features            : ${textCols.length}")
+      println(f"Numeric Features         : ${numericCols.length}")
+      println(f"Total Features           : ${textCols.length + numericCols.length}")
+      println("=" * 80)
+    }
+
+    saveResult(transformedDF,
+      pcaModel,
+      experiment,
+      featureNames)
+    transformedDF
   }
 
   /**
@@ -74,158 +185,26 @@ object FlightFeatureExtractor {
    * @param varianceThreshold Minimum cumulative variance to retain (default: 0.60 for 60%)
    * @return Tuple of (transformed DataFrame, PCAModel, VarianceAnalysis)
    */
-  def extractWithPCA(
+  def applyPCA(
     data: DataFrame,
-    target: String,
-    varianceThreshold: Double = defaultVarianceThreshold
-  )(implicit configuration: AppConfiguration): (DataFrame, PCAModel, VarianceAnalysis) = {
-    require(
-      varianceThreshold > 0.0 && varianceThreshold <= 1.0,
-      s"Variance threshold must be between 0.0 and 1.0, got $varianceThreshold"
-    )
+    featureNames: Array[String],
+    experiment: ExperimentConfig)(implicit configuration: AppConfiguration): (DataFrame, PCAModel, VarianceAnalysis) = {
 
-    println(s"\n[FlightFeatureExtractor] PCA enabled with ${varianceThreshold * 100}% variance threshold")
+    val varianceThreshold = experiment.featureExtraction.pcaVarianceThreshold
 
-    val (df, Some(pcaModel), Some(analysis)) = extractInternal(
-      data,
-      target,
-      usePCA = true,
-      Some(varianceThreshold)
-    )
+    println(s"\n- PCA enabled with ${varianceThreshold * 100}% variance threshold")
 
-    println("\n" + "=" * 80)
-    println("Feature Extraction Summary (with PCA)")
-    println("=" * 80)
-    println(f"Original Features    : ${analysis.originalDimension}")
-    println(f"PCA Components       : ${analysis.numComponents}")
-    println(f"Variance Explained   : ${analysis.totalVarianceExplained * 100}%.2f%%")
-    println(f"Dimensionality Reduction: ${(1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100}%.1f%%")
-    println("=" * 80)
-
-    // Display sample data
-    println("\nSample of extracted features:")
-    df.show(5, truncate = false)
-
-    // Save PCA model
-    val pcaModelPath = s"${configuration.output.basePath}/models/pca_${configuration.featureExtraction.pcaVarianceThreshold}_${configuration.model.target}"
-    println(s"\nSaving PCA model to: $pcaModelPath")
-    pcaModel.write.overwrite().save(pcaModelPath)
-    println("✓ PCA model saved")
-
-    // Save extracted features
-    val featuresPath = s"${configuration.output.basePath}/features/pca_features_${configuration.model.target}"
-    println(s"Saving extracted features to: $featuresPath")
-    df.write.mode("overwrite").parquet(featuresPath)
-    println("✓ Features saved")
-
-    (df, pcaModel, analysis)
-  }
-
-  /**
-   * Extract features with PCA and save both features and model
-   * @param data Input DataFrame with flight data
-   * @param target Target column name
-   * @param varianceThreshold Minimum cumulative variance to retain
-   * @param featuresOutputPath Path to save the extracted features
-   * @param modelOutputPath Path to save the PCA model
-   * @return Tuple of (transformed DataFrame, PCAModel, VarianceAnalysis)
-   */
-  def extractWithPCAAndSave(
-    data: DataFrame,
-    target: String,
-    varianceThreshold: Double = defaultVarianceThreshold,
-    featuresOutputPath: String,
-    modelOutputPath: String
-  )(implicit configuration: AppConfiguration): (DataFrame, PCAModel, VarianceAnalysis) = {
-
-    val (extracted, pcaModel, analysis) = extractWithPCA(data, target, varianceThreshold)
-
-    // Save features
-    println(s"\n[FlightFeatureExtractor] Saving PCA features to: $featuresOutputPath")
-    extracted.write.mode("overwrite").parquet(featuresOutputPath)
-    println(s"[FlightFeatureExtractor] ✓ PCA features saved successfully")
-
-    // Save PCA model
-    println(s"[FlightFeatureExtractor] Saving PCA model to: $modelOutputPath")
-    pcaModel.write.overwrite().save(modelOutputPath)
-    println(s"[FlightFeatureExtractor] ✓ PCA model saved successfully")
-
-    (extracted, pcaModel, analysis)
-  }
-
-  /**
-   * Internal extraction method with optional PCA
-   */
-  private def extractInternal(
-    data: DataFrame,
-    target: String,
-    usePCA: Boolean,
-    varianceThreshold: Option[Double]
-  )(implicit configuration: AppConfiguration): (DataFrame, Option[PCAModel], Option[VarianceAnalysis]) = {
-
-    println("\n" + "=" * 80)
-    println(s"[FeatureExtractor] Feature Extraction - Start")
-    println("=" * 80)
-    println(s"\nTarget column: $target")
-
-    // Step 1: Drop unused labels (keep only target)
-    val labelsToDrop = data.columns
-      .filter(colName => colName.startsWith("label_") && colName != target)
-    val flightData = data.drop(labelsToDrop: _*)
-
-    println(s"  → Dropped ${labelsToDrop.length} unused label columns")
-
-    // Step 2: Detect column types using DataQualityMetrics
-    val flightDataMetric = DataQualityMetrics.metrics(flightData)
-    val textCols = flightDataMetric
-      .filter(col("colType").contains(DataQualityMetrics._text))
-      .select("name")
-      .rdd.flatMap(x => x.toSeq).map(x => x.toString).collect
-
-    val numericCols = flightDataMetric
-      .filter(col("colType").contains(DataQualityMetrics._numeric))
-      .filter(!col("name").contains(target))
-      .select("name")
-      .rdd.flatMap(x => x.toSeq).map(x => x.toString).collect
-
-    println(s"  → Detected ${textCols.length} text columns and ${numericCols.length} numeric columns")
-
-    // Step 3: Apply feature pipeline (with or without scaling based on PCA usage)
-    val baseFeatures = if (usePCA) {
-      // Use EnhancedFlightFeaturePipeline with StandardScaler for PCA
-      println(s"\n  → Using EnhancedFlightFeaturePipeline with StandardScaler (PCA mode)")
-      val enhancedPipeline = new EnhancedFlightFeaturePipeline(
-        textCols = textCols,
-        numericCols = numericCols,
-        target = target,
-        maxCat = maxCat,
-        handleInvalid = handleInvalid,
-        scalerType = Some("standard")  // Critical for PCA
-      )
-      val (model, transformed) = enhancedPipeline.fitTransform(flightData)
-      transformed
-    } else {
-      // Use BasicFlightFeaturePipeline without scaling for tree-based models
-      println(s"\n  → Using BasicFlightFeaturePipeline (tree-based models)")
-      val basicPipeline = new BasicFlightFeaturePipeline(textCols, numericCols, target, maxCat, handleInvalid)
-      basicPipeline.fit(flightData)
-    }
-
-    println(s"  ✓ Feature pipeline completed")
-
-    // Step 4: Apply PCA if enabled
-    if (usePCA && varianceThreshold.isDefined) {
+    val (df, Some(pcaModel), Some(analysis)) = {
       val pca = PCAFeatureExtractor.varianceBased(
-        threshold = varianceThreshold.get,
-        inputCol = "features",
+        threshold = varianceThreshold,
         outputCol = _pcaFeatures
       )
 
-      val (pcaModel, pcaData, analysis) = pca.fitTransform(baseFeatures)
+      val (pcaModel, pcaData, analysis) = pca.fitTransform(data)
 
       // Print PCA summary
       println(s"\n" + "=" * 50)
-      println("PCA Summary")
+      println("[STEP 3] PCA Summary")
       println("=" * 50)
       println(f"Original features:    ${analysis.originalDimension}%4d")
       println(f"PCA components:       ${analysis.numComponents}%4d")
@@ -233,70 +212,99 @@ object FlightFeatureExtractor {
       println(f"Dimensionality reduction: ${(1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100}%6.2f%%")
       println("=" * 50)
 
+      // Save PCA metrics for visualization
+      val pcaMetricsPath = s"${configuration.common.output.basePath}/${experiment.name}/metrics/pca_analysis"
+      println(s"\n[Saving PCA Metrics]")
+      println(s"  - Metrics path: $pcaMetricsPath")
+      println(s"  - Feature names count: ${featureNames.length}")
+
+      pca.saveVarianceAnalysis(analysis, s"${configuration.common.output.basePath}/${experiment.name}/metrics/pca_variance.csv")
+      pca.savePCAProjections(pcaData, s"${configuration.common.output.basePath}/${experiment.name}/metrics/pca_projections.csv",
+        labelCol = Some("label"), maxSamples = 5000)
+      pca.savePCALoadings(pcaModel, s"${configuration.common.output.basePath}/${experiment.name}/metrics/pca_loadings.csv",
+        topN = Some(10), featureNames = Some(featureNames))
+
+      // Also save feature names separately for reference
+      pca.saveFeatureNames(featureNames, s"${configuration.common.output.basePath}/${experiment.name}/features/feature_names.csv")
+
       // Select final columns: pcaFeatures -> features, label
       val finalData = pcaData
         .select(col(_pcaFeatures).alias("features"), col("label"))
 
-      // Save extracted features
-      val featuresPath = s"${configuration.output.basePath}/features/pca_features_${configuration.model.target}"
-      println(s"\nSaving extracted features:")
-      println(s"  → Path: $featuresPath")
-      finalData.write.mode("overwrite").parquet(featuresPath)
-      println(s"  ✓ Saved ${finalData.count()} records with PCA features")
-
       println("\n" + "=" * 80)
-      println("[FeatureExtractor] Feature Extraction - End")
-      println("=" * 80 + "\n")
+      println("[STEP 3][Visualization Command]")
+      println("=" * 80)
+
+      println(s"  To visualize PCA analysis, run:")
+      println(s"  python work/scripts/visualize_pca.py $pcaMetricsPath")
+      println("")
 
       (finalData, Some(pcaModel), Some(analysis))
-    } else {
-
-      // Save extracted features
-      val featuresPath = s"${configuration.output.basePath}/features/base_features_${configuration.model.target}"
-      println(s"\nSaving extracted features:")
-      println(s"  → Path: $featuresPath")
-      baseFeatures.write.mode("overwrite").parquet(featuresPath)
-      println(s"  ✓ Saved ${baseFeatures.count()} records with base features")
-
-      println("\n" + "=" * 80)
-      println("[FeatureExtractor] Feature Extraction - End")
-      println("=" * 80 + "\n")
-
-      (baseFeatures, None, None)
     }
+
+    println("\n" + "=" * 80)
+    println("[STEP 3] Feature Extraction Summary (with PCA)")
+    println("=" * 80)
+    println(f"Original Features    : ${analysis.originalDimension}")
+    println(f"PCA Components       : ${analysis.numComponents}")
+    println(f"Variance Explained   : ${analysis.totalVarianceExplained * 100}%.2f%%")
+    println(f"Dimensionality Reduction: ${(1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100}%.1f%%")
+    println("=" * 80)
+
+    (df, pcaModel, analysis)
   }
+
 
   /**
-   * Explore optimal PCA variance threshold
-   * @param data Input DataFrame
-   * @param target Target column
-   * @param maxK Maximum number of components to test (default: 50)
-   * @return VarianceAnalysis for exploration
+   * Save Extraction Result to CSV and Parquet files
    */
-  def explorePCAVariance(
+  private def saveResult(
     data: DataFrame,
-    target: String,
-    maxK: Int = 50
-  )(implicit configuration: AppConfiguration): VarianceAnalysis = {
-    println(s"\n[FlightFeatureExtractor] Exploring PCA variance with maxK=$maxK")
+    pcaModel: Option[PCAModel],
+    experiment: ExperimentConfig,
+    featureNames: Array[String]
+  )(implicit configuration: AppConfiguration): (DataFrame) = {
 
-    // Get base features without PCA
-    val (baseFeatures, _, _) = extractInternal(data, target, usePCA = false, None)
+    //Experiment OutputPath:
+    val experimentOutputPath = s"${configuration.common.output.basePath}/${experiment.name}"
 
-    // Perform variance analysis
-    val analysis = PCAFeatureExtractor.exploreVariance(
-      baseFeatures,
-      inputCol = "features",
-      maxK = maxK
-    )
+    // Save PCA model if present
+    pcaModel.foreach { model =>
+      val pcaModelPath = s"${experimentOutputPath}/models/pca_model"
+      println(s"\nSaving PCA model to: $pcaModelPath")
+      model.write.overwrite().save(pcaModelPath)
+      println("- PCA model saved")
+    }
 
-    // Print recommendations
-    println(s"\nPCA Variance Exploration Results:")
-    println(s"  - For 60% variance: ${analysis.getMinComponentsForVariance(0.60)} components")
-    println(s"  - For 75% variance: ${analysis.getMinComponentsForVariance(0.75)} components")
-    println(s"  - For 90% variance: ${analysis.getMinComponentsForVariance(0.90)} components")
-    println(s"  - For 95% variance: ${analysis.getMinComponentsForVariance(0.95)} components")
+    // Save feature names if feature selection is enabled
+    if (experiment.featureExtraction.isFeatureSelectionEnabled) {
+      val featureNamesPath = s"${experimentOutputPath}/features/selected_features.txt"
+      import java.io.PrintWriter
+      import java.io.File
 
-    analysis
+      println(s"\nSaving selected feature names to: $featureNamesPath")
+      val outputDir = new File(s"${experimentOutputPath}/features")
+      if (!outputDir.exists()) {
+        outputDir.mkdirs()
+      }
+
+      val writer = new PrintWriter(new File(featureNamesPath))
+      try {
+        featureNames.foreach(writer.println)
+        println(s"  - Saved ${featureNames.length} feature names")
+      } finally {
+        writer.close()
+      }
+    }
+
+    // Save extracted features
+    val featuresPath = s"${experimentOutputPath}/features/extracted_features"
+    println(s"\nSaving extracted features:")
+    println(s"  - Path: $featuresPath")
+    data.write.mode("overwrite").parquet(featuresPath)
+    println(s"  - Saved ${data.count()} records with extracted features")
+
+    data
   }
+
 }

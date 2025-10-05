@@ -20,7 +20,7 @@ object FlightDataCleaner extends DataPreprocessor {
   override def preprocess(rawFlightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
 
     println("\n" + "=" * 80)
-    println("[DataCleaner] Flight Data Cleaning - Start")
+    println("[STEP 2][DataCleaner] Flight Data Cleaning - Start")
     println("=" * 80)
 
     val originalCount = rawFlightData.count()
@@ -44,9 +44,6 @@ object FlightDataCleaner extends DataPreprocessor {
     // Cleaning summary
     logCleaningSummary(rawFlightData, finalData)
 
-    println("\n" + "=" * 80)
-    println("[DataCleaner] Flight Data Cleaning - End")
-    println("=" * 80 + "\n")
 
     finalData
   }
@@ -74,7 +71,7 @@ object FlightDataCleaner extends DataPreprocessor {
     // Remove rows with critical null values
     val result = removeNullValues(deduplicated, criticalColumns)
 
-    println(s"  ✓ Current count: ${result.count()} records")
+    println(s"  - Current count: ${result.count()} records")
     result
   }
 
@@ -83,7 +80,7 @@ object FlightDataCleaner extends DataPreprocessor {
    */
   private def filterInvalidFlights(df: DataFrame): DataFrame = {
     println("\nPhase 2: Filter Invalid Flights")
-    println("  → Filtering cancelled and diverted flights")
+    println("  - Filtering cancelled and diverted flights")
 
     // Replace NULL with 0 for CANCELLED and DIVERTED
     val dfWithDefaults = df
@@ -96,7 +93,7 @@ object FlightDataCleaner extends DataPreprocessor {
       .drop("CANCELLED", "DIVERTED")
 
     // Filter invalid departure times
-    println("  → Filtering invalid departure times")
+    println("  - Filtering invalid departure times")
     val validDepartureTimes = filteredCancelledDiverted.filter(
       col("CRS_DEP_TIME").isNotNull &&
         col("CRS_DEP_TIME") >= 0 &&
@@ -104,14 +101,14 @@ object FlightDataCleaner extends DataPreprocessor {
     )
 
     // Filter invalid airport IDs
-    println("  → Filtering invalid airports")
+    println("  - Filtering invalid airports")
     val validAirports = validDepartureTimes.filter(
       col("ORIGIN_AIRPORT_ID") > 0 &&
         col("DEST_AIRPORT_ID") > 0 &&
         col("ORIGIN_AIRPORT_ID") =!= col("DEST_AIRPORT_ID")
     )
 
-    println(s"  ✓ Current count: ${validAirports.count()} records")
+    println(s"  - Current count: ${validAirports.count()} records")
     validAirports
   }
 
@@ -137,10 +134,10 @@ object FlightDataCleaner extends DataPreprocessor {
     val convertedData = convertDataTypes(df, typeMapping)
 
     // Validate date format
-    println("  → Filtering invalid flight dates")
+    println("  - Filtering invalid flight dates")
     val validDates = convertedData.filter(col("FL_DATE").isNotNull)
 
-    println(s"  ✓ Current count: ${validDates.count()} records")
+    println(s"  - Current count: ${validDates.count()} records")
     validDates
   }
 
@@ -151,20 +148,20 @@ object FlightDataCleaner extends DataPreprocessor {
     println("\nPhase 4: Outlier Filtering")
 
     // Filter extreme delays (> 10 hours = 600 minutes)
-    println("  → Filtering delays > 600 minutes")
+    println("  - Filtering delays > 600 minutes")
     val reasonableDelays = df.filter(
       col("ARR_DELAY_NEW").isNull ||
         col("ARR_DELAY_NEW") <= 600
     )
 
     // Filter invalid flight times (between 10 minutes and 24 hours)
-    println("  → Filtering flight times (10 min - 24 hours)")
+    println("  - Filtering flight times (10 min - 24 hours)")
     val validFlightTimes = reasonableDelays.filter(
       col("CRS_ELAPSED_TIME").isNull ||
         (col("CRS_ELAPSED_TIME") >= 10 && col("CRS_ELAPSED_TIME") <= 1440)
     )
 
-    println(s"  ✓ Current count: ${validFlightTimes.count()} records")
+    println(s"  - Current count: ${validFlightTimes.count()} records")
     validFlightTimes
   }
 
@@ -187,7 +184,7 @@ object FlightDataCleaner extends DataPreprocessor {
     }
 
     val finalCount = df.count()
-    println(s"  ✓ Validation passed: $finalCount records")
+    println(s"  - Validation passed: $finalCount records")
     df
   }
 

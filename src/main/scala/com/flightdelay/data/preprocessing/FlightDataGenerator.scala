@@ -19,10 +19,9 @@ object FlightDataGenerator extends DataPreprocessor {
    */
   override def preprocess(cleanedFlightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
     println("")
-    println("")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("--> [FlightDataGenerator] Flight Data Generator - Start ...")
-    println("----------------------------------------------------------------------------------------------------------")
+    println("=" * 80)
+    println("[STEP 2][FlightDataGenerator] Flight Data Generator - Start ...")
+    println("=" * 80)
 
     val originalColumns = cleanedFlightData.columns.length
     println(s"Original Column Counts: $originalColumns")
@@ -45,12 +44,6 @@ object FlightDataGenerator extends DataPreprocessor {
     // Résumé de l'enrichissement
     logEnrichmentSummary(cleanedFlightData, withAggregatedFeatures)
 
-    println("")
-    println("--> [FlightDataGenerator] Flight Data Generator- End ...")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("")
-    println("")
-
     withAggregatedFeatures
 
   }
@@ -61,7 +54,7 @@ object FlightDataGenerator extends DataPreprocessor {
   def addTemporalFeatures(df: DataFrame): DataFrame = {
     println("")
     println("Phase 1: Add Temporal Features")
-    println("- Add feature_flight_timestamp")
+    /**println("- Add feature_flight_timestamp")
     println("- Add feature_flight_year")
     println("- Add feature_flight_month")
     println("- Add feature_flight_quarter") // NOUVEAU
@@ -75,7 +68,7 @@ object FlightDataGenerator extends DataPreprocessor {
     println("- Add feature_departure_quarter_day")
     println("- Add feature_departure_quarter_name")
     println("- Add feature_departure_time_period")
-    println("- Add feature_minutes_since_midnight")
+    println("- Add feature_minutes_since_midnight")**/
 
     val columnExpressions = Map[String, Column](
       // Conversion de la date en timestamp
@@ -138,7 +131,7 @@ object FlightDataGenerator extends DataPreprocessor {
 
     val result = addCalculatedColumns(df, columnExpressions)
     println(s"Temporal features added: ${columnExpressions.size}")
-    result.printSchema
+    //result.printSchema
     result
   }
 
@@ -149,13 +142,13 @@ object FlightDataGenerator extends DataPreprocessor {
     println("")
     println("Phase 2: Add Flight Characteristics")
 
-    println("- Add feature_flight_unique_id ")
+    /**println("- Add feature_flight_unique_id ")
     println("- Add feature_distance_category (short, medium, long, very_long) ")
     println("- Add feature_distance_score ")
     println("- Add feature_is_likely_domestic ")
     println("- Add feature_carrier_hash ")
     println("- Add feature_route_id ")
-    println("- Add feature_is_roundtrip_candidate ")
+    println("- Add feature_is_roundtrip_candidate ")**/
 
     val columnExpressions = Map(
       // Identifiant unique du vol
@@ -206,7 +199,7 @@ object FlightDataGenerator extends DataPreprocessor {
     println("")
     println("Phase 3: Add Period <indicator")
 
-    println("- Add feature_is_weekend, feature_is_friday, feature_is_monday")
+   /**println("- Add feature_is_weekend, feature_is_friday, feature_is_monday")
     println("- Add feature_is_summer, feature_is_winter, feature_is_spring, feature_is_fall ")
     println("- Add feature_is_holiday_season (approximative)")
     println("- Add feature_is_early_morning ")
@@ -216,7 +209,7 @@ object FlightDataGenerator extends DataPreprocessor {
     println("- Add feature_is_night_flight ")
     println("- Add feature_is_month_start ")
     println("- Add feature_is_month_end ")
-    println("- Add feature_is_extended_weekend ")
+    println("- Add feature_is_extended_weekend ")**/
 
     val columnExpressions = Map(
       // Indicateurs de fin de semaine
@@ -270,7 +263,7 @@ object FlightDataGenerator extends DataPreprocessor {
     println("")
     println("Phase 4: Add Geographical Features")
 
-    println("- Add feature_origin_is_major_hub (10397, 11298, 12266, 13930, 14107, 14771, 15016  // Principaux hubs US)")
+    /**println("- Add feature_origin_is_major_hub (10397, 11298, 12266, 13930, 14107, 14771, 15016  // Principaux hubs US)")
     println("- Add feature_dest_is_major_hub  (10397, 11298, 12266, 13930, 14107, 14771, 15016  // Principaux hubs US)")
     println("- Add feature_is_hub_to_hub")
     println("- Add feature_flight_quarter") // NOUVEAU
@@ -279,7 +272,7 @@ object FlightDataGenerator extends DataPreprocessor {
     println("- Add feature_timezone_diff_proxy")
     println("- Add feature_flight_week_of_year")
     println("- Add feature_is_eastbound")
-    println("- Add feature_is_westbound")
+    println("- Add feature_is_westbound")**/
 
 
     val columnExpressions1 = Map(
@@ -330,11 +323,11 @@ object FlightDataGenerator extends DataPreprocessor {
     println("")
     println("Phase 5 : Add Aggregated Features")
 
-    println("- Add feature_flights_on_route")
+    /**println("- Add feature_flights_on_route")
     println("- Add feature_carrier_flight_count")
     println("- Add feature_origin_airport_traffic")
     println("- Add feature_route_popularity_score")
-    println("- Add feature_carrier_size_category")
+    println("- Add feature_carrier_size_category")**/
 
     import org.apache.spark.sql.expressions.Window
 
@@ -373,8 +366,8 @@ object FlightDataGenerator extends DataPreprocessor {
     val addedColumns = enrichedColumns - originalColumns
 
     println("")
-    println("")
     println("=== Enrichment Summary ===")
+    println("")
     println(s"Original Columns: $originalColumns")
     println(s"Columns after enrichment: $enrichedColumns")
     println(s"Enriched Columns: $addedColumns")
@@ -383,6 +376,6 @@ object FlightDataGenerator extends DataPreprocessor {
 
     // Lister les nouvelles colonnes par catégorie
     val newColumns = enrichedDf.columns.filterNot(originalDf.columns.contains)
-    println(s"New Features Created : \n${newColumns.mkString(",\n")}")
+    println(s"New Features Created : \n\n${newColumns.mkString(",\n")}")
   }
 }

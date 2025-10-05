@@ -27,9 +27,9 @@ object FlightLabelGenerator extends DataPreprocessor {
   override def preprocess(enrichedFlightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
     println("")
     println("")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("--> [FlightLabelGenerator] Flight Label Generator - Start ...")
-    println("----------------------------------------------------------------------------------------------------------")
+    println("=" * 80)
+    println("[STEP 2][FlightLabelGenerator] Flight Label Generator - Start ...")
+    println("=" * 80)
 
     // Vérifier que les colonnes de retard nécessaires sont présentes
     validateRequiredColumns(enrichedFlightData)
@@ -51,12 +51,6 @@ object FlightLabelGenerator extends DataPreprocessor {
 
     // Étape 6: Validation et statistiques finales
     //val finalData = validateAndLogLabelStatistics(withCompositeLabels)
-
-    println("")
-    println("--> [FlightDataGenerator] Flight Data Generator- End ...")
-    println("----------------------------------------------------------------------------------------------------------")
-    println("")
-    println("")
 
     withBasicLabels
   }
@@ -108,7 +102,7 @@ object FlightLabelGenerator extends DataPreprocessor {
   private def addBasicDelayLabels(df: DataFrame): DataFrame = {
     println("")
     println("Phase 2: Adding basic labels for different thresholds")
-    println("- Add label_is_delayed_15min")
+    /**println("- Add label_is_delayed_15min")
     println("- Add label_is_delayed_30min")
     println("- Add label_is_delayed_45min")
     println("- Add label_is_delayed_60min")
@@ -118,7 +112,7 @@ object FlightLabelGenerator extends DataPreprocessor {
     println("- Add label_has_any_weather_nas_delay")
     println("- Add label_total_weather_nas_delay")
     println("- Add label_is_on_time")
-    println("- Add label_is_early")
+    println("- Add label_is_early")**/
 
 
     val columnExpressions = Map[String, Column](

@@ -1,6 +1,6 @@
 package com.flightdelay.ml.models
 
-import com.flightdelay.config.ModelConfig
+import com.flightdelay.config.ExperimentConfig
 import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.{Pipeline, Transformer}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
@@ -18,9 +18,9 @@ import org.apache.spark.sql.DataFrame
  * - Provides feature importance
  * - Works well with high-dimensional data
  *
- * @param config Model configuration with hyperparameters
+ * @param experiment Experiment configuration with model type and hyperparameters
  */
-class RandomForestModel(config: ModelConfig) extends MLModel {
+class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
 
   /**
    * Train Random Forest classifier on flight delay data
@@ -29,17 +29,21 @@ class RandomForestModel(config: ModelConfig) extends MLModel {
    * @return Trained RandomForest model wrapped in a Pipeline
    */
   def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
-    println("\n" + "=" * 80)
-    println("Training Random Forest Model")
-    println("=" * 80)
-    println(s"Model: ${config.name}")
-    println(s"Target: ${config.target}")
-    println(s"Number of trees: ${config.numTrees}")
-    println(s"Max depth: ${config.maxDepth}")
-    println(s"Max bins: ${config.maxBins}")
-    println(s"Min instances per node: ${config.minInstancesPerNode}")
-    println(s"Random seed: ${config.seed}")
-    println("=" * 80)
+    val hp = experiment.train.hyperparameters
+
+    // Use first value from arrays for single training
+    // (Grid Search will iterate over all combinations)
+    val numTrees = hp.numTrees.head
+    val maxDepth = hp.maxDepth.head
+
+    println(s"\n[RandomForest] Training with hyperparameters:")
+    println(s"  - Number of trees: $numTrees")
+    println(s"  - Max depth: $maxDepth")
+    println(s"  - Max bins: ${hp.maxBins}")
+    println(s"  - Min instances per node: ${hp.minInstancesPerNode}")
+    println(s"  - Subsampling rate: ${hp.subsamplingRate}")
+    println(s"  - Feature subset strategy: ${hp.featureSubsetStrategy}")
+    println(s"  - Impurity: ${hp.impurity}")
 
     // Configure Random Forest classifier
     val rf = new RandomForestClassifier()
@@ -48,14 +52,13 @@ class RandomForestModel(config: ModelConfig) extends MLModel {
       .setPredictionCol("prediction")
       .setProbabilityCol("probability")
       .setRawPredictionCol("rawPrediction")
-      .setNumTrees(config.numTrees)
-      .setMaxDepth(config.maxDepth)
-      .setMaxBins(config.maxBins)
-      .setMinInstancesPerNode(config.minInstancesPerNode)
-      .setSeed(config.seed)
-      .setFeatureSubsetStrategy("auto")  // Let Spark decide optimal features per split
-      .setImpurity("gini")               // Gini impurity for classification
-      .setSubsamplingRate(1.0)           // Use all data for each tree
+      .setNumTrees(numTrees)
+      .setMaxDepth(maxDepth)
+      .setMaxBins(hp.maxBins)
+      .setMinInstancesPerNode(hp.minInstancesPerNode)
+      .setFeatureSubsetStrategy(hp.featureSubsetStrategy)
+      .setImpurity(hp.impurity)
+      .setSubsamplingRate(hp.subsamplingRate)
 
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(rf))
@@ -68,7 +71,7 @@ class RandomForestModel(config: ModelConfig) extends MLModel {
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"\n✓ Training completed in $trainingTime%.2f seconds")
+    println(f"\n- Training completed in $trainingTime%.2f seconds")
 
     // Extract and display feature importance
     val rfModel = model.stages(0).asInstanceOf[RandomForestClassificationModel]
@@ -120,7 +123,7 @@ class RandomForestModel(config: ModelConfig) extends MLModel {
 
     MetricsWriter.writeFeatureImportance(importancesWithIndex, outputPath) match {
       case scala.util.Success(_) => // Already logged by MetricsWriter
-      case scala.util.Failure(ex) => println(s"  ✗ Failed to save feature importances: ${ex.getMessage}")
+      case scala.util.Failure(ex) => println(s"  - Failed to save feature importances: ${ex.getMessage}")
     }
   }
 }
@@ -131,11 +134,11 @@ class RandomForestModel(config: ModelConfig) extends MLModel {
 object RandomForestModel {
 
   /**
-   * Create a RandomForestModel from configuration
-   * @param config Model configuration
+   * Create a RandomForestModel from experiment configuration
+   * @param experiment Experiment configuration
    * @return New RandomForestModel instance
    */
-  def apply(config: ModelConfig): RandomForestModel = {
-    new RandomForestModel(config)
+  def apply(experiment: ExperimentConfig): RandomForestModel = {
+    new RandomForestModel(experiment)
   }
 }

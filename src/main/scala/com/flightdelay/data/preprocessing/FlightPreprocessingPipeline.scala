@@ -20,32 +20,33 @@ object FlightPreprocessingPipeline {
     println("[Preprocessing] Flight Data Preprocessing Pipeline - Start")
     println("=" * 80)
 
-    val processedParquetPath = s"${configuration.output.data.path}/processed_flights.parquet"
+    val processedParquetPath = s"${configuration.common.output.basePath}/common/data/processed_flights.parquet"
 
     // Load raw data from parquet
-    val rawParquetPath = s"${configuration.output.data.path}/raw_flights.parquet"
+    val rawParquetPath = s"${configuration.common.output.basePath}/common/data/raw_flights.parquet"
     println(s"\nLoading raw data from parquet:")
-    println(s"  → Path: $rawParquetPath")
+    println(s"  - Path: $rawParquetPath")
     val originalDf = spark.read.parquet(rawParquetPath)
-    println(s"  ✓ Loaded ${originalDf.count()} raw records")
+    println(s"  - Loaded ${originalDf.count()} raw records")
 
     // Execute preprocessing pipeline
     val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
     val generatedFightData = FlightDataGenerator.preprocess(cleanedFlightData)
     val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFightData)
-    val finalCleanedData = FlightDataLeakageCleaner.preprocess(generatedFightDataWithLabels)
+    val flightLeakageCleanedData = FlightDataLeakageCleaner.preprocess(generatedFightDataWithLabels)
+    val finalCleanedData = FlightDataBalancer.preprocess(flightLeakageCleanedData)
 
     // Validate schema
     validatePreprocessedSchema(finalCleanedData)
 
     // Save processed data to parquet
     println(s"\nSaving preprocessed data to parquet:")
-    println(s"  → Path: $processedParquetPath")
+    println(s"  - Path: $processedParquetPath")
     finalCleanedData.write
       .mode("overwrite")
       .option("compression", "snappy")
       .parquet(processedParquetPath)
-    println(s"  ✓ Saved ${finalCleanedData.count()} preprocessed records")
+    println(s"  - Saved ${finalCleanedData.count()} preprocessed records")
 
     println("\n" + "=" * 80)
     println("[Preprocessing] Flight Data Preprocessing Pipeline - End")
@@ -113,7 +114,7 @@ object FlightPreprocessingPipeline {
           println(s"  ✗ Wrong type for $colName: expected $expectedType, got $actualType")
           validationPassed = false
         } else {
-          println(s"  ✓ $colName ($expectedType)")
+          println(s"  - $colName ($expectedType)")
         }
       }
     }
@@ -125,7 +126,7 @@ object FlightPreprocessingPipeline {
         println(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
-        println(s"  ✓ $colName")
+        println(s"  - $colName")
       }
     }
 
@@ -136,7 +137,7 @@ object FlightPreprocessingPipeline {
         println(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
-        println(s"  ✓ $colName")
+        println(s"  - $colName")
       }
     }
 
@@ -148,14 +149,14 @@ object FlightPreprocessingPipeline {
         println(s"  ✗ LEAKAGE DETECTED: $colName should have been removed!")
         validationPassed = false
       } else {
-        println(s"  ✓ $colName removed (no leakage)")
+        println(s"  - $colName removed (no leakage)")
       }
     }
 
     // Summary
     println("\n" + "=" * 80)
     if (validationPassed) {
-      println(s"✓ Schema Validation PASSED - ${df.columns.length} columns validated")
+      println(s"- Schema Validation PASSED - ${df.columns.length} columns validated")
     } else {
       println("✗ Schema Validation FAILED")
       throw new RuntimeException("Schema validation failed. Check logs for details.")
