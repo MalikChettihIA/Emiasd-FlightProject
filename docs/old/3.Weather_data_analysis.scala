@@ -204,7 +204,7 @@ display(weather_original_metadata.orderBy($"name".asc))
 // MAGIC ## 💧 **PRÉCIPITATIONS**
 // MAGIC | Colonne | Description | Type | Valeurs distinctes | Utilité ML |
 // MAGIC |---------|-------------|------|-------------------|------------|
-// MAGIC | `HourlyPrecip` | Précipitation horaire (pouces) | Float | 145 | ✅ Pluie/neige → retards |
+// MAGIC | `HourlyPrecip` | Précipitation horaire (pouces) | Float | 145 | ✅ Pluie/neige - retards |
 // MAGIC | `HourlyPrecipFlag` | Indicateur de validité | String | 2 | ❌ À ignorer |
 // MAGIC
 // MAGIC ## 📊 **PRESSION ATMOSPHÉRIQUE**

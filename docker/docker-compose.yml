@@ -1,4 +1,7 @@
 services:
+  # ============================================================================
+  # Spark Master
+  # ============================================================================
   spark-master:
     image: bitnami/spark:3.5.3
     container_name: spark-master
@@ -26,7 +29,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-
+  # ============================================================================
+  # Spark Worker 1
+  # ============================================================================
   spark-worker-1:
     image: bitnami/spark:3.5.3
     container_name: spark-worker-1
@@ -51,7 +56,9 @@ services:
       - ../work/tmp/spark-tmp-1:/tmp/spark-local
     networks:
       - spark-network
-
+  # ============================================================================
+  # Spark Worker 2
+  # ============================================================================
   spark-worker-2:
     image: bitnami/spark:3.5.3
     container_name: spark-worker-2
@@ -76,7 +83,9 @@ services:
       - ../work/tmp/spark-tmp-2:/tmp/spark-local
     networks:
       - spark-network
-
+  # ============================================================================
+  # Spark Worker 3
+  # ============================================================================
   spark-worker-3:
     image: bitnami/spark:3.5.3
     container_name: spark-worker-3
@@ -101,7 +110,9 @@ services:
       - ../work/tmp/spark-tmp-3:/tmp/spark-local
     networks:
       - spark-network
-
+  # ============================================================================
+  # Spark Worker 4
+  # ============================================================================
   spark-worker-4:
     image: bitnami/spark:3.5.3
     container_name: spark-worker-4
@@ -126,7 +137,9 @@ services:
       - ../work/tmp/spark-tmp-4:/tmp/spark-local
     networks:
       - spark-network
-
+  # ============================================================================
+  # Spark Submit
+  # ============================================================================
   spark-submit:
     image: bitnami/spark:3.5.3
     container_name: spark-submit
@@ -150,10 +163,12 @@ services:
     # Maintien le container actif sans démarrer de service Spark
     command: tail -f /dev/null
     restart: unless-stopped
-
+  # ============================================================================
+  # Jupyter - Notebooks
+  # ============================================================================
   jupyter:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile.jupyter
     container_name: jupyter-spark
     hostname: jupyter-spark
@@ -180,6 +195,40 @@ services:
     networks:
       - spark-network
     restart: unless-stopped
+
+  # ============================================================================
+  # MLFlow Tracking Server
+  # ============================================================================
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.4.0
+    container_name: mlflow-server
+    ports:
+      - "5555:5000"
+    volumes:
+      # SQLite database persistence
+      - ../work/mlflow:/mlflow
+      # Artifacts storage
+      - ../work/mlflow/artifacts:/mlflow/artifacts
+    environment:
+      # Backend store (SQLite)
+      - BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
+      # Artifact store (local filesystem)
+      - ARTIFACT_ROOT=/mlflow/artifacts
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - spark-network
 
 networks:
   spark-network:

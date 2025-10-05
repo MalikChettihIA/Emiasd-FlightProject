@@ -740,3 +740,11 @@ work/output/model/flight_delay_rf_randomforest/stages/0_rfc_c71cac66fbab/data/_S
 work/output/model/flight_delay_rf_randomforest/stages/0_rfc_c71cac66fbab/metadata/_SUCCESS
 work/output/model/flight_delay_rf_randomforest/stages/0_rfc_c71cac66fbab/metadata/part-00000
 work/output/model/flight_delay_rf_randomforest/stages/0_rfc_c71cac66fbab/treesMetadata/_SUCCESS
+.claude/settings.local.json
+.idea/libraries/sbt__com_eed3si9n_jarjar_jarjar_1_13_1_jar.xml
+.idea/libraries/sbt__com_eed3si9n_jarjarabrams_jarjar_abrams_core_2_12_1_13_1_jar.xml
+.idea/libraries/sbt__com_eed3si9n_sbt_assembly_2_1_5_jar.xml
+.idea/libraries/sbt__com_fasterxml_jackson_core_jackson_annotations_2_13_4_jar.xml
+.idea/libraries/sbt__org_ow2_asm_asm_9_6_jar.xml
+.idea/libraries/sbt__org_ow2_asm_asm_commons_9_6_jar.xml
+.idea/libraries/sbt__org_ow2_asm_asm_tree_9_6_jar.xml
