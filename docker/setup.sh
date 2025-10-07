@@ -17,6 +17,21 @@ log_success() { echo -e "${GREEN}✅ $1${NC}"; }
 log_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 log_error() { echo -e "${RED}❌ $1${NC}"; }
 
+# Détection de la commande Docker Compose
+detect_docker_compose() {
+    if command -v docker-compose >/dev/null 2>&1; then
+        echo "docker-compose"
+    elif docker compose version >/dev/null 2>&1; then
+        echo "docker compose"
+    else
+        log_error "Ni docker-compose ni docker compose n'est disponible"
+        exit 1
+    fi
+}
+
+DOCKER_COMPOSE_CMD=$(detect_docker_compose)
+log_info "Utilisation de: $DOCKER_COMPOSE_CMD"
+
 # Vérification des fichiers requis
 log_info "Vérification des fichiers requis..."
 
@@ -37,7 +52,7 @@ fi
 
 # Validation du docker-compose.yml
 log_info "Validation de la configuration Docker Compose..."
-if ! docker-compose config >/dev/null 2>&1; then
+if ! $DOCKER_COMPOSE_CMD config >/dev/null 2>&1; then
     log_error "Erreur dans docker-compose.yml. Vérifiez la syntaxe."
     exit 1
 fi
@@ -47,7 +62,7 @@ read -p "🧹 Voulez-vous faire un nettoyage complet ? (y/N): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     log_info "Nettoyage en cours..."
-    docker-compose down --volumes --remove-orphans 2>/dev/null || true
+    $DOCKER_COMPOSE_CMD down --volumes --remove-orphans 2>/dev/null || true
     docker system prune -f
 fi
 
@@ -57,10 +72,10 @@ mkdir -p notebooks data
 
 # Construction et démarrage
 log_info "Construction des images..."
-docker-compose build --no-cache
+$DOCKER_COMPOSE_CMD build --no-cache
 
 log_info "Démarrage du cluster..."
-docker-compose up -d
+$DOCKER_COMPOSE_CMD up -d
 
 # Attente que les services soient prêts
 log_info "Attente du démarrage des services..."
@@ -113,7 +128,7 @@ echo "   • Spark Master UI: http://localhost:8080"
 echo "   • Workers UI:      http://localhost:8081-8084"
 echo ""
 echo "🛠️  Commandes utiles:"
-echo "   • docker-compose logs -f [service]  - Voir les logs"
-echo "   • docker-compose restart [service] - Redémarrer un service"
-echo "   • docker-compose down              - Arrêter le cluster"
+echo "   • $DOCKER_COMPOSE_CMD logs -f [service]  - Voir les logs"
+echo "   • $DOCKER_COMPOSE_CMD restart [service] - Redémarrer un service"
+echo "   • $DOCKER_COMPOSE_CMD down              - Arrêter le cluster"
 echo ""
