@@ -10,7 +10,7 @@ Before starting, ensure you have:
 
 - **Docker Desktop** installed and running
   - Download from [docker.com](https://www.docker.com/products/docker-desktop)
-- **16GB RAM** minimum (24GB recommended)
+- **24GB RAM** minimum (32GB recommended)
 - **20GB free disk space**
 - **Internet connection** (for downloading Docker images)
 

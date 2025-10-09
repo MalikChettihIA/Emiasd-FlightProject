@@ -49,20 +49,20 @@ The project uses three primary datasets:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Docker Infrastructure                      │
+│                    Docker Infrastructure                    │
 ├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │ Spark Master│  │ 4x Workers   │  │ MLflow Server│       │
-│  │   :8080     │  │ :8081-8084   │  │   :5555      │       │
-│  └─────────────┘  └──────────────┘  └──────────────┘       │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐        │
+│  │ Spark Master│  │ 4x Workers   │  │ MLflow Server│        │
+│  │   :8080     │  │ :8081-8084   │  │   :5000      │        │
+│  └─────────────┘  └──────────────┘  └──────────────┘        │
 └─────────────────────────────────────────────────────────────┘
                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                      ML Pipeline                              │
-├─────────────────────────────────────────────────────────────┤
+┌──────────────────────────────────────────────────────────────┐
+│                      ML Pipeline                             │
+├──────────────────────────────────────────────────────────────┤
 │  1. Data Loading → 2. Preprocessing → 3. Feature Engineering │
 │  4. Model Training → 5. Evaluation → 6. MLflow Tracking      │
-└─────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────┘
 ```
 
 **Technology Stack**:
@@ -80,7 +80,7 @@ The project uses three primary datasets:
 ### Prerequisites
 
 - Docker and Docker Compose
-- 16GB+ RAM recommended
+- 32GB+ RAM recommended
 - 20GB+ free disk space
 
 ### Setup and Run
@@ -99,7 +99,7 @@ cd docker
 
 # 4. View results
 # - Spark UI: http://localhost:8080
-# - MLflow UI: http://localhost:5555
+# - MLflow UI: http://localhost:5000
 ```
 
 **That's it!** The system will automatically:
@@ -215,7 +215,7 @@ The project includes a complete Docker-based infrastructure:
 |---------|------|-------------|
 | **spark-master** | 8080 | Spark Master Web UI |
 | **spark-worker-1..4** | 8081-8084 | 4 Worker nodes (6GB RAM each) |
-| **mlflow-server** | 5555 | MLflow Tracking Server |
+| **mlflow-server** | 5000 | MLflow Tracking Server |
 | **jupyter** | 8888 | JupyterLab with PySpark |
 
 ### Management Scripts
@@ -270,7 +270,7 @@ All experiments are automatically tracked in MLflow:
 
 ### MLflow UI
 
-Access at **http://localhost:5555**
+Access at **http://localhost:5000**
 
 - Compare experiments side-by-side
 - Filter by metrics (`test_f1 > 0.85`)
@@ -324,29 +324,30 @@ experiments:                  # List of experiments
 Emiasd-FlightProject/
 ├── docker/                      # Docker infrastructure
 │   ├── docker-compose.yml       # Service definitions
-│   ├── setup.sh                 # Setup script
-│   └── submit.sh                # Job submission
+│   └── setup.sh                 # Setup script
+
 ├── src/main/scala/com/flightdelay/
 │   ├── app/                     # Main application
 │   ├── config/                  # Configuration classes
 │   ├── data/                    # Data loading & preprocessing
-│   │   ├── loaders/            # Data loaders
-│   │   └── preprocessing/      # Preprocessing pipeline
+│   │   ├── loaders/             # Data loaders
+│   │   └── preprocessing/       # Preprocessing pipeline
 │   ├── features/                # Feature engineering
-│   │   ├── pipelines/          # Feature pipelines
-│   │   └── pca/                # PCA implementation
+│   │   ├── pipelines/           # Feature pipelines
+│   │   └── pca/                 # PCA implementation
 │   ├── ml/                      # Machine learning
-│   │   ├── models/             # Model implementations
-│   │   ├── training/           # Training logic
-│   │   ├── evaluation/         # Model evaluation
-│   │   └── tracking/           # MLflow tracking
+│   │   ├── models/              # Model implementations
+│   │   ├── training/            # Training logic
+│   │   ├── evaluation/          # Model evaluation
+│   │   └── tracking/            # MLflow tracking
 │   └── utils/                   # Utilities
 ├── work/                        # Working directory
 │   ├── apps/                    # JARs and libraries
 │   ├── scripts/                 # Python visualization scripts
 │   ├── data/                    # Input data (mounted)
 │   └── output/                  # Results (mounted)
-└── docs/MD/                     # Documentation
+├── docs/MD/                     # Documentation
+└── submit.sh                    # Submit Application on Spark cluster
 ```
 
 ### Adding a New Model
@@ -375,7 +376,7 @@ python work/scripts/visualize_experiments_comparison.py /output
 python work/scripts/visualize_metrics.py /output/exp_name/metrics
 
 # Analyze PCA components
-python work/scripts/visualize_pca.py /output/exp_name/metrics/pca_analysis
+python work/scripts/visualize_pca.py /output/exp_name/metrics
 
 # Cross-validation analysis
 python work/scripts/visualize_cv.py /output/exp_name/metrics
