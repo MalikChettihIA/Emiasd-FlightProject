@@ -169,7 +169,7 @@ services:
   jupyter:
     build:
       context: ..
-      dockerfile: Dockerfile.jupyter
+      dockerfile: docker/Dockerfile.jupyter
     container_name: jupyter-spark
     hostname: jupyter-spark
     ports:
