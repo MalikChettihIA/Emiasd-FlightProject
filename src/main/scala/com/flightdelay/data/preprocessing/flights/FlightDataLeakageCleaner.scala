@@ -1,5 +1,6 @@
-package com.flightdelay.data.preprocessing
+package com.flightdelay.data.preprocessing.flights
 
+import com.flightdelay.data.preprocessing.DataPreprocessor
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**

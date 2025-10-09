@@ -1,9 +1,10 @@
-package com.flightdelay.data.preprocessing
+package com.flightdelay.data.preprocessing.flights
 
 import com.flightdelay.config.AppConfiguration
-import com.flightdelay.utils.CsvWriter
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import com.flightdelay.data.preprocessing.weather.WeatherInteractionFeatures
+import com.flightdelay.data.utils.TimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object FlightPreprocessingPipeline {
 
@@ -31,7 +32,8 @@ object FlightPreprocessingPipeline {
 
     // Execute preprocessing pipeline
     val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
-    val generatedFightData = FlightDataGenerator.preprocess(cleanedFlightData)
+    val enrichedWithWBAN = FlightWBANEnricher.preprocess(cleanedFlightData)
+    val generatedFightData = FlightDataGenerator.preprocess(enrichedWithWBAN)
     val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFightData)
     val flightLeakageCleanedData = FlightDataLeakageCleaner.preprocess(generatedFightDataWithLabels)
     val finalCleanedData = FlightDataBalancer.preprocess(flightLeakageCleanedData)
@@ -85,7 +87,11 @@ object FlightPreprocessingPipeline {
       "feature_flight_day_of_week",
       "feature_is_weekend",
       "feature_route_id",
-      "feature_distance_category"
+      "feature_distance_category",
+      "ORIGIN_WBAN",
+      "ORIGIN_TIMEZONE",
+      "DEST_WBAN",
+      "DEST_TIMEZONE"
     )
 
     // Required label columns

@@ -1,7 +1,7 @@
-package com.flightdelay.data.preprocessing
+package com.flightdelay.data.preprocessing.flights
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
  * Flight Data Balancer using Random Under-Sampling

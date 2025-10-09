@@ -419,7 +419,7 @@ import com.flightdelay.data.preprocessing.FlightPreprocessingPipeline
 import org.apache.spark.ml.classification.RandomForestClassifier
 
 // Step 1: Preprocess data (feature engineering)
-val processedData = FlightPreprocessingPipeline.execute(rawFlightData)
+val processedData = flights.FlightPreprocessingPipeline.execute(rawFlightData)
 
 // Step 2: Extract features with PCA (60% variance)
 val (trainFeatures, pcaModel, analysis) = FlightFeatureExtractor.extractWithPCA(

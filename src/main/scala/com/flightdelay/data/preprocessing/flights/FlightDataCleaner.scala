@@ -1,8 +1,9 @@
-package com.flightdelay.data.preprocessing
+package com.flightdelay.data.preprocessing.flights
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import com.flightdelay.data.preprocessing.DataPreprocessor
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
  * Classe spécialisée pour le nettoyage de premier niveau des données de vols

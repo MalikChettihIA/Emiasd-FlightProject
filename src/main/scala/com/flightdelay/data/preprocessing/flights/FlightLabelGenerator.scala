@@ -1,8 +1,8 @@
-package com.flightdelay.data.preprocessing
+package com.flightdelay.data.preprocessing.flights
 
-import org.apache.spark.sql.{DataFrame, SparkSession, Column}
+import com.flightdelay.data.preprocessing.DataPreprocessor
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
 /**
  * Classe spécialisée pour la génération des labels de classification

@@ -1,8 +1,7 @@
 package com.flightdelay.app
 
 import com.flightdelay.config.{AppConfiguration, ConfigurationLoader, ExperimentConfig}
-import com.flightdelay.data.preprocessing.FlightPreprocessingPipeline
-import com.flightdelay.data.loaders.FlightDataLoader
+import com.flightdelay.data.DataPipeline
 import com.flightdelay.features.FlightFeatureExtractor
 import com.flightdelay.ml.MLPipeline
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -13,10 +12,15 @@ import scala.util.{Failure, Success}
 /**
  * Flight Delay Prediction Application - Main Entry Point
  *
- * Pipeline per experiment:
- * 1. Load raw flight data (once, shared across experiments)
- * 2. Preprocess and engineer features (once, shared across experiments)
- * 3. For each enabled experiment:
+ * Pipeline:
+ * 1. Data Pipeline (once, shared across experiments):
+ *    - Load raw flight data
+ *    - Load raw weather data
+ *    - Load WBAN-Airport-Timezone mapping
+ *    - Preprocess flight data (clean, enrich with WBAN, generate features, create labels)
+ *    - Preprocess weather data
+ *    - Join flight and weather data
+ * 2. For each enabled experiment:
  *    - Extract features with optional PCA
  *    - Train model
  *    - Evaluate model
@@ -53,7 +57,7 @@ object FlightDelayPredictionApp {
     val tasks = if (args.length > 1) {
       args(1).split(",").map(_.trim.toLowerCase).toSet
     } else {
-      Set("load", "preprocess", "feature-extraction", "train", "evaluate")
+      Set("data-pipeline", "feature-extraction", "train", "evaluate")
     }
 
     println(s"Tasks to execute: ${tasks.mkString(", ")}")
@@ -62,34 +66,17 @@ object FlightDelayPredictionApp {
     try {
 
       // =====================================================================================
-      // STEP 1: Load Flight Data (once for all experiments)
+      // STEP 1: Data Pipeline (Load & Preprocess Flight + Weather Data)
       // =====================================================================================
-      if (tasks.contains("load")) {
-        println("\n" + "=" * 80)
-        println("[STEP 1] Loading Flight Data")
-        println("=" * 80)
-        val flightData = FlightDataLoader.loadFromConfiguration()
-        println(f"\n- Loaded ${flightData.count()}%,d flight records")
+      if (tasks.contains("data-pipeline")) {
+        val joinedData = DataPipeline.execute()
+        println(f"\n- Final dataset: ${joinedData.count()}%,d records with ${joinedData.columns.length}%3d columns")
       } else {
-        println("\n[STEP 1] Loading flight data... SKIPPED")
+        println("\n[STEP 1] Data pipeline (load & preprocess)... SKIPPED")
       }
 
       // =====================================================================================
-      // STEP 2: Preprocess and Feature Engineering (once for all experiments)
-      // =====================================================================================
-      if (tasks.contains("preprocess")) {
-        println("\n" + "=" * 80)
-        println("[STEP 2] Preprocessing and Feature Engineering")
-        println("=" * 80)
-        val processedFlightData = FlightPreprocessingPipeline.execute()
-        println(f"\n- Generated ${processedFlightData.columns.length}%3d columns (features + labels)")
-        println("=" * 80 + "\n")
-      } else {
-        println("\n[STEP 2] Preprocessing and feature engineering... SKIPPED")
-      }
-
-      // =====================================================================================
-      // STEP 3: Process each enabled experiment sequentially
+      // STEP 2: Process each enabled experiment sequentially
       // =====================================================================================
       enabledExperiments.zipWithIndex.foreach { case (experiment, index) =>
         println("\n" + "=" * 80)
@@ -142,11 +129,11 @@ object FlightDelayPredictionApp {
   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
     // =====================================================================================
-    // STEP 3: Feature Extraction with Optional PCA
+    // STEP 2: Feature Extraction with Optional PCA
     // =====================================================================================
     if (tasks.contains("feature-extraction")) {
       println("\n" + "-" * 80)
-      println(s"[STEP 3] Feature Extraction for ${experiment.name}")
+      println(s"[STEP 2] Feature Extraction for ${experiment.name}")
       println("-" * 80)
       println(s"Feature Type: ${experiment.featureExtraction.featureType}")
 
@@ -161,15 +148,15 @@ object FlightDelayPredictionApp {
 
       println("-" * 80 + "\n")
     } else {
-      println(s"\n[STEP 3] Feature extraction for ${experiment.name}... SKIPPED")
+      println(s"\n[STEP 2] Feature extraction for ${experiment.name}... SKIPPED")
     }
 
     // =====================================================================================
-    // STEP 4: Train Model with K-Fold CV + Hold-out Test
+    // STEP 3: Train Model with K-Fold CV + Hold-out Test
     // =====================================================================================
     if (tasks.contains("train")) {
       println("\n" + "-" * 80)
-      println(s"[STEP 4] Model Training for ${experiment.name}")
+      println(s"[STEP 3] Model Training for ${experiment.name}")
       println("-" * 80)
 
       // Load extracted features (unified path for both PCA and non-PCA)
@@ -193,17 +180,17 @@ object FlightDelayPredictionApp {
       println("-" * 80 + "\n")
 
     } else {
-      println(s"\n[STEP 4] Training model for ${experiment.name}... SKIPPED")
+      println(s"\n[STEP 3] Training model for ${experiment.name}... SKIPPED")
     }
 
     // =====================================================================================
-    // STEP 5: Evaluate Model
+    // STEP 4: Evaluate Model
     // =====================================================================================
     if (tasks.contains("evaluate")) {
-      println(s"\n[STEP 5] Evaluating model for ${experiment.name}...")
+      println(s"\n[STEP 4] Evaluating model for ${experiment.name}...")
       println("⚠ Evaluation not yet implemented")
     } else {
-      println(s"\n[STEP 5] Evaluating model for ${experiment.name}... SKIPPED")
+      println(s"\n[STEP 4] Evaluating model for ${experiment.name}... SKIPPED")
     }
   }
 

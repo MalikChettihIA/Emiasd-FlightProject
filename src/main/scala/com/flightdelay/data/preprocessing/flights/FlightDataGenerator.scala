@@ -1,8 +1,9 @@
-package com.flightdelay.data.preprocessing
+package com.flightdelay.data.preprocessing.flights
 
-import org.apache.spark.sql.{DataFrame, SparkSession, Column}
+import com.flightdelay.data.preprocessing.DataPreprocessor
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
 /**
  * Classe spécialisée pour l'ajout de nouvelles colonnes et features engineering
@@ -127,6 +128,7 @@ object FlightDataGenerator extends DataPreprocessor {
 
       // Minutes depuis minuit
       "feature_minutes_since_midnight" -> ((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)))
+
     )
 
     val result = addCalculatedColumns(df, columnExpressions)
