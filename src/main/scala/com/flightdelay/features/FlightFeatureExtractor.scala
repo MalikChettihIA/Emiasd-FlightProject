@@ -1,12 +1,15 @@
 package com.flightdelay.features
 
 import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
+import org.apache.spark.ml.feature.PCAModel
+
 import com.flightdelay.data.utils.DataQualityMetrics
 import com.flightdelay.features.pipelines.{BasicFlightFeaturePipeline, EnhancedFlightFeaturePipeline}
 import com.flightdelay.features.pca.{PCAFeatureExtractor, VarianceAnalysis}
-import org.apache.spark.ml.feature.PCAModel
+import com.flightdelay.features.leakage.DataLeakageProtection
+
 
 import scala.sys.process._
 /**
@@ -50,12 +53,8 @@ object FlightFeatureExtractor {
 
     val target = experiment.target
 
-    // Step 1: Drop unused labels (keep only target)
-    val labelsToDrop = data.columns
-      .filter(colName => colName.startsWith("label_") && colName != target)
-    val flightData = data.drop(labelsToDrop: _*)
-
-    println(s"  - Dropped ${labelsToDrop.length} unused label columns")
+    // Step 1: Drop Data leakage
+    val flightData = DataLeakageProtection.clean(data, target)
 
     println("\n" + "=" * 80)
     println(s"[STEP 3][FeatureExtractor] Feature Extraction - Start")

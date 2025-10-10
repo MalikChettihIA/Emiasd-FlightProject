@@ -1,6 +1,7 @@
 package com.flightdelay.data.preprocessing.flights
 
 import com.flightdelay.data.preprocessing.DataPreprocessor
+import com.flightdelay.data.utils.TimeFeatureUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
@@ -126,14 +127,76 @@ object FlightDataGenerator extends DataPreprocessor {
         .when((col("CRS_DEP_TIME") / lit(100)) < lit(21), "Evening")
         .otherwise("Night"),
 
-      // Minutes depuis minuit
-      "feature_minutes_since_midnight" -> ((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)))
+      // Minutes depuis minuit (départ)
+      "feature_minutes_since_midnight" -> ((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100))),
+      // Arrondi de CRS_DEP_TIME
+      "feature_departure_hour_rounded" -> TimeFeatureUtils.roundTimeToNearestHour(col("CRS_DEP_TIME")),
+
+      // ===== ARRIVAL TIME FEATURES =====
+      // Calcul de l'heure d'arrivée prévue (CRS_DEP_TIME + CRS_ELAPSED_TIME)
+      // 1. Convertir CRS_DEP_TIME en minutes depuis minuit
+      "feature_departure_minutes_total" -> ((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100))),
+
+      // 2. Ajouter la durée du vol et gérer le passage à minuit (modulo 1440 minutes = 24h)
+      "feature_arrival_minutes_total" -> (
+        ((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)) + col("CRS_ELAPSED_TIME")) % lit(1440)
+      ),
+
+      // 3. Convertir en format HHMM
+      "feature_arrival_time" -> (
+        ((((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)) + col("CRS_ELAPSED_TIME")) % lit(1440)) / lit(60)).cast(IntegerType) * lit(100) +
+        ((((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)) + col("CRS_ELAPSED_TIME")) % lit(1440)) % lit(60)).cast(IntegerType)
+      ),
+
+      // Extraction des composants de l'heure d'arrivée
+      "feature_arrival_hour" -> (
+        (((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)) + col("CRS_ELAPSED_TIME")) % lit(1440)) / lit(60)
+      ).cast(IntegerType),
+
+      "feature_arrival_minute" -> (
+        (((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)) + col("CRS_ELAPSED_TIME")) % lit(1440)) % lit(60)
+      ).cast(IntegerType),
+
+      // Heure d'arrivée en format décimal (ex: 14h30 = 14.5)
+      "feature_arrival_hour_decimal" -> (
+        (((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)) + col("CRS_ELAPSED_TIME")) % lit(1440)) / lit(60.0)
+      ),
+
+      // ===== MIDNIGHT CROSSING DETECTION =====
+      // Détection si le vol traverse minuit (arrive le jour suivant)
+      "feature_crosses_midnight" -> when(
+        ((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)) + col("CRS_ELAPSED_TIME")) >= lit(1440),
+        1
+      ).otherwise(0),
+
+      // Nombre de jours de voyage (0 = même jour, 1 = lendemain, etc.)
+      "feature_flight_days_span" -> floor(
+        ((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100)) + col("CRS_ELAPSED_TIME")) / lit(1440)
+      ).cast(IntegerType)
 
     )
 
-    val result = addCalculatedColumns(df, columnExpressions)
-    println(s"Temporal features added: ${columnExpressions.size}")
-    //result.printSchema
+    // Ajouter les colonnes calculées
+    val resultWithBasicFeatures = addCalculatedColumns(df, columnExpressions)
+
+    // Ajouter les features qui dépendent des colonnes créées ci-dessus
+    val columnExpressions2 = Map(
+      // Arrondi de l'heure d'arrivée (format String avec padding 4 chiffres)
+      "feature_arrival_hour_rounded" -> format_string("%04d",
+        TimeFeatureUtils.roundTimeToNearestHour(col("feature_arrival_time"))
+      ),
+
+      // Date d'arrivée (en tenant compte du passage à minuit)
+      // Ajoute feature_flight_days_span jours à FL_DATE
+      "feature_arrival_date" -> date_format(
+        date_add(col("FL_DATE"), col("feature_flight_days_span")),
+        "yyyy-MM-dd"
+      )
+    )
+
+    val result = addCalculatedColumns(resultWithBasicFeatures, columnExpressions2)
+
+    println(s"Temporal features added: ${columnExpressions.size + columnExpressions2.size}")
     result
   }
 

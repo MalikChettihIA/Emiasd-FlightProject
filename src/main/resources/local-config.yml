@@ -30,118 +30,13 @@ common:
 experiments:
 
   # =========================================================================
-  # Experiment 4:
+  # Experiment 1:
   # Model : RandomForest
   # =========================================================================
-  - name: "exp4_rf_pca_crossvalidation_gridsearch_label_is_delayed_15min"
+  - name: "Experience-1"
     description: "Baseline Random Forest with hyperparameters tunning"
     enabled: true
     target: "label_is_delayed_15min"
-
-    featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
-
-    model:
-      modelType: "randomforest"
-
-    train:
-      trainRatio: 0.8
-
-      crossValidation:
-        numFolds: 5
-
-      gridSearch:
-        enabled: true
-        evaluationMetric: "f1"
-
-      hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
-        impurity: "gini"
-
-  # =========================================================================
-  # Experiment 5:
-  # Model : RandomForest
-  # =========================================================================
-  - name: "exp5_rf_pca_crossvalidation_gridsearch_label_is_delayed_30min"
-    description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
-    target: "label_is_delayed_30min"
-
-    featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
-
-    model:
-      modelType: "randomforest"
-
-    train:
-      trainRatio: 0.8
-
-      crossValidation:
-        numFolds: 5
-
-      gridSearch:
-        enabled: true
-        evaluationMetric: "f1"
-
-      hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
-        impurity: "gini"
-
-  # =========================================================================
-  # Experiment 6:
-  # Model : RandomForest
-  # =========================================================================
-  - name: "exp6_rf_pca_crossvalidation_gridsearch_label_is_delayed_45min"
-    description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
-    target: "label_is_delayed_45min"
-
-    featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
-
-    model:
-      modelType: "randomforest"
-
-    train:
-      trainRatio: 0.8
-
-      crossValidation:
-        numFolds: 5
-
-      gridSearch:
-        enabled: true
-        evaluationMetric: "f1"
-
-      hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
-        impurity: "gini"
-
-  # =========================================================================
-  # Experiment 7:
-  # Model : RandomForest
-  # =========================================================================
-  - name: "exp7_rf_pca_crossvalidation_gridsearch_label_is_delayed_60min"
-    description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
-    target: "label_is_delayed_60min"
 
     featureExtraction:
       type: pca

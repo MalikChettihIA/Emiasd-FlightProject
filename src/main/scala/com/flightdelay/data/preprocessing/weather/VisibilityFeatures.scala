@@ -88,15 +88,3 @@ object VisibilityFeatures {
           .otherwise(10.0))
   }
 }
-
-weatherWithFeatureDF = VisibilityFeatures.createVisibilityFeatures(weatherWithFeatureDF)
-
-weatherWithFeatureDF.select(
-  "Visibility",
-  "visibility_miles",
-  "visibility_km",
-  "visibility_category",
-  "visibility_risk_score",
-  "is_very_low_visibility",
-  "visibility_normalized",
-  "visibility_inverse").show(20)
