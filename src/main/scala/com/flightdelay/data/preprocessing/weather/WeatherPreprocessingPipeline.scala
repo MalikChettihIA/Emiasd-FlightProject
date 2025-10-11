@@ -31,7 +31,7 @@ object WeatherPreprocessingPipeline {
     val processedWithSkyConditionFeatureDf = originalDf.transform(SkyConditionFeatures.createSkyConditionFeatures)
     val porcessedWithVisibilityFeaturesDf = processedWithSkyConditionFeatureDf.transform(VisibilityFeatures.createVisibilityFeatures)
     val porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf = porcessedWithVisibilityFeaturesDf.transform(WeatherInteractionFeatures.createInteractionFeatures)
-    val processedWeatherDf = porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf
+    val processedWeatherDf = WeatherDataCleaner.preprocess(porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf)
 
     println(s"\nSaving preprocessed data to parquet:")
     println(s"  - Path: $processedParquetPath")

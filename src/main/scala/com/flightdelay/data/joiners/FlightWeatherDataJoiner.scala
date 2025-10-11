@@ -78,7 +78,7 @@ object FlightWeatherDataJoiner {
    * Récupère 12 observations horaires avant l'heure de départ UTC
    * Retourne les observations sous forme d'arrays
    */
-  private def joinOriginWeather(flightData: DataFrame, weatherData: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def joinOriginWeather(flightData: DataFrame, weatherData: DataFrame)(implicit spark: SparkSession): DataFrame = {
 
     val startTime = System.currentTimeMillis()
 
@@ -165,7 +165,7 @@ object FlightWeatherDataJoiner {
    * Récupère 12 observations horaires avant l'heure d'arrivée UTC
    * Retourne les observations sous forme d'arrays
    */
-  private def joinDestinationWeather(flightData: DataFrame, weatherData: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def joinDestinationWeather(flightData: DataFrame, weatherData: DataFrame)(implicit spark: SparkSession): DataFrame = {
 
     val startTime = System.currentTimeMillis()
 

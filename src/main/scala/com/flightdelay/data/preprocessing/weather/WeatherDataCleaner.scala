@@ -102,7 +102,6 @@ object WeatherDataCleaner extends DataPreprocessor {
 
     val typeMapping = Map(
       "WBAN" -> StringType,
-      "Date" -> StringType,
       "Time" -> StringType,
       "StationType" -> IntegerType,
       "Visibility" -> DoubleType,
@@ -121,8 +120,13 @@ object WeatherDataCleaner extends DataPreprocessor {
 
     val convertedData = convertDataTypes(df, typeMapping)
 
-    println(s"  - Current count: ${convertedData.count()} records")
-    convertedData
+    // Convert Date from YYYYMMDD string format to proper Date type
+    println("  - Converting Date from YYYYMMDD to Date type")
+    val withDateConverted = convertedData
+      .withColumn("Date", to_date(col("Date"), "yyyyMMdd"))
+
+    println(s"  - Current count: ${withDateConverted.count()} records")
+    withDateConverted
   }
 
   /**
