@@ -99,11 +99,14 @@ object FlightDataGenerator extends DataPreprocessor {
 
       // Conversion de l'heure de départ (format HHMM vers heures et minutes)
       "feature_departure_hour" -> (col("CRS_DEP_TIME") / lit(100)).cast(IntegerType),
+      "feature_utc_departure_hour" -> (col("UTC_CRS_DEP_TIME") / lit(100)).cast(IntegerType),
       "feature_departure_minute" -> (col("CRS_DEP_TIME") % lit(100)).cast(IntegerType),
 
       // Heure de départ en format décimal (ex: 14h30 = 14.5)
       "feature_departure_hour_decimal" -> ((col("CRS_DEP_TIME") / lit(100)).cast(DoubleType) +
         ((col("CRS_DEP_TIME") % lit(100)).cast(DoubleType) / lit(60.0))),
+      "feature_utc_departure_hour_decimal" -> ((col("UTC_CRS_DEP_TIME") / lit(100)).cast(DoubleType) +
+        ((col("UTC_CRS_DEP_TIME") % lit(100)).cast(DoubleType) / lit(60.0))),
 
       // Quart de la journée (0-3 pour les 4 quarters de 6h)
       "feature_departure_quarter_day" -> when((col("CRS_DEP_TIME") / lit(100)) < lit(6), 0)
@@ -131,6 +134,7 @@ object FlightDataGenerator extends DataPreprocessor {
       "feature_minutes_since_midnight" -> ((col("CRS_DEP_TIME") / lit(100)) * lit(60) + (col("CRS_DEP_TIME") % lit(100))),
       // Arrondi de CRS_DEP_TIME
       "feature_departure_hour_rounded" -> TimeFeatureUtils.roundTimeToNearestHour(col("CRS_DEP_TIME")),
+      "feature_utc_departure_hour_rounded" -> TimeFeatureUtils.roundTimeToNearestHour(col("UTC_CRS_DEP_TIME")),
 
       // ===== ARRIVAL TIME FEATURES =====
       // Calcul de l'heure d'arrivée prévue (CRS_DEP_TIME + CRS_ELAPSED_TIME)
@@ -189,7 +193,7 @@ object FlightDataGenerator extends DataPreprocessor {
       // Date d'arrivée (en tenant compte du passage à minuit)
       // Ajoute feature_flight_days_span jours à FL_DATE
       "feature_arrival_date" -> date_format(
-        date_add(col("FL_DATE"), col("feature_flight_days_span")),
+        date_add(col("UTC_FL_DATE"), col("feature_flight_days_span")),
         "yyyy-MM-dd"
       )
     )
@@ -218,7 +222,7 @@ object FlightDataGenerator extends DataPreprocessor {
     val columnExpressions = Map(
       // Identifiant unique du vol
       "feature_flight_unique_id" -> concat(
-        col("FL_DATE"), lit("_"),
+        col("UTC_FL_DATE"), lit("_"),
         col("OP_CARRIER_AIRLINE_ID"), lit("_"),
         col("OP_CARRIER_FL_NUM"), lit("_"),
         col("ORIGIN_AIRPORT_ID"), lit("_"),

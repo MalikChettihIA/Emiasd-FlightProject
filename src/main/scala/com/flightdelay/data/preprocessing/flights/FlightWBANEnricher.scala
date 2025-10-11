@@ -1,8 +1,11 @@
 package com.flightdelay.data.preprocessing.flights
 
-import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.IntegerType
+
+import com.flightdelay.config.AppConfiguration
+
 
 /**
  * Enrichit les données de vols avec les informations WBAN et TimeZone
@@ -45,7 +48,7 @@ object FlightWBANEnricher {
       .drop("ORIGIN_AIRPORT_ID_JOIN")
 
     // Join with destination airport to get destination WBAN and timezone
-    val enrichedDf = withOriginWBAN
+    val withDestWBAN = withOriginWBAN
       .join(
         wbanMappingDf
           .select(
@@ -57,6 +60,48 @@ object FlightWBANEnricher {
         "inner"
       )
       .drop("DEST_AIRPORT_ID_JOIN")
+
+    // Convert CRS_DEP_TIME from local time to UTC using ORIGIN_TIMEZONE
+    // ORIGIN_TIMEZONE is offset from UTC (e.g., -6 for CST, -8 for PST)
+    // UTC = local_time - timezone_offset
+
+    // Step 1: Calculate total UTC minutes (can be negative or > 1440)
+    val withUTCMinutes = withDestWBAN.withColumn("_utc_total_minutes",
+      // Local time in minutes
+      ((col("CRS_DEP_TIME") / lit(100)).cast(IntegerType) * lit(60) +
+       (col("CRS_DEP_TIME") % lit(100)).cast(IntegerType)) -
+      // Subtract timezone offset (convert hours to minutes)
+      (col("ORIGIN_TIMEZONE") * lit(60))
+    )
+
+    // Step 2: Calculate day offset and UTC time
+    val enrichedDf = withUTCMinutes
+      // Calculate day offset (-1, 0, or +1)
+      .withColumn("_utc_day_offset",
+        floor(col("_utc_total_minutes") / lit(1440)).cast(IntegerType)
+      )
+      // Calculate UTC time within the day (0-1439 minutes)
+      .withColumn("_utc_minutes_in_day",
+        ((col("_utc_total_minutes") % lit(1440)) + lit(1440)) % lit(1440)
+      )
+      // Convert UTC minutes to HHMM format
+      .withColumn("UTC_CRS_DEP_TIME",
+        format_string("%04d",
+          (col("_utc_minutes_in_day") / lit(60)).cast(IntegerType) * lit(100) +
+          (col("_utc_minutes_in_day") % lit(60)).cast(IntegerType)
+        )
+      )
+      // Calculate UTC date by adding day offset to FL_DATE
+      .withColumn("UTC_FL_DATE",
+        date_add(col("FL_DATE"), col("_utc_day_offset")
+      )
+
+      )
+      // Drop temporary columns
+      .drop("_utc_total_minutes", "_utc_day_offset", "_utc_minutes_in_day")
+
+    println(s"\n  - Added UTC_CRS_DEP_TIME and UTC_FL_DATE conversion")
+    println(s"  - Handling timezone offsets and date boundaries")
 
     // Display statistics
     val totalFlights = enrichedDf.count()

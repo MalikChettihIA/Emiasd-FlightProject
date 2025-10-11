@@ -78,9 +78,8 @@ object MLPipeline {
    * @return MLResult with trained model and comprehensive metrics
    */
   def train(
-    data: DataFrame,
     experiment: ExperimentConfig
-  )(implicit spark: SparkSession, config: AppConfiguration): MLResult = {
+  )(implicit spark: SparkSession, configuration: AppConfiguration): MLResult = {
 
     println("\n" + "=" * 100)
     println(s"[ML PIPELINE] Starting for experiment: ${experiment.name}")
@@ -93,12 +92,20 @@ object MLPipeline {
     }
     println("=" * 100)
 
+    // Load extracted features (unified path for both PCA and non-PCA)
+    val featuresPath = s"${configuration.common.output.basePath}/${experiment.name}/features/extracted_features"
+
+    println(s"\nLoading features:")
+    println(s"  - Path: $featuresPath")
+    val data = spark.read.parquet(featuresPath)
+    println(f"  - Loaded ${data.count()}%,d feature records")
+
     val startTime = System.currentTimeMillis()
 
     // ========================================================================
     // MLFlow Tracking Initialization
     // ========================================================================
-    MLFlowTracker.initialize(config.common.mlflow.trackingUri, config.common.mlflow.enabled)
+    MLFlowTracker.initialize(configuration.common.mlflow.trackingUri, configuration.common.mlflow.enabled)
     val experimentId = MLFlowTracker.getOrCreateExperiment()
     val runId = experimentId.flatMap(expId => MLFlowTracker.startRun(expId, experiment.name))
 
@@ -115,10 +122,10 @@ object MLPipeline {
         "feature_extraction_type" -> experiment.featureExtraction.featureType,
         "pca_enabled" -> experiment.featureExtraction.isPcaEnabled,
         "pca_variance_threshold" -> experiment.featureExtraction.pcaVarianceThreshold,
-        "random_seed" -> config.common.seed
+        "random_seed" -> configuration.common.seed
       ))
       MLFlowTracker.setTag(rid, "experiment_description", experiment.description)
-      MLFlowTracker.setTag(rid, "environment", config.environment)
+      MLFlowTracker.setTag(rid, "environment", configuration.environment)
     }
 
     // ========================================================================
@@ -130,7 +137,7 @@ object MLPipeline {
     val testRatio = 1.0 - experiment.train.trainRatio
     val Array(devData, testData) = data.randomSplit(
       Array(experiment.train.trainRatio, testRatio),
-      seed = config.common.seed
+      seed = configuration.common.seed
     )
 
     println(f"  - Development set: ${devData.count()}%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
@@ -225,7 +232,7 @@ object MLPipeline {
     println("\n[STEP 5] Saving Model and Metrics")
     println("-" * 80)
 
-    val experimentOutputPath = s"${config.common.output.basePath}/${experiment.name}"
+    val experimentOutputPath = s"${configuration.common.output.basePath}/${experiment.name}"
     val modelPath = s"$experimentOutputPath/models/${experiment.model.modelType}_final"
 
     println(s"  - Model path: $modelPath")

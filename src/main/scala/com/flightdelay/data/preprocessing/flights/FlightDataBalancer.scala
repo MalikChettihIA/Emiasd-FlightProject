@@ -35,7 +35,6 @@ object FlightDataBalancer {
 
     println("\n" + "=" * 80)
     println("[Data Balancing] Random Under-Sampling - Start")
-    println("[Data Balancing] Random Under-Sampling - Start")
     println("=" * 80)
 
     // Validate label column exists

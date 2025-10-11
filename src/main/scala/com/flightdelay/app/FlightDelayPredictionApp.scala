@@ -137,14 +137,9 @@ object FlightDelayPredictionApp {
       println("-" * 80)
       println(s"Feature Type: ${experiment.featureExtraction.featureType}")
 
-      //Experiment output path
-      val processedParquetPath = s"${configuration.common.output.basePath}/common/data/processed_flights.parquet"
-      println(s"\nLoading preprocessed data:")
-      println(s"  - Path: $processedParquetPath")
-      val processedFlightData = spark.read.parquet(processedParquetPath)
-      println(f"  - Loaded ${processedFlightData.count()}%,d preprocessed records")
 
-      FlightFeatureExtractor.extract(processedFlightData, experiment)
+
+      FlightFeatureExtractor.extract(experiment)
 
       println("-" * 80 + "\n")
     } else {
@@ -159,16 +154,8 @@ object FlightDelayPredictionApp {
       println(s"[STEP 3] Model Training for ${experiment.name}")
       println("-" * 80)
 
-      // Load extracted features (unified path for both PCA and non-PCA)
-      val featuresPath = s"${configuration.common.output.basePath}/${experiment.name}/features/extracted_features"
-
-      println(s"\nLoading features:")
-      println(s"  - Path: $featuresPath")
-      val featuresData = spark.read.parquet(featuresPath)
-      println(f"  - Loaded ${featuresData.count()}%,d feature records")
-
       // Train model using new MLPipeline (Option B: K-fold + Hold-out)
-      val mlResult = MLPipeline.train(featuresData, experiment)
+      val mlResult = MLPipeline.train(experiment)
 
       // Display summary
       println("\n" + "-" * 80)
