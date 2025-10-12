@@ -74,17 +74,17 @@ object VisibilityFeatures {
   def createVisibilityFeatures(df: DataFrame): DataFrame = {
     import org.apache.spark.sql.functions._
 
-    df.withColumn("visibility_miles", cleanVisibility(col("Visibility")))
-      .withColumn("visibility_km", col("visibility_miles") * 1.609)
-      .withColumn("visibility_category", categorizeVisibility(col("visibility_miles")))
-      .withColumn("visibility_risk_score", calculateVisibilityRiskScore(col("visibility_miles")))
-      .withColumn("is_low_visibility", isLowVisibility(col("visibility_miles")))
-      .withColumn("is_very_low_visibility", isVeryLowVisibility(col("visibility_miles")))
-      .withColumn("visibility_normalized",
-        when(col("visibility_miles") > 0, col("visibility_miles") / 10.0)
+    df.withColumn("feature_visibility_miles", cleanVisibility(col("Visibility")))
+      .withColumn("feature_visibility_km", col("feature_visibility_miles") * 1.609)
+      .withColumn("feature_visibility_category", categorizeVisibility(col("feature_visibility_miles")))
+      .withColumn("feature_visibility_risk_score", calculateVisibilityRiskScore(col("feature_visibility_miles")))
+      .withColumn("feature_is_low_visibility", isLowVisibility(col("feature_visibility_miles")))
+      .withColumn("feature_is_very_low_visibility", isVeryLowVisibility(col("feature_visibility_miles")))
+      .withColumn("feature_visibility_normalized",
+        when(col("feature_visibility_miles") > 0, col("feature_visibility_miles") / 10.0)
           .otherwise(0.0))
-      .withColumn("visibility_inverse",
-        when(col("visibility_miles") > 0, lit(1.0) / col("visibility_miles"))
+      .withColumn("feature_visibility_inverse",
+        when(col("feature_visibility_miles") > 0, lit(1.0) / col("feature_visibility_miles"))
           .otherwise(10.0))
   }
 }

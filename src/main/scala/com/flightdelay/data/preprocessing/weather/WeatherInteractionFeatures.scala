@@ -70,24 +70,24 @@ object WeatherInteractionFeatures {
   def createInteractionFeatures(df: DataFrame): DataFrame = {
     import org.apache.spark.sql.functions._
 
-    df.withColumn("weather_severity_index",
+    df.withColumn("feature_weather_severity_index",
         calculateWeatherSeverityIndex(
-          col("cloud_risk_score"),
-          col("visibility_risk_score"),
-          col("ceiling"),
-          col("visibility_miles")
+          col("feature_cloud_risk_score"),
+          col("feature_visibility_risk_score"),
+          col("feature_ceiling"),
+          col("feature_visibility_miles")
         ))
-      .withColumn("is_vfr_conditions",
-        isVFRConditions(col("visibility_miles"), col("ceiling")))
-      .withColumn("is_ifr_conditions",
-        isIFRConditions(col("visibility_miles"), col("ceiling")))
-      .withColumn("requires_cat_ii",
-        requiresCATII(col("visibility_miles"), col("ceiling")))
-      .withColumn("operations_risk_level",
+      .withColumn("feature_is_vfr_conditions",
+        isVFRConditions(col("feature_visibility_miles"), col("feature_ceiling")))
+      .withColumn("feature_is_ifr_conditions",
+        isIFRConditions(col("feature_visibility_miles"), col("feature_ceiling")))
+      .withColumn("feature_requires_cat_ii",
+        requiresCATII(col("feature_visibility_miles"), col("feature_ceiling")))
+      .withColumn("feature_operations_risk_level",
         calculateOperationsRiskLevel(
-          col("visibility_miles"),
-          col("ceiling"),
-          col("has_obscured")
+          col("feature_visibility_miles"),
+          col("feature_ceiling"),
+          col("feature_has_obscured")
         ))
   }
 }

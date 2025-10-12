@@ -108,16 +108,16 @@ object SkyConditionFeatures {
    * Applique toutes les transformations pour SkyCondition
    */
   def createSkyConditionFeatures(df: DataFrame): DataFrame = {
-    df.withColumn("most_critical_sky", getMostCriticalSky(col("SkyCondition")))
-      .withColumn("lowest_cloud_height", getLowestCloudHeight(col("SkyCondition")))
-      .withColumn("ceiling", getCeiling(col("SkyCondition")))
-      .withColumn("num_cloud_layers", countCloudLayers(col("SkyCondition")))
-      .withColumn("cloud_risk_score", calculateCloudRiskScore(col("SkyCondition")))
-      .withColumn("has_overcast", col("SkyCondition").contains("OVC"))
-      .withColumn("has_broken", col("SkyCondition").contains("BKN"))
-      .withColumn("has_obscured", col("SkyCondition").contains("VV"))
-      .withColumn("is_clear", col("SkyCondition").contains("CLR") || col("SkyCondition").contains("SKC"))
-      .withColumn("has_low_ceiling", hasLowCeiling(col("ceiling")))
+    df.withColumn("feature_most_critical_sky", getMostCriticalSky(col("SkyCondition")))
+      .withColumn("feature_lowest_cloud_height", getLowestCloudHeight(col("SkyCondition")))
+      .withColumn("feature_ceiling", getCeiling(col("SkyCondition")))
+      .withColumn("feature_num_cloud_layers", countCloudLayers(col("SkyCondition")))
+      .withColumn("feature_cloud_risk_score", calculateCloudRiskScore(col("SkyCondition")))
+      .withColumn("feature_has_overcast", col("SkyCondition").contains("OVC"))
+      .withColumn("feature_has_broken", col("SkyCondition").contains("BKN"))
+      .withColumn("feature_has_obscured", col("SkyCondition").contains("VV"))
+      .withColumn("feature_is_clear", col("SkyCondition").contains("CLR") || col("SkyCondition").contains("SKC"))
+      .withColumn("feature_has_low_ceiling", hasLowCeiling(col("feature_ceiling")))
   }
 }
 

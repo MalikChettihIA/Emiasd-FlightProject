@@ -30,12 +30,12 @@ common:
 experiments:
 
   # =========================================================================
-  # Experiment 4:
-  # Model : RandomForest
+  # Experiment 1:
+  # Model : RandomForest, pca
   # =========================================================================
-  - name: "exp4_rf_pca_crossvalidation_gridsearch_label_is_delayed_15min"
+  - name: "Experience-1"
     description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
+    enabled: false
     target: "label_is_delayed_15min"
 
     featureExtraction:
@@ -65,17 +65,29 @@ experiments:
         impurity: "gini"
 
   # =========================================================================
-  # Experiment 5:
-  # Model : RandomForest
+  # Experiment 2:
+  # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "exp5_rf_pca_crossvalidation_gridsearch_label_is_delayed_30min"
+  - name: "Experience-2"
     description: "Baseline Random Forest with hyperparameters tunning"
     enabled: true
-    target: "label_is_delayed_30min"
+    target: "label_is_delayed_15min"
 
     featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
+      type: "feature_selection"  # Au lieu de "pca"
+      selectedFeatures:
+        # Liste des features à conserver
+        - "feature_utc_departure_hour"
+        - "feature_flight_month"
+        - "feature_flight_year"
+        - "feature_flight_quarter"
+        - "feature_flight_day_of_week"
+        - "feature_is_weekend"
+        - "feature_route_id"
+        - "feature_distance_category"
+        - "ORIGIN_WBAN"
+        - "DEST_WBAN"
+        - "CRS_ELAPSED_TIME"
 
     model:
       modelType: "randomforest"
@@ -91,79 +103,9 @@ experiments:
         evaluationMetric: "f1"
 
       hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
-        impurity: "gini"
-
-  # =========================================================================
-  # Experiment 6:
-  # Model : RandomForest
-  # =========================================================================
-  - name: "exp6_rf_pca_crossvalidation_gridsearch_label_is_delayed_45min"
-    description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
-    target: "label_is_delayed_45min"
-
-    featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
-
-    model:
-      modelType: "randomforest"
-
-    train:
-      trainRatio: 0.8
-
-      crossValidation:
-        numFolds: 5
-
-      gridSearch:
-        enabled: true
-        evaluationMetric: "f1"
-
-      hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
-        impurity: "gini"
-
-  # =========================================================================
-  # Experiment 7:
-  # Model : RandomForest
-  # =========================================================================
-  - name: "exp7_rf_pca_crossvalidation_gridsearch_label_is_delayed_60min"
-    description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
-    target: "label_is_delayed_60min"
-
-    featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
-
-    model:
-      modelType: "randomforest"
-
-    train:
-      trainRatio: 0.8
-
-      crossValidation:
-        numFolds: 5
-
-      gridSearch:
-        enabled: true
-        evaluationMetric: "f1"
-
-      hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
+        numTrees: [100]
+        maxDepth: [10]
+        maxBins: 2048
         minInstancesPerNode: 1
         subsamplingRate: 1.0
         featureSubsetStrategy: "auto"

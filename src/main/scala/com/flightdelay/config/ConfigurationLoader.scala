@@ -33,7 +33,7 @@ object ConfigurationLoader {
       throw new RuntimeException(s"Fichier de configuration non trouvé: $filename")
     }
 
-    val source = Source.fromInputStream(inputStream)
+    val source = Source.fromInputStream(inputStream, "UTF-8")
     val yamlContent = source.mkString
     source.close()
 

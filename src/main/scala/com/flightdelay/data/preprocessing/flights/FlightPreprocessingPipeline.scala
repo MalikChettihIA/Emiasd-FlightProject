@@ -1,8 +1,8 @@
 package com.flightdelay.data.preprocessing.flights
 
-import com.flightdelay.config.AppConfiguration
+import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import com.flightdelay.data.preprocessing.weather.WeatherInteractionFeatures
-import com.flightdelay.data.utils.TimeUtils
+import com.flightdelay.data.utils.TimeFeatureUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -35,8 +35,7 @@ object FlightPreprocessingPipeline {
     val enrichedWithWBAN = FlightWBANEnricher.preprocess(cleanedFlightData)
     val generatedFightData = FlightDataGenerator.preprocess(enrichedWithWBAN)
     val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFightData)
-    val flightLeakageCleanedData = FlightDataLeakageCleaner.preprocess(generatedFightDataWithLabels)
-    val finalCleanedData = FlightDataBalancer.preprocess(flightLeakageCleanedData)
+    val finalCleanedData = FlightDataBalancer.preprocess(generatedFightDataWithLabels)
 
     // Validate schema
     validatePreprocessedSchema(finalCleanedData)
@@ -69,7 +68,7 @@ object FlightPreprocessingPipeline {
     // Required base columns (from raw data)
     // Note: ARR_DELAY_NEW, WEATHER_DELAY, NAS_DELAY are removed by FlightDataLeakageCleaner
     val requiredBaseColumns = Map(
-      "FL_DATE" -> DateType,
+      "UTC_FL_DATE" -> DateType,
       "OP_CARRIER_AIRLINE_ID" -> IntegerType,
       "OP_CARRIER_FL_NUM" -> IntegerType,
       "ORIGIN_AIRPORT_ID" -> IntegerType,
@@ -101,7 +100,8 @@ object FlightPreprocessingPipeline {
       "label_nas_delay_filled",
       "label_is_delayed_15min",
       "label_is_delayed_30min",
-      "label_is_delayed_60min"
+      "label_is_delayed_60min",
+      "label_is_delayed_90min"
     )
 
     val schema = df.schema
@@ -144,18 +144,6 @@ object FlightPreprocessingPipeline {
         validationPassed = false
       } else {
         println(s"  - $colName")
-      }
-    }
-
-    // Validate that leakage columns have been removed
-    println("\nValidating leakage columns removal:")
-    val leakageColumns = Seq("ARR_DELAY_NEW", "WEATHER_DELAY", "NAS_DELAY")
-    leakageColumns.foreach { colName =>
-      if (availableColumns.contains(colName)) {
-        println(s"  ✗ LEAKAGE DETECTED: $colName should have been removed!")
-        validationPassed = false
-      } else {
-        println(s"  - $colName removed (no leakage)")
       }
     }
 

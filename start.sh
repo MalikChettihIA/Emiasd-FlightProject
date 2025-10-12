@@ -1,4 +1,6 @@
 #!/bin/bash
+
+sbt package
 echo "🛑 Démarrage du cluster Spark..."
 
 # Détection de la commande Docker Compose
