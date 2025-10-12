@@ -24,14 +24,20 @@ object WeatherPreprocessingPipeline {
     val rawParquetPath = s"${configuration.common.output.basePath}/common/data/raw_weather.parquet"
     println(s"\nLoading raw data from parquet:")
     println(s"  - Path: $rawParquetPath")
-    val originalDf = spark.read.parquet(rawParquetPath)
+    val originalDf = try {
+      spark.read.parquet(rawParquetPath)
+    } catch {
+      case e: org.apache.spark.sql.AnalysisException if e.getMessage.contains("PATH_NOT_FOUND") =>
+        println("Warning: Raw weather parquet file not found. Returning empty DataFrame.")
+        spark.emptyDataFrame
+    }
     println(s"  - Loaded ${originalDf.count()} raw records")
 
     // Pour l'instant, on retourne le dataset tel quel
     val processedWithSkyConditionFeatureDf = originalDf.transform(SkyConditionFeatures.createSkyConditionFeatures)
-    val porcessedWithVisibilityFeaturesDf = processedWithSkyConditionFeatureDf.transform(VisibilityFeatures.createVisibilityFeatures)
-    val porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf = processedWithSkyConditionFeatureDf.transform(WeatherInteractionFeatures.createInteractionFeatures)
-    val processedWeatherDf = porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf
+    val processedWithVisibilityFeaturesDf = processedWithSkyConditionFeatureDf.transform(VisibilityFeatures.createVisibilityFeatures)
+    val processedWithInteractionFeaturesDf = processedWithVisibilityFeaturesDf.transform(WeatherInteractionFeatures.createInteractionFeatures)
+    val processedWeatherDf = processedWithInteractionFeaturesDf
 
     println(s"\nSaving preprocessed data to parquet:")
     println(s"  - Path: $processedParquetPath")

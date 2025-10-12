@@ -1,0 +1,62 @@
+# docker-compose.override.yml
+# Ce fichier surcharge la configuration de base sans modifier docker-compose.yml
+# Il est automatiquement chargé par docker-compose
+
+services:
+  # ============================================================================
+  # Spark Worker 1 - Configuration optimisée pour ressources limitées
+  # ============================================================================
+  spark-worker-1:
+    environment:
+      # Réduire la mémoire pour s'adapter aux ressources limitées
+      - SPARK_WORKER_MEMORY=2G  # Réduit de 4G à 2G
+      - SPARK_WORKER_CORES=1    # Réduit à 1 core
+    deploy:
+      resources:
+        limits:
+          memory: 3G   # Limite à 3G pour éviter OOM
+          cpus: '1.0'
+        reservations:
+          memory: 2G
+          cpus: '0.5'
+
+  # ============================================================================
+  # Spark Worker 2 - Configuration optimisée pour ressources limitées
+  # ============================================================================
+  spark-worker-2:
+    environment:
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=1
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: '1.0'
+        reservations:
+          memory: 2G
+          cpus: '0.5'
+
+  # ============================================================================
+  # Spark Submit - Configuration adaptée
+  # ============================================================================
+  spark-submit:
+    environment:
+      - SPARK_DRIVER_MEMORY=1G      # Réduit pour ressources limitées
+      - SPARK_EXECUTOR_MEMORY=1G    # Réduit
+      - SPARK_DRIVER_MAXRESULTSIZE=1G
+
+  # ============================================================================
+  # Jupyter - Configuration optimisée
+  # ============================================================================
+  jupyter:
+    environment:
+      - SPARK_DRIVER_MEMORY=1G      # Réduit
+      - SPARK_EXECUTOR_MEMORY=1G    # Réduit
+      - SPARK_EXECUTOR_CORES=1      # Réduit
+      - SPARK_DRIVER_MAXRESULTSIZE=1G
+
+  # ============================================================================
+  # MLFlow - Configuration de base conservée
+  # ============================================================================
+  mlflow:
+    # Configuration inchangée pour compatibilité

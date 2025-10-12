@@ -1,0 +1,130 @@
+# docker-compose.prod.yml
+# Configuration pour déploiement en production
+# À utiliser avec: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  # ============================================================================
+  # Spark Workers - Configuration production
+  # ============================================================================
+  spark-worker-1:
+    environment:
+      - SPARK_WORKER_MEMORY=16G  # Mémoire augmentée pour production
+      - SPARK_WORKER_CORES=4     # Plus de cores
+    deploy:
+      resources:
+        limits:
+          memory: 20G
+          cpus: '4.0'
+        reservations:
+          memory: 16G
+          cpus: '3.0'
+
+  spark-worker-2:
+    environment:
+      - SPARK_WORKER_MEMORY=16G
+      - SPARK_WORKER_CORES=4
+    deploy:
+      resources:
+        limits:
+          memory: 20G
+          cpus: '4.0'
+        reservations:
+          memory: 16G
+          cpus: '3.0'
+
+  # Worker supplémentaire pour production
+  spark-worker-3:
+    image: bitnami/spark:3.5.3
+    container_name: spark-worker-3
+    hostname: spark-worker-3
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=16G
+      - SPARK_WORKER_CORES=4
+      - SPARK_WORKER_WEBUI_PORT=8083
+      - SPARK_DAEMON_MEMORY=1g
+      - SPARK_LOCAL_DIRS=/tmp/spark-local
+    ports:
+      - "8083:8083"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - ../work/data:/data
+      - ../work/apps:/apps
+      - ../work/output:/output
+      - ../work/tmp/spark-tmp-3:/tmp/spark-local
+    networks:
+      - spark-network
+    deploy:
+      resources:
+        limits:
+          memory: 20G
+          cpus: '4.0'
+        reservations:
+          memory: 16G
+          cpus: '3.0'
+
+  # ============================================================================
+  # Spark Submit - Configuration production
+  # ============================================================================
+  spark-submit:
+    environment:
+      - SPARK_DRIVER_MEMORY=8G
+      - SPARK_EXECUTOR_MEMORY=12G
+      - SPARK_DRIVER_MAXRESULTSIZE=4G
+      - SPARK_SQL_SHUFFLE_PARTITIONS=200  # Optimisé pour gros datasets
+
+  # ============================================================================
+  # Jupyter - Configuration production
+  # ============================================================================
+  jupyter:
+    environment:
+      - SPARK_DRIVER_MEMORY=4G
+      - SPARK_EXECUTOR_MEMORY=6G
+      - SPARK_EXECUTOR_CORES=2
+      - SPARK_DRIVER_MAXRESULTSIZE=2G
+
+  # ============================================================================
+  # MLFlow - Configuration production avec stockage externe
+  # ============================================================================
+  mlflow:
+    environment:
+      # Configuration pour stockage externe (optionnel)
+      # - ARTIFACT_ROOT=s3://mlflow-artifacts/
+      # - AWS_ACCESS_KEY_ID=your-key
+      # - AWS_SECRET_ACCESS_KEY=your-secret
+      # - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
+      - ARTIFACT_ROOT=/mlflow/artifacts
+    volumes:
+      # Volume plus important pour production
+      - ../work/mlflow:/mlflow
+      - ../work/mlflow/artifacts:/mlflow/artifacts
+      # Ajouter un volume externe si nécessaire
+      # - /mnt/external-storage/mlflow:/mlflow
+
+  # ============================================================================
+  # MinIO - Stockage objet pour production (optionnel)
+  # ============================================================================
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: minio-server
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   environment:
+  #     MINIO_ACCESS_KEY: flightdelay-access-key
+  #     MINIO_SECRET_KEY: flightdelay-secret-key-change-this
+  #   volumes:
+  #     - ../work/minio:/data
+  #   command: server /data --console-address ":9001"
+  #   networks:
+  #     - spark-network
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s

@@ -34,7 +34,15 @@ object WBANAirportTimezoneLoader extends DataLoader[Nothing] {
   override def loadFromConfiguration(validate: Boolean = false)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
     val filePath = configuration.common.data.airportMapping.path
     val outputPath = s"${configuration.common.output.basePath}/common/data/raw_wban_airport_timezone.parquet"
-    loadFromFilePath(filePath, validate, Some(outputPath))
+    try {
+      loadFromFilePath(filePath, validate, Some(outputPath))
+    } catch {
+      case e: org.apache.spark.sql.AnalysisException if e.getMessage.contains("PATH_NOT_FOUND") =>
+        println(s"Warning: WBAN-Airport-Timezone mapping file not found at $filePath. Skipping mapping loading.")
+        // Return empty DataFrame with expected schema
+        import org.apache.spark.sql.Row
+        spark.createDataFrame(spark.sparkContext.emptyRDD[Row], expectedSchema)
+    }
   }
 
   /**
