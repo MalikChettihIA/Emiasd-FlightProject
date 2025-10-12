@@ -4,8 +4,8 @@ import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.ml.feature.PCAModel
-import com.flightdelay.data.utils.DataQualityMetrics
-import com.flightdelay.features.pipelines.{BasicFlightFeaturePipeline, EnhancedFlightFeaturePipeline}
+import com.flightdelay.data.utils.ColumnTypeDetector
+import com.flightdelay.features.pipelines.EnhancedDataFeatureExtractorPipeline
 import com.flightdelay.features.pca.{PCAFeatureExtractor, VarianceAnalysis}
 import com.flightdelay.features.leakage.DataLeakageProtection
 
@@ -31,9 +31,8 @@ import scala.sys.process._
  *   )
  * }}}
  */
-object FlightFeatureExtractor {
+object FeatureExtractor {
 
-  private val maxCat = 32
   private val handleInvalid = "skip"
   private val defaultVarianceThreshold = 0.70 // 70% minimum variance
 
@@ -47,70 +46,39 @@ object FlightFeatureExtractor {
    * @param target Target column name
    * @return DataFrame with features and label columns
    */
-  def extract(experiment: ExperimentConfig)(implicit configuration: AppConfiguration, spark: SparkSession): DataFrame = {
+  def extract(data: DataFrame, experiment: ExperimentConfig)(implicit configuration: AppConfiguration, spark: SparkSession): DataFrame = {
 
     val extractionStartTime = System.currentTimeMillis()
     val target = experiment.target
 
-    // Step 1: Drop Data leakage
-    println("\n" + "=" * 80)
-    println(s"[STEP 3][FeatureExtractor] Feature Extraction - Start")
-    println("=" * 80)
-    println(s"\nTarget column: $target")
-
-    //Experiment output path
-    val dataParquetPath = s"${configuration.common.output.basePath}/common/data/joined_flights_weather.parquet"
-    println(s"\nLoading data:")
-    println(s"  - Path: $dataParquetPath")
-    val data = spark.read.parquet(dataParquetPath)
-    println(f"  - Loaded ${data.count()}%,d joined records")
-
-
     var stepStartTime = System.currentTimeMillis()
-    val flightData = DataLeakageProtection.clean(data, target)
+    val cleaData = DataLeakageProtection.clean(data, target)
     var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     println(s"  - Data leakage protection completed in ${stepDuration}s")
 
-    // Step 2: Detect column types using DataQualityMetrics
+    // Step 2: Detect column types using schema-based detection (ultra-fast)
     stepStartTime = System.currentTimeMillis()
-    val flightDataMetric = DataQualityMetrics.metrics(flightData)
-    val allTextCols = flightDataMetric
-      .filter(col("colType").contains(DataQualityMetrics._text))
-      .select("name")
-      .rdd.flatMap(x => x.toSeq).map(x => x.toString).collect
 
-    val allNumericCols = flightDataMetric
-      .filter(col("colType").contains(DataQualityMetrics._numeric))
-      .filter(!col("name").contains(target))
-      .select("name")
-      .rdd.flatMap(x => x.toSeq).map(x => x.toString).collect
+    // Détecter tous les types avec heuristiques
+    val (allNumericCols, allTextCols, allBooleanCols, allDateCols) =
+      ColumnTypeDetector.detectColumnTypesWithHeuristics(
+        cleaData,
+        excludeColumns = Seq(target),
+        maxCardinalityForCategorical = experiment.featureExtraction.maxCategoricalCardinality,
+        sampleFraction = 0.01
+      )
+
+    // Afficher le résumé
+    ColumnTypeDetector.printSummary(allNumericCols, allTextCols, allBooleanCols, allDateCols)
+
+    // Afficher les détails des dates
+    ColumnTypeDetector.printDateTypeDetails(cleaData, allDateCols)
 
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     println(s"  - Column type detection completed in ${stepDuration}s")
-    println(s"  - Detected ${allTextCols.length} text columns and ${allNumericCols.length} numeric columns")
+    println(s"  - Detected ${allTextCols.length} categorical columns and ${allNumericCols.length} numeric columns")
 
     // Step 3: Apply feature selection if enabled
-    val (textCols, numericCols) = if (experiment.featureExtraction.isFeatureSelectionEnabled) {
-      experiment.featureExtraction.selectedFeatures match {
-        case Some(selectedFeatureNames) =>
-          val selectedSet = selectedFeatureNames.toSet
-          val filteredTextCols = allTextCols.filter(selectedSet.contains)
-          val filteredNumericCols = allNumericCols.filter(selectedSet.contains)
-
-          println(s"\n  [Feature Selection] Enabled")
-          println(s"  - Selected features: ${selectedFeatureNames.length}")
-          println(s"  - Filtered to ${filteredTextCols.length} text columns and ${filteredNumericCols.length} numeric columns")
-          println(s"  - Selected text columns: ${filteredTextCols.take(5).mkString(", ")}${if (filteredTextCols.length > 5) "..." else ""}")
-          println(s"  - Selected numeric columns: ${filteredNumericCols.take(5).mkString(", ")}${if (filteredNumericCols.length > 5) "..." else ""}")
-
-          (filteredTextCols, filteredNumericCols)
-        case None =>
-          println(s"  - Feature selection enabled but no selectedFeatures specified, using all features")
-          (allTextCols, allNumericCols)
-      }
-    } else {
-      (allTextCols, allNumericCols)
-    }
 
     stepStartTime = System.currentTimeMillis()
     val (baseFeatures, featureNames) = {
@@ -118,7 +86,7 @@ object FlightFeatureExtractor {
       val scalerType = if (experiment.featureExtraction.isPcaEnabled) {
         Some("standard")  // Critical for PCA
       } else {
-        None  // No scaling for feature_selection or other types
+        Some("standard")  // No scaling for feature_selection or other types
       }
 
       val pipelineMode = if (experiment.featureExtraction.isPcaEnabled) "PCA mode"
@@ -127,18 +95,20 @@ object FlightFeatureExtractor {
 
       println(s"\n  - Using EnhancedFlightFeaturePipeline${if (scalerType.isDefined) " with StandardScaler" else ""} ($pipelineMode)")
 
-      val enhancedPipeline = new EnhancedFlightFeaturePipeline(
-        textCols = textCols,
-        numericCols = numericCols,
+      val enhancedPipeline = new EnhancedDataFeatureExtractorPipeline(
+        textCols = allTextCols,
+        numericCols = allNumericCols,
+        booleanCols = allBooleanCols,
+        dateCols = allDateCols,
         target = target,
-        maxCat = maxCat,
+        maxCat = experiment.featureExtraction.maxCategoricalCardinality,
         handleInvalid = handleInvalid,
         scalerType = scalerType
       )
-      val (model, transformed) = enhancedPipeline.fitTransform(flightData)
+      val (model, transformed) = enhancedPipeline.fitTransform(cleaData)
 
       // Build feature names: indexed text columns + numeric columns
-      val names = textCols.map("indexed_" + _) ++ numericCols
+      val names = allTextCols.map("indexed_" + _) ++ allNumericCols ++ allBooleanCols ++ allDateCols
       (transformed, names)
     }
 
@@ -151,7 +121,7 @@ object FlightFeatureExtractor {
     val (transformedDF, pcaModel, varianceAnalysis) : (DataFrame, Option[PCAModel], Option[VarianceAnalysis])
     = if (experiment.featureExtraction.isPcaEnabled) {
       // Extract features with PCA
-      val (df, model, analysis) = FlightFeatureExtractor.applyPCA(
+      val (df, model, analysis) = FeatureExtractor.applyPCA(
         baseFeatures,
         featureNames,
         experiment
@@ -166,29 +136,17 @@ object FlightFeatureExtractor {
       println(s"  - PCA transformation completed in ${stepDuration}s")
     }
 
-    // Display sample data
-    println("\nSample of extracted features:")
-    transformedDF.show(5, truncate = false)
-
     // Display summary based on extraction type
-    if (experiment.featureExtraction.isFeatureSelectionEnabled) {
-      println("\n" + "=" * 80)
-      println("[STEP 3] Feature Extraction Summary (Feature Selection)")
-      println("=" * 80)
-      println(f"Total Features Available : ${allTextCols.length + allNumericCols.length}")
-      println(f"Selected Features        : ${textCols.length + numericCols.length}")
-      println(f"Text Features            : ${textCols.length}")
-      println(f"Numeric Features         : ${numericCols.length}")
-      println("=" * 80)
-    } else if (!experiment.featureExtraction.isPcaEnabled) {
-      println("\n" + "=" * 80)
-      println("[STEP 3] Feature Extraction Summary (All Features)")
-      println("=" * 80)
-      println(f"Text Features            : ${textCols.length}")
-      println(f"Numeric Features         : ${numericCols.length}")
-      println(f"Total Features           : ${textCols.length + numericCols.length}")
-      println("=" * 80)
-    }
+    println("\n" + "=" * 80)
+    println("[STEP 3] Feature Extraction Summary (Feature Selection)")
+    println("=" * 80)
+    println(f"Total Features Available : ${allTextCols.length + allNumericCols.length + allBooleanCols.length + allDateCols.length}")
+    println(f"Text Features            : ${allTextCols.length}")
+    println(f"Boolean Features         : ${allBooleanCols.length}")
+    println(f"Date Features            : ${allDateCols.length}")
+    println(f"Numeric Features         : ${allNumericCols.length}")
+    println("=" * 80)
+
 
     stepStartTime = System.currentTimeMillis()
     saveResult(transformedDF,
@@ -324,7 +282,7 @@ object FlightFeatureExtractor {
     }
 
     // Save extracted features
-    val featuresPath = s"${experimentOutputPath}/features/extracted_features"
+    val featuresPath = s"${experimentOutputPath}/features/extracted_features.parquet"
     println(s"\nSaving extracted features:")
     println(s"  - Path: $featuresPath")
     data.write.mode("overwrite").parquet(featuresPath)

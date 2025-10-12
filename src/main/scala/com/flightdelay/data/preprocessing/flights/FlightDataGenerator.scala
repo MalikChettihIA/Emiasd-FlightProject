@@ -59,7 +59,7 @@ object FlightDataGenerator extends DataPreprocessor {
     /**println("- Add feature_flight_timestamp")
     println("- Add feature_flight_year")
     println("- Add feature_flight_month")
-    println("- Add feature_flight_quarter") // NOUVEAU
+    println("- Add feature_flight_quarter")
     println("- Add feature_flight_day_of_month")
     println("- Add feature_flight_day_of_week")
     println("- Add feature_flight_day_of_year")

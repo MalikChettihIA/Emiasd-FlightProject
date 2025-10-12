@@ -24,32 +24,37 @@ object DataQualityMetrics {
 
 
   def metrics(data: DataFrame): DataFrame = {
-    // imports nécessaires pour col(), toDS(), etc.
     import data.sparkSession.implicits._
 
-    val totalCount: Long = data.count()
+    val totalCount = data.count()
 
-    val res: Seq[MetaData] = data.dtypes.toSeq.map {
-      case (colName, colType) =>
-        val nonNullCount: Long =
-          data.filter(col(colName).isNotNull).count()
-
-        val distinctCnt: Long =
-          data.select(col(colName)).distinct().count()
-
-        MetaData(
-          name   = colName,
-          origType    = colType,
-          colType  = whichType(colType),
-          compRatio = nonNullCount.toFloat / math.max(1L, totalCount).toFloat,
-          nbDistinctValues = distinctCnt
-        )
+    // Construire les agrégations pour toutes les colonnes en une seule passe
+    val aggregations = data.dtypes.flatMap { case (colName, colType) =>
+      Seq(
+        count(when(col(colName).isNotNull, 1)).alias(s"${colName}_nonNull"),
+        countDistinct(col(colName)).alias(s"${colName}_distinct")
+      )
     }
 
-    val metadata = res.toDS().toDF()
-    metadata.persist()
-    metadata.count()
-    metadata
+    // Une seule passe sur les données !
+    val aggResult = data.agg(aggregations.head, aggregations.tail: _*)
+    val row = aggResult.collect()(0)
+
+    // Construire les métadonnées
+    val res: Seq[MetaData] = data.dtypes.zipWithIndex.map { case ((colName, colType), idx) =>
+      val nonNullCount = row.getLong(idx * 2)
+      val distinctCnt = row.getLong(idx * 2 + 1)
+
+      MetaData(
+        name = colName,
+        origType = colType,
+        colType = whichType(colType),
+        compRatio = nonNullCount.toFloat / math.max(1L, totalCount).toFloat,
+        nbDistinctValues = distinctCnt
+      )
+    }
+
+    res.toDS().toDF()
   }
 
   def SetMDColType(metaData: DataFrame, name: String, colType: String): DataFrame = {

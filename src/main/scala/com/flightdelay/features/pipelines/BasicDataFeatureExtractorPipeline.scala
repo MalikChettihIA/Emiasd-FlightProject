@@ -43,7 +43,7 @@ import org.apache.spark.sql.functions.col
  *       d’autres transformations ou modèles dans un `Pipeline` global,
  *       adaptez la classe pour exposer `Array[PipelineStage]` au lieu du DataFrame.
  */
-class BasicFlightFeaturePipeline(textCols: Array[String], numericCols: Array[String], target: String, maxCat: Int, handleInvalid: String){
+class BasicDataFeatureExtractorPipeline(textCols: Array[String], numericCols: Array[String], target: String, maxCat: Int, handleInvalid: String){
 
   //pipeline
   private val _label = "label"

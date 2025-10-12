@@ -33,7 +33,8 @@ object FlightPreprocessingPipeline {
     // Execute preprocessing pipeline
     val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
     val enrichedWithWBAN = FlightWBANEnricher.preprocess(cleanedFlightData)
-    val generatedFightData = FlightDataGenerator.preprocess(enrichedWithWBAN)
+    val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithWBAN)
+    val generatedFightData = FlightDataGenerator.preprocess(enrichedWithArrival)
     val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFightData)
     val finalCleanedData = FlightDataBalancer.preprocess(generatedFightDataWithLabels)
 

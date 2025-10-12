@@ -9,16 +9,16 @@ common:
   seed: 42
 
   data:
-    basePath: "/data"
+    basePath: "/home/jovyan/work/data"
     flight:
-      path: "/data/FLIGHT-3Y/Flights/2012*.csv"
+      path: "/home/jovyan/work/data/FLIGHT-3Y/Flights/201201.csv"
     weather:
-      path: "/data/FLIGHT-3Y/Weather/2012*.txt"
+      path: "/home/jovyan/work/data/FLIGHT-3Y/Weather/201201hourly.txt"
     airportMapping:
-      path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
+      path: "/home/jovyan/work/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
   output:
-    basePath: "/output"
+    basePath: "/home/jovyan/work/output"
 
   mlflow:
     enabled: true
@@ -30,20 +30,19 @@ common:
 experiments:
 
   # =========================================================================
-  # Experiment 1:
+  # Experiment Juniper-1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-1-local"
+  - name: "Experience-Juniper-1"
     description: "Baseline Random Forest with hyperparameters tunning"
     enabled: true
     target: "label_is_delayed_15min"
 
     featureExtraction:
       type: "feature_selection" # Au lieu de "pca"
-      storeJoinData: false
-      storeExplodeJoinData: false
+      storeJoinData: true
+      storeExplodeJoinData: true
       weatherDepthHours: 12
-      maxCategoricalCardinality: 50  # Max distinct values to treat column as categorical
       flightSelectedFeatures:
         # Liste des features à conserver
         - "FL_DATE"
@@ -55,8 +54,8 @@ experiments:
         - "DEST_WBAN"
         - "label_is_delayed_15min"
       weatherSelectedFeatures:
-        - "feature_weather_severity_index"
-
+        - "SkyCondition"
+        - "Visibility"
     model:
       modelType: "randomforest"
 

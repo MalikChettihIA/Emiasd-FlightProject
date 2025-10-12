@@ -332,10 +332,10 @@ case class SelectionInfo(
 #### Method 1: Without PCA (Original Behavior)
 
 ```scala
-import com.flightdelay.features.FlightFeatureExtractor
+import com.flightdelay.features.FeatureExtractor
 
 // Extract features without PCA
-val data = FlightFeatureExtractor.extract(
+val data = FeatureExtractor.extract(
   df,
   target = "label_is_delayed_15min"
 )
@@ -414,7 +414,7 @@ object FlightFeatureExtractor {
 ### Example 1: Complete Pipeline with PCA
 
 ```scala
-import com.flightdelay.features.FlightFeatureExtractor
+import com.flightdelay.features.FeatureExtractor
 import com.flightdelay.data.preprocessing.FlightPreprocessingPipeline
 import org.apache.spark.ml.classification.RandomForestClassifier
 
@@ -422,7 +422,7 @@ import org.apache.spark.ml.classification.RandomForestClassifier
 val processedData = flights.FlightPreprocessingPipeline.execute(rawFlightData)
 
 // Step 2: Extract features with PCA (60% variance)
-val (trainFeatures, pcaModel, analysis) = FlightFeatureExtractor.extractWithPCA(
+val (trainFeatures, pcaModel, analysis) = FeatureExtractor.extractWithPCA(
   processedData,
   target = "label_is_delayed_15min",
   varianceThreshold = 0.60

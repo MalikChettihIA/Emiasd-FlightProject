@@ -164,15 +164,45 @@ object ConfigurationLoader {
       .map(_.toString.toDouble)
       .getOrElse(0.95)
 
-    // Parse selectedFeatures (optional, for feature_selection type)
-    val selectedFeatures = data.get("selectedFeatures").map { featureList =>
+    // Parse storeJoinData (optional, defaults to false)
+    val storeJoinData = data.get("storeJoinData")
+      .map(_.toString.toBoolean)
+      .getOrElse(false)
+
+    // Parse storeExplodeJoinData (optional, defaults to false)
+    val storeExplodeJoinData = data.get("storeExplodeJoinData")
+      .map(_.toString.toBoolean)
+      .getOrElse(false)
+
+    // Parse weatherDepthHours (optional, defaults to 12)
+    val weatherDepthHours = data.get("weatherDepthHours")
+      .map(_.toString.toInt)
+      .getOrElse(12)
+
+    // Parse maxCategoricalCardinality (optional, defaults to 50)
+    val maxCategoricalCardinality = data.get("maxCategoricalCardinality")
+      .map(_.toString.toInt)
+      .getOrElse(50)
+
+    // Parse flightSelectedFeatures (optional, for feature_selection type)
+    val flightSelectedFeatures = data.get("flightSelectedFeatures").map { featureList =>
+      featureList.asInstanceOf[java.util.List[_]].asScala.map(_.toString).toSeq
+    }
+
+    // Parse weatherSelectedFeatures (optional, for feature_selection type)
+    val weatherSelectedFeatures = data.get("weatherSelectedFeatures").map { featureList =>
       featureList.asInstanceOf[java.util.List[_]].asScala.map(_.toString).toSeq
     }
 
     FeatureExtractionConfig(
       featureType = featureType,
       pcaVarianceThreshold = pcaVarianceThreshold,
-      selectedFeatures = selectedFeatures
+      storeJoinData = storeJoinData,
+      storeExplodeJoinData = storeExplodeJoinData,
+      weatherDepthHours = weatherDepthHours,
+      maxCategoricalCardinality = maxCategoricalCardinality,
+      flightSelectedFeatures = flightSelectedFeatures,
+      weatherSelectedFeatures = weatherSelectedFeatures
     )
   }
 
