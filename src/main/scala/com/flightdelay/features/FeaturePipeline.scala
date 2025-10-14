@@ -56,8 +56,6 @@ object FeaturePipeline {
 
     // Jointure des données
     println("\nJoining flight and weather data...")
-    println(f"  - Flight records: ${flightData.count()}%,d")
-    println(f"  - Weather records: ${weatherData.count()}%,d")
 
     val stepStartTime = System.currentTimeMillis()
     val joinedData = FlightWeatherDataJoiner.joinFlightsWithWeather(
@@ -68,29 +66,58 @@ object FeaturePipeline {
       experimentConfig.featureExtraction.flightSelectedFeatures,
       experimentConfig.featureExtraction.weatherSelectedFeatures)
 
-    println(f"  - Joined records: ${joinedData.count()}%,d with ${joinedData.columns.length}%3d columns")
+    // OPTIMIZATION: Cache joined data to avoid recomputation
+    // This is critical since we'll need it for count, explode, and potentially save
+    println("  - Caching joined data...")
+    val cachedJoinedData = joinedData.cache()
+
+    // Force materialization with a single count
+    val joinedCount = cachedJoinedData.count()
+    println(f"  - Joined records: ${joinedCount}%,d with ${cachedJoinedData.columns.length}%3d columns")
 
     if (experimentConfig.featureExtraction.storeJoinData) {
       val joinedParquetPath = s"${configuration.common.output.basePath}/${experimentConfig.name}/data/joined_flights_weather.parquet"
       println(s"\nSaving joined flight weather data to parquet:")
       println(s"  - Path: $joinedParquetPath")
-      joinedData.write
+
+      // Coalesce to reduce number of output files (improves write performance)
+      cachedJoinedData.coalesce(8)
+        .write
         .mode("overwrite")
-        .option("compression", "snappy")
+        .option("compression", "zstd")  // Better compression than snappy
         .parquet(joinedParquetPath)
-      println(s"  - Saved ${joinedData.count()} joined records")
+      println(s"  - Saved ${joinedCount} joined records (already counted)")
     }
 
-    joinedData
+    cachedJoinedData
   }
 
   def explose(data: DataFrame, experimentConfig: ExperimentConfig)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     import org.apache.spark.sql.functions._
 
-    // Get weather feature names from config
+    // Get weather feature names from config, or auto-detect from schema
     val weatherFeatures = experimentConfig.featureExtraction.weatherSelectedFeatures.getOrElse {
-      throw new IllegalArgumentException("weatherSelectedFeatures must be defined in configuration for explosion")
+      // Auto-detect: extract all field names from origin_weather_observations array struct
+      if (data.columns.contains("origin_weather_observations")) {
+        import org.apache.spark.sql.types.{ArrayType, StructType}
+        val arraySchema = data.schema("origin_weather_observations").dataType
+        arraySchema match {
+          case ArrayType(elementType: StructType, _) =>
+            val fields = elementType.fieldNames.toSeq
+            println(s"\n[Auto-detect] No weatherSelectedFeatures defined, using all ${fields.length} fields from schema:")
+            println(s"  ${fields.mkString(", ")}")
+            fields
+          case _ =>
+            throw new IllegalArgumentException(
+              "weatherSelectedFeatures not defined and cannot auto-detect from origin_weather_observations schema"
+            )
+        }
+      } else {
+        throw new IllegalArgumentException(
+          "weatherSelectedFeatures must be defined in configuration when origin_weather_observations column is missing"
+        )
+      }
     }
 
     val weatherDepthHours = experimentConfig.featureExtraction.weatherDepthHours
@@ -142,19 +169,35 @@ object FeaturePipeline {
     println(s"  - Output columns: ${result.columns.length}")
     println(s"  - Column organization: grouped by index (${weatherDepthHours-1} to 0)")
 
+    // OPTIMIZATION: Cache exploded data before any action (count or save)
+    println("  - Caching exploded data...")
+    val cachedResult = result.cache()
+
     // Optionally save exploded data
     if (experimentConfig.featureExtraction.storeExplodeJoinData) {
       val explodedParquetPath = s"${configuration.common.output.basePath}/${experimentConfig.name}/data/exploded_joined_data.parquet"
       println(s"\nSaving exploded data to parquet:")
       println(s"  - Path: $explodedParquetPath")
-      result.write
+
+      // Force materialization with count before save
+      val explodedCount = cachedResult.count()
+      println(s"  - Exploded records: ${explodedCount}")
+
+      // Coalesce to reduce number of output files
+      cachedResult.coalesce(8)
+        .write
         .mode("overwrite")
-        .option("compression", "snappy")
+        .option("compression", "zstd")  // Better compression
         .parquet(explodedParquetPath)
-      println(s"  - Saved ${result.count()} exploded records")
+      println(s"  - Saved ${explodedCount} exploded records")
+    } else {
+      // Force materialization even if we don't save
+      // This ensures the cache is populated before feature extraction
+      val explodedCount = cachedResult.count()
+      println(s"  - Exploded records: ${explodedCount}")
     }
 
-    result
+    cachedResult
   }
 
   def extractFeature(data: DataFrame, experimentConfig: ExperimentConfig)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {

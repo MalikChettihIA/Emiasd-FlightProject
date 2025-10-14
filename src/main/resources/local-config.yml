@@ -11,9 +11,9 @@ common:
   data:
     basePath: "/data"
     flight:
-      path: "/data/FLIGHT-3Y/Flights/2012*.csv"
+      path: "/data/FLIGHT-3Y/Flights/201201*.csv"
     weather:
-      path: "/data/FLIGHT-3Y/Weather/2012*.txt"
+      path: "/data/FLIGHT-3Y/Weather/201201*.txt"
     airportMapping:
       path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
@@ -34,8 +34,8 @@ experiments:
   # Model : RandomForest, feature_selection
   # =========================================================================
   - name: "Experience-1-local"
-    description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
+    description: "Baseline Random Forest with hyperparameters tuning"
+    enabled: false
     target: "label_is_delayed_15min"
 
     featureExtraction:
@@ -46,7 +46,6 @@ experiments:
       maxCategoricalCardinality: 50  # Max distinct values to treat column as categorical
       flightSelectedFeatures:
         # Liste des features à conserver
-        - "FL_DATE"
         - "OP_CARRIER_AIRLINE_ID"
         - "OP_CARRIER_FL_NUM"
         - "ORIGIN_AIRPORT_ID"
@@ -56,6 +55,22 @@ experiments:
         - "label_is_delayed_15min"
       weatherSelectedFeatures:
         - "feature_weather_severity_index"
+        - "feature_requires_cat_ii"
+        - "feature_is_vfr_conditions"
+        - "feature_is_ifr_conditions"
+        - "feature_operations_risk_level"
+        - "feature_visibility_category"
+        - "Icing_Risk_Flag"
+        - "Icing_Risk_Level"
+        - "weather_intensity"
+        - "has_thunderstorm"
+        - "has_freezing"
+        - "has_freezing_precip"
+        - "has_visible_moisture"
+        - "has_precipitation"
+        - "has_obscuration"
+        - "has_hazardous"
+        - "weather_hazard_level"
 
     model:
       modelType: "randomforest"
@@ -71,10 +86,135 @@ experiments:
         evaluationMetric: "f1"
 
       hyperparameters:
-        numTrees: [100]
-        maxDepth: [10]
-        maxBins: 2048
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
+        numTrees: [300]
+        maxDepth: [20]
+        maxBins: [4096]
+        minInstancesPerNode: [1]
+        subsamplingRate: [0.7]
+        featureSubsetStrategy: ["auto"]
         impurity: "gini"
+
+  # =========================================================================
+  # Experiment 2:
+  # Model : Logistic Regression, feature_selection
+  # =========================================================================
+  - name: "Experience-2-local"
+    description: "Logistic Regression for comparison with Random Forest"
+    enabled: false
+    target: "label_is_delayed_15min"
+
+    featureExtraction:
+      type: "feature_selection"
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherDepthHours: 12
+      maxCategoricalCardinality: 50
+      flightSelectedFeatures:
+        - "OP_CARRIER_AIRLINE_ID"
+        - "OP_CARRIER_FL_NUM"
+        - "ORIGIN_AIRPORT_ID"
+        - "DEST_AIRPORT_ID"
+        - "ORIGIN_WBAN"
+        - "DEST_WBAN"
+        - "label_is_delayed_15min"
+      weatherSelectedFeatures:
+        - "feature_weather_severity_index"
+        - "feature_requires_cat_ii"
+        - "feature_is_vfr_conditions"
+        - "feature_is_ifr_conditions"
+        - "feature_operations_risk_level"
+        - "feature_visibility_category"
+        - "Icing_Risk_Flag"
+        - "Icing_Risk_Level"
+        - "weather_intensity"
+        - "has_thunderstorm"
+        - "has_freezing"
+        - "has_freezing_precip"
+        - "has_visible_moisture"
+        - "has_precipitation"
+        - "has_obscuration"
+        - "has_hazardous"
+        - "weather_hazard_level"
+
+    model:
+      modelType: "logisticregression"
+
+    train:
+      trainRatio: 0.8
+
+      crossValidation:
+        numFolds: 5
+
+      gridSearch:
+        enabled: true
+        evaluationMetric: "f1"
+
+      hyperparameters:
+        # Logistic Regression specific params
+        maxIter: [500, 1000, 1500]  # Number of iterations
+        regParam: [0.0001, 0.001]  # Regularization: 0=none, 0.01=weak, 0.1=medium, 1.0=strong
+        elasticNetParam: [0.0]  # 0.0=Ridge(L2), 1.0=Lasso(L1), 0.5=ElasticNet
+
+  # =========================================================================
+  # Experiment 3:
+  # Model : Gradient Boosted Trees (GBT), feature_selection
+  # =========================================================================
+  - name: "Experience-3-local"
+    description: "Gradient Boosted Trees with hyperparameter tuning"
+    enabled: true
+    target: "label_is_delayed_15min"
+
+    featureExtraction:
+      type: "feature_selection"
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherDepthHours: 12
+      maxCategoricalCardinality: 50
+      flightSelectedFeatures:
+        - "OP_CARRIER_AIRLINE_ID"
+        - "OP_CARRIER_FL_NUM"
+        - "ORIGIN_AIRPORT_ID"
+        - "DEST_AIRPORT_ID"
+        - "ORIGIN_WBAN"
+        - "DEST_WBAN"
+        - "label_is_delayed_15min"
+      weatherSelectedFeatures:
+        - "feature_weather_severity_index"
+        - "feature_requires_cat_ii"
+        - "feature_is_vfr_conditions"
+        - "feature_is_ifr_conditions"
+        - "feature_operations_risk_level"
+        - "feature_visibility_category"
+        - "Icing_Risk_Flag"
+        - "Icing_Risk_Level"
+        - "weather_intensity"
+        - "has_thunderstorm"
+        - "has_freezing"
+        - "has_freezing_precip"
+        - "has_visible_moisture"
+        - "has_precipitation"
+        - "has_obscuration"
+        - "has_hazardous"
+        - "weather_hazard_level"
+
+    model:
+      modelType: "gbt"
+
+    train:
+      trainRatio: 0.8
+
+      crossValidation:
+        numFolds: 3
+
+      gridSearch:
+        enabled: true
+        evaluationMetric: "f1"
+
+      hyperparameters:
+        # GBT specific params
+        maxIter: [300, 500]  # Number of boosting iterations (trees)
+        maxDepth: [5, 6]  # Depth of each tree (GBT typically uses shallower trees)
+        maxBins: [64]  # Number of bins for discretization
+        minInstancesPerNode: [1]  # Min instances per node
+        subsamplingRate: [1.0]  # Fraction of data to use per iteration
+        stepSize: [0.005, 0.05, 0.1]  # Learning rate (lower = more robust but slower)

@@ -71,12 +71,27 @@ object DataPipeline {
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     println(s"[Step 6/6] Completed in ${stepDuration}s")
 
+    // OPTIMIZATION: Cache normalized data since it will be used by all experiments
+    println("\n[Step 7/7] Caching normalized data for reuse across experiments...")
+    stepStartTime = System.currentTimeMillis()
+    val cachedFlightData = normalizedFlightData.cache()
+    val cachedWeatherData = normalizedWeatherData.cache()
+
+    // Force materialization
+    val flightCount = cachedFlightData.count()
+    val weatherCount = cachedWeatherData.count()
+    println(s"  - Cached flight data: ${flightCount} records")
+    println(s"  - Cached weather data: ${weatherCount} records")
+
+    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    println(s"[Step 7/7] Completed in ${stepDuration}s")
+
     val totalDuration = (System.currentTimeMillis() - pipelineStartTime) / 1000.0
     println("\n" + "=" * 80)
     println(s"[DataPipeline] Complete Data Pipeline - End (Total: ${totalDuration}s)")
     println("=" * 80 + "\n")
 
-    (normalizedFlightData, normalizedWeatherData)
+    (cachedFlightData, cachedWeatherData)
   }
 
 }

@@ -27,25 +27,38 @@ object WeatherPreprocessingPipeline {
     val originalDf = spark.read.parquet(rawParquetPath)
     println(s"  - Loaded ${originalDf.count()} raw records")
 
-    // Pour l'instant, on retourne le dataset tel quel
+    // Execute preprocessing pipeline (each step creates a new DataFrame)
     val processedWithSkyConditionFeatureDf = originalDf.transform(SkyConditionFeatures.createSkyConditionFeatures)
     val porcessedWithVisibilityFeaturesDf = processedWithSkyConditionFeatureDf.transform(VisibilityFeatures.createVisibilityFeatures)
     val porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf = porcessedWithVisibilityFeaturesDf.transform(WeatherInteractionFeatures.createInteractionFeatures)
-    val processedWeatherDf = WeatherDataCleaner.preprocess(porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf)
+    val porcessWithWeatherConditionFeaturesDf = porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf.transform(WeatherTypeFeatureGenerator.createFeatures)
+    val processedWeatherDf = WeatherDataCleaner.preprocess(porcessWithWeatherConditionFeaturesDf)
+
+
+    // OPTIMIZATION: Cache final data because it will be:
+    // 1. Counted once
+    // 2. Written to parquet
+    // 3. Returned and used by DataPipeline (cached again there)
+    val cachedProcessedWeatherDf = processedWeatherDf.cache()
+    val processedCount = cachedProcessedWeatherDf.count()
 
     println(s"\nSaving preprocessed data to parquet:")
     println(s"  - Path: $processedParquetPath")
-    processedWeatherDf.write
+    println(s"  - Records to save: ${processedCount}")
+
+    // OPTIMIZATION: Coalesce and use zstd compression
+    cachedProcessedWeatherDf.coalesce(8)
+      .write
       .mode("overwrite")
-      .option("compression", "snappy")
+      .option("compression", "zstd")
       .parquet(processedParquetPath)
-    println(s"  - Saved ${processedWeatherDf.count()} preprocessed records")
+    println(s"  - Saved ${processedCount} preprocessed records")
 
     println("\n" + "=" * 80)
     println("[Preprocessing] Weather Data Preprocessing Pipeline - End")
     println("=" * 80 + "\n")
 
-    processedWeatherDf
+    cachedProcessedWeatherDf
   }
 
 }

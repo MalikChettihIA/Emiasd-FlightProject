@@ -105,11 +105,28 @@ object FeatureExtractor {
         handleInvalid = handleInvalid,
         scalerType = scalerType
       )
+
+      // Print pipeline configuration summary
+      enhancedPipeline.printSummary()
+
       val (model, transformed) = enhancedPipeline.fitTransform(cleaData)
 
-      // Build feature names: indexed text columns + numeric columns
-      val names = allTextCols.map("indexed_" + _) ++ allNumericCols ++ allBooleanCols ++ allDateCols
-      (transformed, names)
+      // OPTIMIZATION: Cache transformed features before any further operations
+      println("  - Caching transformed features...")
+      val cachedTransformed = transformed.cache()
+
+      // Force materialization with a single count
+      val transformedCount = cachedTransformed.count()
+      println(s"  - Transformed ${transformedCount} records")
+
+      // Build feature names: indexed text columns + numeric columns + boolean + date-derived features
+      val dateFeatureNames = buildDateFeatureNames(allDateCols, cleaData)
+
+      println(s"\n  - Date columns (${allDateCols.length}): ${allDateCols.mkString(", ")}")
+      println(s"  - Date-derived features (${dateFeatureNames.length}): ${dateFeatureNames.mkString(", ")}")
+
+      val names = allTextCols.map("indexed_" + _) ++ allNumericCols ++ allBooleanCols ++ dateFeatureNames
+      (cachedTransformed, names)
     }
 
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
@@ -285,10 +302,68 @@ object FeatureExtractor {
     val featuresPath = s"${experimentOutputPath}/features/extracted_features.parquet"
     println(s"\nSaving extracted features:")
     println(s"  - Path: $featuresPath")
-    data.write.mode("overwrite").parquet(featuresPath)
-    println(s"  - Saved ${data.count()} records with extracted features")
+
+    // OPTIMIZATION: Count before save to avoid double materialization
+    val recordCount = data.count()
+    println(s"  - Records to save: ${recordCount}")
+
+    // OPTIMIZATION: Coalesce to reduce number of output files (improves write performance)
+    // Use 8 partitions for balance between parallelism and file count
+    // OPTIMIZATION: Use zstd compression (better than snappy)
+    data.coalesce(8)
+      .write
+      .mode("overwrite")
+      .option("compression", "zstd")
+      .parquet(featuresPath)
+    println(s"  - Saved ${recordCount} records with extracted features")
 
     data
+  }
+
+  /**
+   * Build feature names for date-derived columns
+   * Replicates the logic from EnhancedDataFeatureExtractorPipeline.getDateNumericCols()
+   *
+   * Each date column generates these features:
+   * - date_<colName>_year
+   * - date_<colName>_month
+   * - date_<colName>_day
+   * - date_<colName>_dayofweek
+   * - date_<colName>_unix
+   *
+   * Timestamp columns additionally generate:
+   * - date_<colName>_hour
+   * - date_<colName>_minute
+   */
+  private def buildDateFeatureNames(dateCols: Array[String], data: DataFrame): Array[String] = {
+    import org.apache.spark.sql.types.{DateType, TimestampType}
+
+    if (dateCols.isEmpty) {
+      Array.empty
+    } else {
+      dateCols.flatMap { colName =>
+        // Check if column type is Date or Timestamp
+        val colType = data.schema(colName).dataType
+
+        val baseFeatures = Seq(
+          s"date_${colName}_year",
+          s"date_${colName}_month",
+          s"date_${colName}_day",
+          s"date_${colName}_dayofweek",
+          s"date_${colName}_unix"
+        )
+
+        // Add hour and minute for Timestamp columns
+        if (colType == TimestampType) {
+          baseFeatures ++ Seq(
+            s"date_${colName}_hour",
+            s"date_${colName}_minute"
+          )
+        } else {
+          baseFeatures
+        }
+      }
+    }
   }
 
 }

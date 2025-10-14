@@ -250,25 +250,63 @@ object ConfigurationLoader {
 
   /**
    * Parse hyperparameters configuration
+   * All parameters support arrays for grid search
    */
   private def parseHyperparametersConfig(data: Map[String, Any]): HyperparametersConfig = {
-    // numTrees can be an array or a single value
-    val numTrees = data("numTrees") match {
+    // Tree-based model parameters (optional)
+    val numTrees = data.get("numTrees").map {
       case list: java.util.List[_] => list.asScala.map(_.toString.toInt).toSeq
       case value => Seq(value.toString.toInt)
     }
 
-    // maxDepth can be an array or a single value
-    val maxDepth = data("maxDepth") match {
+    val maxDepth = data.get("maxDepth").map {
       case list: java.util.List[_] => list.asScala.map(_.toString.toInt).toSeq
       case value => Seq(value.toString.toInt)
     }
 
-    val maxBins = data("maxBins").toString.toInt
-    val minInstancesPerNode = data("minInstancesPerNode").toString.toInt
-    val subsamplingRate = data("subsamplingRate").toString.toDouble
-    val featureSubsetStrategy = data("featureSubsetStrategy").toString
-    val impurity = data("impurity").toString
+    val maxBins = data.get("maxBins").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toInt).toSeq
+      case value => Seq(value.toString.toInt)
+    }
+
+    val minInstancesPerNode = data.get("minInstancesPerNode").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toInt).toSeq
+      case value => Seq(value.toString.toInt)
+    }
+
+    val subsamplingRate = data.get("subsamplingRate").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toDouble).toSeq
+      case value => Seq(value.toString.toDouble)
+    }
+
+    val featureSubsetStrategy = data.get("featureSubsetStrategy").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString).toSeq
+      case value => Seq(value.toString)
+    }
+
+    val impurity = data.get("impurity").map(_.toString)
+
+    // GBT specific parameters (optional)
+    val stepSize = data.get("stepSize").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toDouble).toSeq
+      case value => Seq(value.toString.toDouble)
+    }
+
+    // Logistic Regression parameters (optional)
+    val maxIter = data.get("maxIter").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toInt).toSeq
+      case value => Seq(value.toString.toInt)
+    }
+
+    val regParam = data.get("regParam").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toDouble).toSeq
+      case value => Seq(value.toString.toDouble)
+    }
+
+    val elasticNetParam = data.get("elasticNetParam").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toDouble).toSeq
+      case value => Seq(value.toString.toDouble)
+    }
 
     HyperparametersConfig(
       numTrees = numTrees,
@@ -277,7 +315,11 @@ object ConfigurationLoader {
       minInstancesPerNode = minInstancesPerNode,
       subsamplingRate = subsamplingRate,
       featureSubsetStrategy = featureSubsetStrategy,
-      impurity = impurity
+      impurity = impurity,
+      stepSize = stepSize,
+      maxIter = maxIter,
+      regParam = regParam,
+      elasticNetParam = elasticNetParam
     )
   }
 }

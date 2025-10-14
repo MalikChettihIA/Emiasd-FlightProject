@@ -1,72 +1,73 @@
 package com.flightdelay.ml.models
 
 import com.flightdelay.config.ExperimentConfig
-import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.{Pipeline, Transformer}
-import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
+import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
 import org.apache.spark.sql.DataFrame
 
 /**
- * Random Forest model implementation for flight delay prediction.
+ * Gradient Boosted Trees model implementation for flight delay prediction.
  *
- * Random Forest is an ensemble learning method that constructs multiple decision trees
- * during training and outputs the class that is the mode of the classes of individual trees.
+ * GBT is an ensemble learning method that builds trees sequentially,
+ * where each tree tries to correct the errors of the previous ones.
  *
  * Advantages for flight delay prediction:
- * - Handles non-linear relationships well
- * - Robust to outliers
- * - Provides feature importance
- * - Works well with high-dimensional data
+ * - Better accuracy than Random Forest on many datasets
+ * - Handles non-linear relationships and interactions
+ * - Less prone to overfitting with proper tuning
+ * - Feature importance available
+ *
+ * Disadvantages:
+ * - Slower training than Random Forest (sequential)
+ * - More sensitive to hyperparameters
+ * - Can overfit if not properly regularized
  *
  * @param experiment Experiment configuration with model type and hyperparameters
  */
-class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
+class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
 
   /**
-   * Train Random Forest classifier on flight delay data
+   * Train GBT classifier on flight delay data
    * @param data Training data with "features" and "label" columns
    * @param featureImportancePath Optional path to save feature importances
-   * @return Trained RandomForest model wrapped in a Pipeline
+   * @return Trained GBT model wrapped in a Pipeline
    */
   def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
     val hp = experiment.train.hyperparameters
 
     // Use first value from arrays for single training
-    // (Grid Search will iterate over all combinations)
-    val numTrees = hp.numTrees.getOrElse(Seq(100)).head
+    val maxIter = hp.maxIter.getOrElse(Seq(100)).head
     val maxDepth = hp.maxDepth.getOrElse(Seq(5)).head
     val maxBins = hp.maxBins.getOrElse(Seq(32)).head
     val minInstancesPerNode = hp.minInstancesPerNode.getOrElse(Seq(1)).head
     val subsamplingRate = hp.subsamplingRate.getOrElse(Seq(1.0)).head
-    val featureSubsetStrategy = hp.featureSubsetStrategy.getOrElse(Seq("auto")).head
-    val impurity = hp.impurity.getOrElse("gini")
+    val stepSize = hp.stepSize.getOrElse(Seq(0.1)).head
 
-    println(s"\n[RandomForest] Training with hyperparameters:")
-    println(s"  - Number of trees: $numTrees")
+    println(s"\n[GradientBoostedTrees] Training with hyperparameters:")
+    println(s"  - Max iterations (trees): $maxIter")
     println(s"  - Max depth: $maxDepth")
     println(s"  - Max bins: $maxBins")
     println(s"  - Min instances per node: $minInstancesPerNode")
     println(s"  - Subsampling rate: $subsamplingRate")
-    println(s"  - Feature subset strategy: $featureSubsetStrategy")
-    println(s"  - Impurity: ${hp.impurity}")
+    println(s"  - Step size (learning rate): $stepSize")
 
-    // Configure Random Forest classifier
-    val rf = new RandomForestClassifier()
+    // Configure GBT classifier
+    val gbt = new GBTClassifier()
       .setLabelCol("label")
       .setFeaturesCol("features")
       .setPredictionCol("prediction")
       .setProbabilityCol("probability")
       .setRawPredictionCol("rawPrediction")
-      .setNumTrees(numTrees)
+      .setMaxIter(maxIter)
       .setMaxDepth(maxDepth)
       .setMaxBins(maxBins)
       .setMinInstancesPerNode(minInstancesPerNode)
-      .setFeatureSubsetStrategy(featureSubsetStrategy)
-      .setImpurity(impurity)
       .setSubsamplingRate(subsamplingRate)
+      .setStepSize(stepSize)
+      .setSeed(experiment.name.hashCode.toLong) // Use experiment name as seed for reproducibility
 
     // Create pipeline with the classifier
-    val pipeline = new Pipeline().setStages(Array(rf))
+    val pipeline = new Pipeline().setStages(Array(gbt))
 
     println("\nStarting training...")
     val startTime = System.currentTimeMillis()
@@ -79,12 +80,12 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     println(f"\n- Training completed in $trainingTime%.2f seconds")
 
     // Extract and display feature importance
-    val rfModel = model.stages(0).asInstanceOf[RandomForestClassificationModel]
-    displayFeatureImportance(rfModel)
+    val gbtModel = model.stages(0).asInstanceOf[GBTClassificationModel]
+    displayFeatureImportance(gbtModel)
 
     // Save feature importance if path provided
     featureImportancePath.foreach { path =>
-      saveFeatureImportance(rfModel, path)
+      saveFeatureImportance(gbtModel, path)
     }
 
     println("=" * 80 + "\n")
@@ -102,7 +103,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Display top feature importances from the trained model
    */
-  private def displayFeatureImportance(model: RandomForestClassificationModel): Unit = {
+  private def displayFeatureImportance(model: GBTClassificationModel): Unit = {
     val importances = model.featureImportances.toArray
     val topN = 20
 
@@ -165,7 +166,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Save feature importances to CSV file with feature names
    */
-  private def saveFeatureImportance(model: RandomForestClassificationModel, outputPath: String): Unit = {
+  private def saveFeatureImportance(model: GBTClassificationModel, outputPath: String): Unit = {
     val importances = model.featureImportances.toArray
     val featureNames = loadFeatureNames()
 
@@ -197,16 +198,16 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
 }
 
 /**
- * Companion object for RandomForestModel factory methods
+ * Companion object for GradientBoostedTreesModel factory methods
  */
-object RandomForestModel {
+object GradientBoostedTreesModel {
 
   /**
-   * Create a RandomForestModel from experiment configuration
+   * Create a GradientBoostedTreesModel from experiment configuration
    * @param experiment Experiment configuration
-   * @return New RandomForestModel instance
+   * @return New GradientBoostedTreesModel instance
    */
-  def apply(experiment: ExperimentConfig): RandomForestModel = {
-    new RandomForestModel(experiment)
+  def apply(experiment: ExperimentConfig): GradientBoostedTreesModel = {
+    new GradientBoostedTreesModel(experiment)
   }
 }

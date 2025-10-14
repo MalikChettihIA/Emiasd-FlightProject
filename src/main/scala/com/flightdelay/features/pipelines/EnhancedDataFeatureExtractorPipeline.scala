@@ -172,13 +172,22 @@ class EnhancedDataFeatureExtractorPipeline(
   }
 
   /**
-   * Stage 3: VectorIndexer
+   * Stage 3: DateAwareVectorIndexer (replaces standard VectorIndexer)
+   * Built dynamically to access feature names
    */
-  private val vectorIndexer = new VectorIndexer()
-    .setInputCol(_featuresVec)
-    .setOutputCol(_featuresVecIndex)
-    .setMaxCategories(maxCat)
-    .setHandleInvalid(handleInvalid)
+  private def buildVectorIndexer(preprocessedDF: DataFrame): DateAwareVectorIndexer = {
+    // Build feature names in the same order as VectorAssembler
+    val featureNames = textCols.map(_prefix + _) ++
+      numericCols ++
+      getBooleanNumericCols ++
+      getDateNumericCols(preprocessedDF)
+
+    new DateAwareVectorIndexer(featureNames)
+      .setInputCol(_featuresVec)
+      .setOutputCol(_featuresVecIndex)
+      .setMaxCategories(maxCat)
+      .setHandleInvalid(handleInvalid)
+  }
 
   /**
    * Stage 4: Optional Feature Selector
@@ -243,7 +252,8 @@ class EnhancedDataFeatureExtractorPipeline(
 
   private def buildPipeline(preprocessedDF: DataFrame): Pipeline = {
     val vectorAssembler = buildVectorAssembler(preprocessedDF)
-    val baseStages = Array(stringIndexer, vectorAssembler, vectorIndexer)
+    val dateAwareVectorIndexer = buildVectorIndexer(preprocessedDF)
+    val baseStages = Array(stringIndexer, vectorAssembler, dateAwareVectorIndexer)
     val withSelector = selectorStage.map(s => baseStages :+ s).getOrElse(baseStages)
     val withScaler = scalerStage.map(s => withSelector :+ s).getOrElse(withSelector)
     val allStages = withScaler ++ customStages
@@ -269,9 +279,98 @@ class EnhancedDataFeatureExtractorPipeline(
    */
   def fitTransform(data: DataFrame): (PipelineModel, DataFrame) = {
     val preprocessed = preprocessDates(preprocessBooleans(data))
-    val model = buildPipeline(preprocessed).fit(preprocessed)
+    val pipeline = buildPipeline(preprocessed)
+
+    println("\n" + "=" * 80)
+    println("[Pipeline] Fitting transformation pipeline...")
+    println("=" * 80)
+
+    val model = pipeline.fit(preprocessed)
+
+    // Extract VectorIndexer information
+    printVectorIndexerSummary(model, preprocessed)
+
     val transformed = postProcess(model.transform(preprocessed))
     (model, transformed)
+  }
+
+  /**
+   * Print detailed summary of VectorIndexer decisions
+   */
+  private def printVectorIndexerSummary(model: PipelineModel, data: DataFrame): Unit = {
+    // Find VectorIndexer model in the pipeline
+    val vectorIndexerModel = model.stages.collectFirst {
+      case vim: org.apache.spark.ml.feature.VectorIndexerModel => vim
+    }
+
+    vectorIndexerModel match {
+      case Some(vim) =>
+        val categoryMaps = vim.categoryMaps
+        val numFeatures = vim.numFeatures
+
+        println("\n" + "=" * 80)
+        println("[VectorIndexer] Feature Type Analysis")
+        println("=" * 80)
+        println(s"Total features in vector: $numFeatures")
+        println(s"Categorical features detected: ${categoryMaps.size}")
+        println(s"Numeric features: ${numFeatures - categoryMaps.size}")
+        println(s"Max categories threshold: $maxCat")
+        println("=" * 80)
+
+        if (categoryMaps.nonEmpty) {
+          // Build feature names for display
+          val featureNames = textCols.map("indexed_" + _) ++
+                             numericCols ++
+                             getBooleanNumericCols ++
+                             getDateNumericCols(data)
+
+          println("\n[Categorical Features] (treated as discrete values):")
+          println("-" * 80)
+
+          val sortedCategorical = categoryMaps.toSeq.sortBy(_._1)
+          sortedCategorical.foreach { case (featureIdx, valueMap) =>
+            val featureName = if (featureIdx < featureNames.length) {
+              featureNames(featureIdx)
+            } else {
+              s"Feature_$featureIdx"
+            }
+            val numCategories = valueMap.size
+            println(f"  [$featureIdx%3d] $featureName%-50s → $numCategories%3d categories")
+          }
+
+          println("\n[Numeric Features] (treated as continuous values):")
+          println("-" * 80)
+
+          val categoricalIndices = categoryMaps.keySet
+          val numericIndices = (0 until numFeatures).filterNot(categoricalIndices.contains)
+
+          if (numericIndices.length > 10) {
+            // Show first 5 and last 5 if too many
+            println(s"  Showing first 5 and last 5 of ${numericIndices.length} numeric features:")
+            numericIndices.take(5).foreach { idx =>
+              val featureName = if (idx < featureNames.length) featureNames(idx) else s"Feature_$idx"
+              println(f"  [$idx%3d] $featureName")
+            }
+            println(s"  ... (${numericIndices.length - 10} more)")
+            numericIndices.takeRight(5).foreach { idx =>
+              val featureName = if (idx < featureNames.length) featureNames(idx) else s"Feature_$idx"
+              println(f"  [$idx%3d] $featureName")
+            }
+          } else {
+            numericIndices.foreach { idx =>
+              val featureName = if (idx < featureNames.length) featureNames(idx) else s"Feature_$idx"
+              println(f"  [$idx%3d] $featureName")
+            }
+          }
+        } else {
+          println("\n⚠ No categorical features detected - all features treated as numeric")
+        }
+
+        println("\n" + "=" * 80)
+
+      case None =>
+        println("\n⚠ VectorIndexer not found in pipeline")
+    }
   }
 
   /**
@@ -299,9 +398,9 @@ class EnhancedDataFeatureExtractorPipeline(
   }
 
   def getStages: Array[PipelineStage] = {
-    // Return dummy pipeline stages for inspection
-    // Note: Actual pipeline is built dynamically with preprocessed data
-    Array(stringIndexer, vectorIndexer) ++
+    // Note: VectorIndexer is now built dynamically (DateAwareVectorIndexer)
+    // This method returns only the static stages for inspection
+    Array(stringIndexer) ++
       selectorStage.toSeq ++
       scalerStage.toSeq ++
       customStages

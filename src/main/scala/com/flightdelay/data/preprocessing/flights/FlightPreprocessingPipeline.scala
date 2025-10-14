@@ -30,7 +30,7 @@ object FlightPreprocessingPipeline {
     val originalDf = spark.read.parquet(rawParquetPath)
     println(s"  - Loaded ${originalDf.count()} raw records")
 
-    // Execute preprocessing pipeline
+    // Execute preprocessing pipeline (each step creates a new DataFrame)
     val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
     val enrichedWithWBAN = FlightWBANEnricher.preprocess(cleanedFlightData)
     val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithWBAN)
@@ -41,20 +41,31 @@ object FlightPreprocessingPipeline {
     // Validate schema
     validatePreprocessedSchema(finalCleanedData)
 
+    // OPTIMIZATION: Cache final data because it will be:
+    // 1. Counted once
+    // 2. Written to parquet
+    // 3. Returned and used by DataPipeline (cached again there)
+    val cachedFinalData = finalCleanedData.cache()
+    val processedCount = cachedFinalData.count()
+
     // Save processed data to parquet
     println(s"\nSaving preprocessed data to parquet:")
     println(s"  - Path: $processedParquetPath")
-    finalCleanedData.write
+    println(s"  - Records to save: ${processedCount}")
+
+    // OPTIMIZATION: Coalesce and use zstd compression
+    cachedFinalData.coalesce(8)
+      .write
       .mode("overwrite")
-      .option("compression", "snappy")
+      .option("compression", "zstd")
       .parquet(processedParquetPath)
-    println(s"  - Saved ${finalCleanedData.count()} preprocessed records")
+    println(s"  - Saved ${processedCount} preprocessed records")
 
     println("\n" + "=" * 80)
     println("[Preprocessing] Flight Data Preprocessing Pipeline - End")
     println("=" * 80 + "\n")
 
-    finalCleanedData
+    cachedFinalData
   }
 
   /**

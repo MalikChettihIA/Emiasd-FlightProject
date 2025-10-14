@@ -2,123 +2,124 @@ package com.flightdelay.data.preprocessing.weather
 
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import scala.util.Try
+import org.apache.spark.sql.types._
 
 object SkyConditionFeatures {
 
   /**
-   * Extrait le trigramme le plus critique d'une observation SkyCondition
-   * Ordre de priorité : VV > OVC > BKN > SCT > FEW > CLR
-   */
-  val getMostCriticalSky = udf((skyCondition: String) => {
-    if (skyCondition == null || skyCondition.trim.isEmpty) {
-      "UNKNOWN"
-    } else {
-      val codes = skyCondition.split(" ").map(_.trim).filter(_.nonEmpty)
-
-      // Priorité du pire au meilleur
-      if (codes.exists(_.startsWith("VV"))) "VV"
-      else if (codes.exists(_.startsWith("OVC"))) "OVC"
-      else if (codes.exists(_.startsWith("BKN"))) "BKN"
-      else if (codes.exists(_.startsWith("SCT"))) "SCT"
-      else if (codes.exists(_.startsWith("FEW"))) "FEW"
-      else if (codes.exists(_.startsWith("CLR")) || codes.exists(_.startsWith("SKC"))) "CLR"
-      else "UNKNOWN"
-    }
-  })
-
-  /**
-   * Extrait l'altitude de la couche nuageuse la plus basse (en pieds)
-   */
-  val getLowestCloudHeight = udf((skyCondition: String) => {
-    if (skyCondition == null || skyCondition.trim.isEmpty) {
-      99999 // Valeur sentinelle pour pas de nuages
-    } else {
-      val codes = skyCondition.split(" ").filter(_.length > 3)
-
-      val heights = codes.flatMap { code =>
-        Try(code.substring(3).toInt * 100).toOption
-      }
-
-      if (heights.nonEmpty) heights.min else 99999
-    }
-  })
-
-  /**
-   * Calcule l'altitude du plafond (couche BKN ou OVC la plus basse)
-   */
-  val getCeiling = udf((skyCondition: String) => {
-    if (skyCondition == null || skyCondition.trim.isEmpty) {
-      99999
-    } else {
-      val codes = skyCondition.split(" ").filter(_.nonEmpty)
-
-      val ceilingCodes = codes.filter(c =>
-        c.startsWith("BKN") || c.startsWith("OVC") || c.startsWith("VV")
-      )
-
-      val ceilings = ceilingCodes.flatMap { code =>
-        if (code.startsWith("VV")) Some(0) // Visibilité verticale = plafond 0
-        else if (code.length > 3) Try(code.substring(3).toInt * 100).toOption
-        else None
-      }
-
-      if (ceilings.nonEmpty) ceilings.min else 99999
-    }
-  })
-
-  /**
-   * Compte le nombre de couches nuageuses
-   */
-  val countCloudLayers = udf((skyCondition: String) => {
-    if (skyCondition == null || skyCondition.trim.isEmpty) {
-      0
-    } else {
-      skyCondition.split(" ").filter(_.nonEmpty).length
-    }
-  })
-
-  /**
-   * Calcule un score de risque basé sur la couverture nuageuse (0-5)
-   */
-  val calculateCloudRiskScore = udf((skyCondition: String) => {
-    if (skyCondition == null || skyCondition.trim.isEmpty) {
-      1.0 // Risque faible par défaut
-    } else {
-      val codes = skyCondition.split(" ")
-
-      if (codes.exists(_.startsWith("VV"))) 5.0      // Obscuration totale
-      else if (codes.exists(_.startsWith("OVC"))) 4.0 // Ciel couvert
-      else if (codes.exists(_.startsWith("BKN"))) 3.0 // Fragmenté
-      else if (codes.exists(_.startsWith("SCT"))) 2.0 // Épars
-      else if (codes.exists(_.startsWith("FEW"))) 1.0 // Quelques nuages
-      else if (codes.exists(_.startsWith("CLR"))) 0.0 // Clair
-      else 2.0 // Inconnu = risque moyen
-    }
-  })
-
-  /**
-   * Détecte si le plafond est bas (< 1000 pieds)
-   */
-  val hasLowCeiling = udf((ceiling: Int) => {
-    ceiling < 1000
-  })
-
-  /**
    * Applique toutes les transformations pour SkyCondition
+   * OPTIMISÉ : Utilise uniquement des expressions Spark natives (pas d'UDF)
    */
   def createSkyConditionFeatures(df: DataFrame): DataFrame = {
-    df.withColumn("feature_most_critical_sky", getMostCriticalSky(col("SkyCondition")))
-      .withColumn("feature_lowest_cloud_height", getLowestCloudHeight(col("SkyCondition")))
-      .withColumn("feature_ceiling", getCeiling(col("SkyCondition")))
-      .withColumn("feature_num_cloud_layers", countCloudLayers(col("SkyCondition")))
-      .withColumn("feature_cloud_risk_score", calculateCloudRiskScore(col("SkyCondition")))
+
+    df
+      // 1. Extraire le trigramme le plus critique
+      // Ordre de priorité : VV > OVC > BKN > SCT > FEW > CLR
+      .withColumn("feature_most_critical_sky",
+        when(col("SkyCondition").isNull || trim(col("SkyCondition")) === "", lit("UNKNOWN"))
+          .when(col("SkyCondition").contains("VV"), lit("VV"))
+          .when(col("SkyCondition").contains("OVC"), lit("OVC"))
+          .when(col("SkyCondition").contains("BKN"), lit("BKN"))
+          .when(col("SkyCondition").contains("SCT"), lit("SCT"))
+          .when(col("SkyCondition").contains("FEW"), lit("FEW"))
+          .when(col("SkyCondition").contains("CLR") || col("SkyCondition").contains("SKC"), lit("CLR"))
+          .otherwise(lit("UNKNOWN"))
+      )
+
+      // 2. Compter le nombre de couches nuageuses
+      .withColumn("feature_num_cloud_layers",
+        when(col("SkyCondition").isNull || trim(col("SkyCondition")) === "", lit(0))
+          .otherwise(
+            size(split(trim(col("SkyCondition")), "\\s+"))
+          )
+      )
+
+      // 3. Calculer le score de risque basé sur la couverture nuageuse (0-5)
+      .withColumn("feature_cloud_risk_score",
+        when(col("SkyCondition").isNull || trim(col("SkyCondition")) === "", lit(1.0))
+          .when(col("SkyCondition").contains("VV"), lit(5.0))      // Obscuration totale
+          .when(col("SkyCondition").contains("OVC"), lit(4.0))     // Ciel couvert
+          .when(col("SkyCondition").contains("BKN"), lit(3.0))     // Fragmenté
+          .when(col("SkyCondition").contains("SCT"), lit(2.0))     // Épars
+          .when(col("SkyCondition").contains("FEW"), lit(1.0))     // Quelques nuages
+          .when(col("SkyCondition").contains("CLR") || col("SkyCondition").contains("SKC"), lit(0.0)) // Clair
+          .otherwise(lit(2.0))                                     // Inconnu = risque moyen
+      )
+
+      // 4. Détection des conditions spécifiques
       .withColumn("feature_has_overcast", col("SkyCondition").contains("OVC"))
       .withColumn("feature_has_broken", col("SkyCondition").contains("BKN"))
       .withColumn("feature_has_obscured", col("SkyCondition").contains("VV"))
-      .withColumn("feature_is_clear", col("SkyCondition").contains("CLR") || col("SkyCondition").contains("SKC"))
-      .withColumn("feature_has_low_ceiling", hasLowCeiling(col("feature_ceiling")))
+      .withColumn("feature_is_clear",
+        col("SkyCondition").contains("CLR") || col("SkyCondition").contains("SKC"))
+
+      // 5. Extraire les altitudes des couches nuageuses (en pieds)
+      // Approche : Extraire jusqu'à 4 couches (max typique), puis calculer min/max
+      .withColumn("_temp_sky_clean",
+        when(col("SkyCondition").isNull, lit(""))
+          .otherwise(col("SkyCondition"))
+      )
+
+      // Extraire les hauteurs de toutes les couches avec regexp_extract_all
+      // Pattern: Capture les nombres de 3 chiffres après FEW/SCT/BKN/OVC
+      .withColumn("_temp_all_heights",
+        regexp_extract_all(
+          col("_temp_sky_clean"),
+          lit("(FEW|SCT|BKN|OVC)(\\d{3})"),  // Capture le code et les 3 chiffres
+          lit(2)  // Groupe 2 = les chiffres
+        )
+      )
+
+      // Convertir les strings en ints et multiplier par 100 pour obtenir les pieds
+      .withColumn("_temp_heights_array",
+        transform(
+          col("_temp_all_heights"),
+          x => (x.cast(IntegerType) * 100)
+        )
+      )
+
+      // Calculer l'altitude de la couche la plus basse
+      .withColumn("feature_lowest_cloud_height",
+        when(size(col("_temp_heights_array")) > 0,
+          array_min(col("_temp_heights_array")))
+          .otherwise(lit(99999))
+      )
+
+      // 6. Calculer le plafond (couche BKN, OVC ou VV la plus basse)
+      .withColumn("_temp_ceiling_heights",
+        when(col("SkyCondition").contains("VV"), array(lit(0)))  // VV = plafond 0
+          .otherwise(
+            regexp_extract_all(
+              col("_temp_sky_clean"),
+              lit("(BKN|OVC)(\\d{3})"),  // Seulement BKN et OVC
+              lit(2)
+            )
+          )
+      )
+
+      .withColumn("_temp_ceiling_array",
+        when(col("SkyCondition").contains("VV"), array(lit(0)))
+          .otherwise(
+            transform(
+              col("_temp_ceiling_heights"),
+              x => (x.cast(IntegerType) * 100)
+            )
+          )
+      )
+
+      .withColumn("feature_ceiling",
+        when(size(col("_temp_ceiling_array")) > 0,
+          array_min(col("_temp_ceiling_array")))
+          .otherwise(lit(99999))
+      )
+
+      // 7. Déterminer si le plafond est bas (< 1000 pieds)
+      .withColumn("feature_has_low_ceiling",
+        (col("feature_ceiling") < 1000).cast(IntegerType)
+      )
+
+      // Nettoyer les colonnes temporaires
+      .drop("_temp_sky_clean", "_temp_all_heights", "_temp_heights_array",
+        "_temp_ceiling_heights", "_temp_ceiling_array")
   }
 }
-
-

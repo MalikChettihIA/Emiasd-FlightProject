@@ -93,7 +93,7 @@ object MLPipeline {
     println("=" * 100)
 
     // Load extracted features (unified path for both PCA and non-PCA)
-    val featuresPath = s"${configuration.common.output.basePath}/${experiment.name}/features/extracted_features"
+    val featuresPath = s"${configuration.common.output.basePath}/${experiment.name}/features/extracted_features.parquet"
 
     println(s"\nLoading features:")
     println(s"  - Path: $featuresPath")

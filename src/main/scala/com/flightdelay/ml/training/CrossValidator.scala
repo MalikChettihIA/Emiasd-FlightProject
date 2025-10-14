@@ -206,25 +206,87 @@ object CrossValidator {
 
   /**
    * Build parameter grid from experiment configuration
+   * Creates cartesian product of all hyperparameter arrays
    */
   private def buildParameterGrid(experiment: ExperimentConfig): Seq[Map[String, Any]] = {
     val hp = experiment.train.hyperparameters
+    val modelType = experiment.model.modelType.toLowerCase
 
-    // Create combinations of numTrees and maxDepth
-    val combinations = for {
-      numTrees <- hp.numTrees
-      maxDepth <- hp.maxDepth
-    } yield Map[String, Any](
-      "numTrees" -> numTrees,
-      "maxDepth" -> maxDepth,
-      "maxBins" -> hp.maxBins,
-      "minInstancesPerNode" -> hp.minInstancesPerNode,
-      "subsamplingRate" -> hp.subsamplingRate,
-      "featureSubsetStrategy" -> hp.featureSubsetStrategy,
-      "impurity" -> hp.impurity
-    )
+    modelType match {
+      case "randomforest" | "rf" =>
+        // Create combinations of ALL RandomForest hyperparameters
+        val numTreesValues = hp.numTrees.getOrElse(Seq(100))
+        val maxDepthValues = hp.maxDepth.getOrElse(Seq(5))
+        val maxBinsValues = hp.maxBins.getOrElse(Seq(32))
+        val minInstancesPerNodeValues = hp.minInstancesPerNode.getOrElse(Seq(1))
+        val subsamplingRateValues = hp.subsamplingRate.getOrElse(Seq(1.0))
+        val featureSubsetStrategyValues = hp.featureSubsetStrategy.getOrElse(Seq("auto"))
+        val impurityValue = hp.impurity.getOrElse("gini")
 
-    combinations
+        val combinations = for {
+          numTrees <- numTreesValues
+          maxDepth <- maxDepthValues
+          maxBins <- maxBinsValues
+          minInstancesPerNode <- minInstancesPerNodeValues
+          subsamplingRate <- subsamplingRateValues
+          featureSubsetStrategy <- featureSubsetStrategyValues
+        } yield Map[String, Any](
+          "numTrees" -> numTrees,
+          "maxDepth" -> maxDepth,
+          "maxBins" -> maxBins,
+          "minInstancesPerNode" -> minInstancesPerNode,
+          "subsamplingRate" -> subsamplingRate,
+          "featureSubsetStrategy" -> featureSubsetStrategy,
+          "impurity" -> impurityValue
+        )
+        combinations
+
+      case "gbt" | "gradientboostedtrees" =>
+        // Create combinations of GBT hyperparameters
+        val maxIterValues = hp.maxIter.getOrElse(Seq(100))
+        val maxDepthValues = hp.maxDepth.getOrElse(Seq(5))
+        val maxBinsValues = hp.maxBins.getOrElse(Seq(32))
+        val minInstancesPerNodeValues = hp.minInstancesPerNode.getOrElse(Seq(1))
+        val subsamplingRateValues = hp.subsamplingRate.getOrElse(Seq(1.0))
+        val stepSizeValues = hp.stepSize.getOrElse(Seq(0.1))
+
+        val combinations = for {
+          maxIter <- maxIterValues
+          maxDepth <- maxDepthValues
+          maxBins <- maxBinsValues
+          minInstancesPerNode <- minInstancesPerNodeValues
+          subsamplingRate <- subsamplingRateValues
+          stepSize <- stepSizeValues
+        } yield Map[String, Any](
+          "maxIter" -> maxIter,
+          "maxDepth" -> maxDepth,
+          "maxBins" -> maxBins,
+          "minInstancesPerNode" -> minInstancesPerNode,
+          "subsamplingRate" -> subsamplingRate,
+          "stepSize" -> stepSize
+        )
+        combinations
+
+      case "logisticregression" | "lr" =>
+        // Create combinations of Logistic Regression hyperparameters
+        val maxIterValues = hp.maxIter.getOrElse(Seq(100))
+        val regParamValues = hp.regParam.getOrElse(Seq(0.0))
+        val elasticNetParamValues = hp.elasticNetParam.getOrElse(Seq(0.0))
+
+        val combinations = for {
+          maxIter <- maxIterValues
+          regParam <- regParamValues
+          elasticNetParam <- elasticNetParamValues
+        } yield Map[String, Any](
+          "maxIter" -> maxIter,
+          "regParam" -> regParam,
+          "elasticNetParam" -> elasticNetParam
+        )
+        combinations
+
+      case other =>
+        throw new IllegalArgumentException(s"Unsupported model type in buildParameterGrid: $other")
+    }
   }
 
   /**

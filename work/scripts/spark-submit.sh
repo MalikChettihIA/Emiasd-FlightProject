@@ -8,7 +8,7 @@
 #TASKS="${1:-data-pipeline,feature-extraction,train}"
 #TASKS="${1:-data-pipeline,feature-extraction,train,evaluate}"
 
-TASKS="${1:-data-pipeline,feature-extraction,train,evaluate}"
+TASKS="${1:-train,evaluate}"
 
 
 spark-submit \
