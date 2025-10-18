@@ -2,7 +2,7 @@ package com.flightdelay.app
 
 import com.flightdelay.config.{AppConfiguration, ConfigurationLoader, ExperimentConfig}
 import com.flightdelay.data.DataPipeline
-import com.flightdelay.features.FlightFeatureExtractor
+import com.flightdelay.features.FeaturePipeline
 import com.flightdelay.ml.MLPipeline
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.slf4j.LoggerFactory
@@ -19,9 +19,8 @@ import scala.util.{Failure, Success}
  *    - Load WBAN-Airport-Timezone mapping
  *    - Preprocess flight data (clean, enrich with WBAN, generate features, create labels)
  *    - Preprocess weather data
- *    - Join flight and weather data
  * 2. For each enabled experiment:
- *    - Extract features with optional PCA
+ *    - Feature Pipeline (join flight/weather data, explode, extract features with optional PCA)
  *    - Train model
  *    - Evaluate model
  */
@@ -29,15 +28,7 @@ object FlightDelayPredictionApp {
 
   def main(args: Array[String]): Unit = {
 
-    implicit val spark: SparkSession = SparkSession.builder()
-      .appName("Flight Delay Prediction App")
-      .master("local[*]")
-      .config("spark.sql.adaptive.enabled", "true")
-      .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
-      .getOrCreate()
-
-    // Réduire les logs pour plus de clarté
-    spark.sparkContext.setLogLevel("WARN")
+    val appStartTime = System.currentTimeMillis()
 
     println("\n" + "=" * 80)
     println("Flight Delay Prediction App Starting...")
@@ -45,6 +36,19 @@ object FlightDelayPredictionApp {
 
     implicit val configuration: AppConfiguration = ConfigurationLoader.loadConfiguration(args)
     println(s"Configuration '${configuration.environment}' loaded successfully")
+
+
+    implicit val spark: SparkSession = SparkSession.builder()
+      .appName("Flight Delay Prediction App")
+      .master("local[*]")
+      .config("spark.sql.adaptive.enabled", "true")
+      .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+      .getOrCreate()
+    //Set CheckPoint Dir
+    spark.sparkContext.setCheckpointDir(s"${configuration.common.output.basePath}/spark-checkpoints")
+    // Réduire les logs pour plus de clarté
+    spark.sparkContext.setLogLevel("WARN")
+
 
     // Get enabled experiments
     val enabledExperiments = configuration.enabledExperiments
@@ -68,11 +72,34 @@ object FlightDelayPredictionApp {
       // =====================================================================================
       // STEP 1: Data Pipeline (Load & Preprocess Flight + Weather Data)
       // =====================================================================================
-      if (tasks.contains("data-pipeline")) {
-        val joinedData = DataPipeline.execute()
-        println(f"\n- Final dataset: ${joinedData.count()}%,d records with ${joinedData.columns.length}%3d columns")
+      val (flightData, weatherData) = if (tasks.contains("data-pipeline")) {
+        val (flights, weather) = DataPipeline.execute()
+        println(f"\n- Final Flights dataset: ${flights.count()}%,d records with ${flights.columns.length}%3d columns")
+        weather match {
+          case Some(w) =>
+            println(f"\n- Final Weather dataset: ${w.count()}%,d records with ${w.columns.length}%3d columns")
+          case None =>
+            println(f"\n- Weather data: DISABLED (no weather features configured)")
+        }
+        (flights, weather)
       } else {
         println("\n[STEP 1] Data pipeline (load & preprocess)... SKIPPED")
+        println("\n[STEP 1] Loading preprocessed data from parquet...")
+        val flights = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_flights.parquet")
+
+        // Check if ANY ENABLED experiment needs weather data
+        val isWeatherNeeded = configuration.enabledExperiments.exists(_.featureExtraction.isWeatherEnabled)
+        val weather = if (isWeatherNeeded) {
+          val w = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_weather.parquet")
+          println(f"- Loaded Weather: ${w.count()}%,d records")
+          Some(w)
+        } else {
+          println(f"- Weather data: SKIPPED (no weather features configured)")
+          None
+        }
+
+        println(f"- Loaded Flights: ${flights.count()}%,d records")
+        (flights, weather)
       }
 
       // =====================================================================================
@@ -89,7 +116,7 @@ object FlightDelayPredictionApp {
         println("=" * 80 + "\n")
 
         try {
-          runExperiment(experiment, tasks)
+          runExperiment(experiment, tasks, flightData, weatherData)
         } catch {
           case ex: Exception =>
             println("\n" + "=" * 80)
@@ -115,6 +142,14 @@ object FlightDelayPredictionApp {
         ex.printStackTrace()
         println("=" * 80 + "\n")
     } finally {
+      val totalAppDuration = (System.currentTimeMillis() - appStartTime) / 1000.0
+
+      println("\n" + "=" * 80)
+      println("Flight Delay Prediction App - Execution Summary")
+      println("=" * 80)
+      println(f"Total execution time: ${totalAppDuration}%.2f seconds (${totalAppDuration / 60}%.2f minutes)")
+      println("=" * 80 + "\n")
+
       spark.stop()
       println("Spark session stopped.\n")
     }
@@ -125,25 +160,25 @@ object FlightDelayPredictionApp {
    */
   private def runExperiment(
     experiment: ExperimentConfig,
-    tasks: Set[String]
+    tasks: Set[String],
+    flightData: DataFrame,
+    weatherData: Option[DataFrame]
   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
     // =====================================================================================
-    // STEP 2: Feature Extraction with Optional PCA
+    // STEP 2: Feature Pipeline (Join + Explode + Extract Features)
     // =====================================================================================
     if (tasks.contains("feature-extraction")) {
       println("\n" + "-" * 80)
-      println(s"[STEP 2] Feature Extraction for ${experiment.name}")
+      println(s"[STEP 2] Feature Pipeline for ${experiment.name}")
       println("-" * 80)
       println(s"Feature Type: ${experiment.featureExtraction.featureType}")
 
-
-
-      FlightFeatureExtractor.extract(experiment)
+      FeaturePipeline.execute(flightData, weatherData, experiment)
 
       println("-" * 80 + "\n")
     } else {
-      println(s"\n[STEP 2] Feature extraction for ${experiment.name}... SKIPPED")
+      println(s"\n[STEP 2] Feature pipeline for ${experiment.name}... SKIPPED")
     }
 
     // =====================================================================================

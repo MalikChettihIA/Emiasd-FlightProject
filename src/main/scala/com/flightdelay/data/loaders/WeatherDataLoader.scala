@@ -177,8 +177,6 @@ object WeatherDataLoader extends DataLoader[Nothing] {
 
     println("\nSchema:")
     rawDf.printSchema
-    println("\nSample data (10 rows):")
-    rawDf.show(10)
 
     if (validate && (!validateSchema(rawDf)))
       println("! Schema validation failed")

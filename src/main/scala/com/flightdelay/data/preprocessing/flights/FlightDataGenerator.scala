@@ -59,7 +59,7 @@ object FlightDataGenerator extends DataPreprocessor {
     /**println("- Add feature_flight_timestamp")
     println("- Add feature_flight_year")
     println("- Add feature_flight_month")
-    println("- Add feature_flight_quarter") // NOUVEAU
+    println("- Add feature_flight_quarter")
     println("- Add feature_flight_day_of_month")
     println("- Add feature_flight_day_of_week")
     println("- Add feature_flight_day_of_year")
@@ -443,8 +443,5 @@ object FlightDataGenerator extends DataPreprocessor {
     println(s"Dataset size: ${enrichedDf.count()}")
     println("")
 
-    // Lister les nouvelles colonnes par catégorie
-    val newColumns = enrichedDf.columns.filterNot(originalDf.columns.contains)
-    println(s"New Features Created : \n\n${newColumns.mkString(",\n")}")
   }
 }

@@ -72,12 +72,84 @@ object Trainer {
     hyperparameters: Map[String, Any]
   )(implicit spark: SparkSession, config: AppConfiguration): Transformer = {
 
-    // Create model from factory
-    val model = ModelFactory.create(experiment)
+    import org.apache.spark.ml.Pipeline
+    import org.apache.spark.ml.classification.{RandomForestClassifier, GBTClassifier, LogisticRegression}
 
-    // TODO: Apply hyperparameters to model before training
-    // For now, just train with default params from experiment config
+    val modelType = experiment.model.modelType.toLowerCase
 
-    model.train(data)
+    val classifier = modelType match {
+      case "randomforest" | "rf" =>
+        // Extract hyperparameters
+        val numTrees = hyperparameters("numTrees").asInstanceOf[Int]
+        val maxDepth = hyperparameters("maxDepth").asInstanceOf[Int]
+        val maxBins = hyperparameters("maxBins").asInstanceOf[Int]
+        val minInstancesPerNode = hyperparameters("minInstancesPerNode").asInstanceOf[Int]
+        val subsamplingRate = hyperparameters("subsamplingRate").asInstanceOf[Double]
+        val featureSubsetStrategy = hyperparameters("featureSubsetStrategy").asInstanceOf[String]
+        val impurity = hyperparameters("impurity").asInstanceOf[String]
+
+        // Create RandomForest with specific hyperparameters
+        new RandomForestClassifier()
+          .setLabelCol("label")
+          .setFeaturesCol("features")
+          .setPredictionCol("prediction")
+          .setProbabilityCol("probability")
+          .setRawPredictionCol("rawPrediction")
+          .setNumTrees(numTrees)
+          .setMaxDepth(maxDepth)
+          .setMaxBins(maxBins)
+          .setMinInstancesPerNode(minInstancesPerNode)
+          .setFeatureSubsetStrategy(featureSubsetStrategy)
+          .setImpurity(impurity)
+          .setSubsamplingRate(subsamplingRate)
+
+      case "gbt" | "gradientboostedtrees" =>
+        // Extract hyperparameters
+        val maxIter = hyperparameters("maxIter").asInstanceOf[Int]
+        val maxDepth = hyperparameters("maxDepth").asInstanceOf[Int]
+        val maxBins = hyperparameters("maxBins").asInstanceOf[Int]
+        val minInstancesPerNode = hyperparameters("minInstancesPerNode").asInstanceOf[Int]
+        val subsamplingRate = hyperparameters("subsamplingRate").asInstanceOf[Double]
+        val stepSize = hyperparameters("stepSize").asInstanceOf[Double]
+
+        // Create GBT with specific hyperparameters
+        new GBTClassifier()
+          .setLabelCol("label")
+          .setFeaturesCol("features")
+          .setPredictionCol("prediction")
+          .setProbabilityCol("probability")
+          .setRawPredictionCol("rawPrediction")
+          .setMaxIter(maxIter)
+          .setMaxDepth(maxDepth)
+          .setMaxBins(maxBins)
+          .setMinInstancesPerNode(minInstancesPerNode)
+          .setSubsamplingRate(subsamplingRate)
+          .setStepSize(stepSize)
+
+      case "logisticregression" | "lr" =>
+        // Extract hyperparameters
+        val maxIter = hyperparameters("maxIter").asInstanceOf[Int]
+        val regParam = hyperparameters("regParam").asInstanceOf[Double]
+        val elasticNetParam = hyperparameters("elasticNetParam").asInstanceOf[Double]
+
+        // Create Logistic Regression with specific hyperparameters
+        new LogisticRegression()
+          .setLabelCol("label")
+          .setFeaturesCol("features")
+          .setPredictionCol("prediction")
+          .setProbabilityCol("probability")
+          .setRawPredictionCol("rawPrediction")
+          .setMaxIter(maxIter)
+          .setRegParam(regParam)
+          .setElasticNetParam(elasticNetParam)
+          .setFamily("binomial")
+
+      case other =>
+        throw new IllegalArgumentException(s"Unsupported model type in trainWithParams: $other")
+    }
+
+    // Create and fit pipeline
+    val pipeline = new Pipeline().setStages(Array(classifier))
+    pipeline.fit(data)
   }
 }

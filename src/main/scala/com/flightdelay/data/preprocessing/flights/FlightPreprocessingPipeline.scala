@@ -30,30 +30,51 @@ object FlightPreprocessingPipeline {
     val originalDf = spark.read.parquet(rawParquetPath)
     println(s"  - Loaded ${originalDf.count()} raw records")
 
-    // Execute preprocessing pipeline
+    // Execute preprocessing pipeline (each step creates a new DataFrame)
     val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
     val enrichedWithWBAN = FlightWBANEnricher.preprocess(cleanedFlightData)
-    val generatedFightData = FlightDataGenerator.preprocess(enrichedWithWBAN)
-    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFightData)
-    val finalCleanedData = FlightDataBalancer.preprocess(generatedFightDataWithLabels)
+    val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithWBAN)
+    val generatedFlightData = FlightDataGenerator.preprocess(enrichedWithArrival)
+    val generatedPreviousLateFlightData = PreviousLateFlightFeatureGenerator.createLateAircraftFeature(generatedFlightData)
+    generatedPreviousLateFlightData.checkpoint()
+    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedPreviousLateFlightData)
+    generatedFightDataWithLabels.checkpoint()
+    // Calculate avg delay features for ALL delay thresholds (15min, 30min, 45min, 60min, 90min)
+    val generatedFlightsWithAvgDelay = AvgDelayFeatureGenerator.enrichFlightsWithAvgDelay(generatedFightDataWithLabels)
+    generatedFightDataWithLabels.checkpoint()
+    val finalCleanedData = FlightDataBalancer.preprocess(generatedFlightsWithAvgDelay)
 
     // Validate schema
     validatePreprocessedSchema(finalCleanedData)
 
+    // OPTIMIZATION: Cache final data because it will be:
+    // 1. Counted once
+    // 2. Written to parquet
+    // 3. Returned and used by DataPipeline (cached again there)
+    val cachedFinalData = finalCleanedData.cache()
+    val processedCount = cachedFinalData.count()
+
     // Save processed data to parquet
     println(s"\nSaving preprocessed data to parquet:")
     println(s"  - Path: $processedParquetPath")
-    finalCleanedData.write
+    println(s"  - Records to save: ${processedCount}")
+
+    // OPTIMIZATION: Coalesce and use zstd compression
+    cachedFinalData.coalesce(8)
+      .write
       .mode("overwrite")
-      .option("compression", "snappy")
+      .option("compression", "zstd")
       .parquet(processedParquetPath)
-    println(s"  - Saved ${finalCleanedData.count()} preprocessed records")
+    println(s"  - Saved ${processedCount} preprocessed records")
+    cachedFinalData.printSchema()
+
+    println(s"\nSaving preprocessed data to parquet:")
 
     println("\n" + "=" * 80)
     println("[Preprocessing] Flight Data Preprocessing Pipeline - End")
     println("=" * 80 + "\n")
 
-    finalCleanedData
+    cachedFinalData
   }
 
   /**

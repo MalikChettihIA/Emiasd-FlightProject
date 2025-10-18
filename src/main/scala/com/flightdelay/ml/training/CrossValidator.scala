@@ -6,47 +6,23 @@ import com.flightdelay.ml.evaluation.ModelEvaluator.EvaluationMetrics
 import com.flightdelay.ml.models.ModelFactory
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.ml.{PipelineModel, Model}  // ✅ AJOUTÉ
 
-/**
- * CrossValidator - K-Fold Cross-Validation with optional Grid Search
- *
- * Performs robust model evaluation and hyperparameter tuning:
- * 1. K-fold split of development data
- * 2. Optional Grid Search over hyperparameter space
- * 3. Returns best hyperparameters and CV metrics
- */
 object CrossValidator {
 
-  /**
-   * Result of cross-validation
-   *
-   * @param avgMetrics Average metrics across all folds
-   * @param stdMetrics Standard deviation of metrics across folds
-   * @param foldMetrics Metrics for each individual fold
-   * @param bestHyperparameters Best hyperparameters from grid search (empty if grid search disabled)
-   * @param numFolds Number of folds used
-   */
   case class CVResult(
-    avgMetrics: EvaluationMetrics,
-    stdMetrics: EvaluationMetrics,
-    foldMetrics: Seq[EvaluationMetrics],
-    bestHyperparameters: Map[String, Any],
-    numFolds: Int
-  )
+                       avgMetrics: EvaluationMetrics,
+                       stdMetrics: EvaluationMetrics,
+                       foldMetrics: Seq[EvaluationMetrics],
+                       bestHyperparameters: Map[String, Any],
+                       numFolds: Int
+                     )
 
-  /**
-   * Perform K-fold cross-validation with optional grid search
-   *
-   * @param devData Development data (80% of original data)
-   * @param experiment Experiment configuration
-   * @param spark Implicit SparkSession
-   * @param config Implicit AppConfiguration
-   * @return CVResult with metrics and best hyperparameters
-   */
   def validate(
-    devData: DataFrame,
-    experiment: ExperimentConfig
-  )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
+                devData: DataFrame,
+                experiment: ExperimentConfig
+              )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
 
     val numFolds = experiment.train.crossValidation.numFolds
 
@@ -63,12 +39,13 @@ object CrossValidator {
 
   /**
    * Simple K-fold CV without grid search
+   * ✅ MODIFIÉ : Sauvegarde/rechargement du modèle pour éviter le broadcast
    */
   private def validateSimple(
-    devData: DataFrame,
-    experiment: ExperimentConfig,
-    numFolds: Int
-  )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
+                              devData: DataFrame,
+                              experiment: ExperimentConfig,
+                              numFolds: Int
+                            )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
 
     println(s"\n[K-Fold CV] Performing $numFolds-fold cross-validation...")
 
@@ -91,11 +68,43 @@ object CrossValidator {
       val model = ModelFactory.create(experiment)
       val trainedModel = model.train(trainFold)
 
-      // Evaluate on validation fold
-      val valPredictions = trainedModel.transform(valFold)
-      val metrics = ModelEvaluator.evaluate(valPredictions)
+      // ✅ SOLUTION : Sauvegarder et recharger le modèle pour éviter le broadcast
+      val tempModelPath = s"${config.common.output.basePath}/${experiment.name}/model/temp_cv_fold_${foldIdx}_${System.currentTimeMillis()}"
 
-      println(f"    Val Metrics: Acc=${metrics.accuracy * 100}%.2f%% | F1=${metrics.f1Score * 100}%.2f%% | AUC=${metrics.areaUnderROC}%.4f")
+      val metrics = try {
+        println(s"    💾 Saving model to avoid broadcast...")
+
+        // ✅ Cast en PipelineModel pour accéder à write
+        trainedModel match {
+          case pm: PipelineModel =>
+            pm.write.overwrite().save(tempModelPath)
+            println(s"    📂 Reloading model from disk...")
+            val reloadedModel = PipelineModel.load(tempModelPath)
+
+            // Evaluate on validation fold with reloaded model
+            println(s"    🔍 Evaluating on validation fold...")
+            val valPredictions = reloadedModel.transform(valFold)
+            val evaluationMetrics = ModelEvaluator.evaluate(valPredictions)
+
+            println(f"    ✅ Val Metrics: Acc=${evaluationMetrics.accuracy * 100}%.2f%% | F1=${evaluationMetrics.f1Score * 100}%.2f%% | AUC=${evaluationMetrics.areaUnderROC}%.4f")
+
+            evaluationMetrics
+
+          case _ =>
+            // Si ce n'est pas un PipelineModel, évaluer directement (risque de broadcast)
+            println(s"    ⚠️  Model is not PipelineModel, evaluating directly (may cause broadcast issues)")
+            val valPredictions = trainedModel.transform(valFold)
+            val evaluationMetrics = ModelEvaluator.evaluate(valPredictions)
+
+            println(f"    ✅ Val Metrics: Acc=${evaluationMetrics.accuracy * 100}%.2f%% | F1=${evaluationMetrics.f1Score * 100}%.2f%% | AUC=${evaluationMetrics.areaUnderROC}%.4f")
+
+            evaluationMetrics
+        }
+
+      } finally {
+        // Cleanup temp model
+        cleanupTempModel(tempModelPath)
+      }
 
       metrics
     }
@@ -113,67 +122,15 @@ object CrossValidator {
   }
 
   /**
-   * K-fold CV with Grid Search for hyperparameter tuning
-   *
-   * For each hyperparameter combination:
-   * 1. Perform K-fold CV
-   * 2. Calculate average validation metric
-   * 3. Select best combination based on evaluation metric
-   */
-  private def validateWithGridSearch(
-    devData: DataFrame,
-    experiment: ExperimentConfig,
-    numFolds: Int
-  )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
-
-    println(s"\n[Grid Search] Building parameter grid...")
-
-    // Build parameter grid from experiment config
-    val paramGrid = buildParameterGrid(experiment)
-
-    println(s"  - Total combinations: ${paramGrid.size}")
-    println(s"  - Evaluation metric: ${experiment.train.gridSearch.evaluationMetric}")
-
-    // For each parameter combination, perform K-fold CV
-    val gridResults = paramGrid.zipWithIndex.map { case (params, idx) =>
-      println(s"\n[Grid Search] Testing combination ${idx + 1}/${paramGrid.size}")
-      params.foreach { case (k, v) => println(s"    $k: $v") }
-
-      // Perform K-fold CV with these params
-      val cvResult = validateWithParams(devData, experiment, params, numFolds)
-
-      // Get metric value for comparison
-      val metricValue = getMetricValue(cvResult.avgMetrics, experiment.train.gridSearch.evaluationMetric)
-
-      println(f"    → Avg ${experiment.train.gridSearch.evaluationMetric}: $metricValue%.4f")
-
-      (params, cvResult, metricValue)
-    }
-
-    // Select best combination based on evaluation metric
-    val (bestParams, bestCVResult, bestMetricValue) = gridResults.maxBy(_._3)
-
-    println(s"\n" + "=" * 80)
-    println("[Grid Search] BEST COMBINATION FOUND")
-    println("=" * 80)
-    bestParams.toSeq.sortBy(_._1).foreach { case (k, v) =>
-      println(f"  $k%-25s : $v")
-    }
-    println(f"  Best ${experiment.train.gridSearch.evaluationMetric}%-25s : $bestMetricValue%.6f")
-    println("=" * 80)
-
-    bestCVResult.copy(bestHyperparameters = bestParams)
-  }
-
-  /**
-   * Perform K-fold CV with specific hyperparameters
+   * K-fold CV with specific hyperparameters
+   * ✅ MODIFIÉ : Sauvegarde/rechargement du modèle pour éviter le broadcast
    */
   private def validateWithParams(
-    devData: DataFrame,
-    experiment: ExperimentConfig,
-    params: Map[String, Any],
-    numFolds: Int
-  )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
+                                  devData: DataFrame,
+                                  experiment: ExperimentConfig,
+                                  params: Map[String, Any],
+                                  numFolds: Int
+                                )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
 
     // Add fold index column
     val dataWithFold = devData.withColumn("fold", (rand(config.common.seed) * numFolds).cast("int"))
@@ -187,9 +144,31 @@ object CrossValidator {
       // Train with specific params
       val trainedModel = Trainer.trainWithParams(trainFold, experiment, params)
 
-      // Evaluate
-      val valPredictions = trainedModel.transform(valFold)
-      ModelEvaluator.evaluate(valPredictions)
+      // ✅ SOLUTION : Sauvegarder et recharger le modèle pour éviter le broadcast
+      val tempModelPath = s"${config.common.output.basePath}/${experiment.name}/model/temp_cv_fold_${foldIdx}_${System.currentTimeMillis()}"
+
+      val metrics = try {
+        // ✅ Cast en PipelineModel pour accéder à write
+        trainedModel match {
+          case pm: PipelineModel =>
+            pm.write.overwrite().save(tempModelPath)
+            val reloadedModel = PipelineModel.load(tempModelPath)
+
+            // Evaluate
+            val valPredictions = reloadedModel.transform(valFold)
+            ModelEvaluator.evaluate(valPredictions)
+
+          case _ =>
+            // Fallback : évaluer directement
+            val valPredictions = trainedModel.transform(valFold)
+            ModelEvaluator.evaluate(valPredictions)
+        }
+
+      } finally {
+        cleanupTempModel(tempModelPath)
+      }
+
+      metrics
     }
 
     // Calculate statistics
@@ -205,38 +184,145 @@ object CrossValidator {
   }
 
   /**
-   * Build parameter grid from experiment configuration
+   * Fonction helper pour nettoyer les modèles temporaires
    */
-  private def buildParameterGrid(experiment: ExperimentConfig): Seq[Map[String, Any]] = {
-    val hp = experiment.train.hyperparameters
-
-    // Create combinations of numTrees and maxDepth
-    val combinations = for {
-      numTrees <- hp.numTrees
-      maxDepth <- hp.maxDepth
-    } yield Map[String, Any](
-      "numTrees" -> numTrees,
-      "maxDepth" -> maxDepth,
-      "maxBins" -> hp.maxBins,
-      "minInstancesPerNode" -> hp.minInstancesPerNode,
-      "subsamplingRate" -> hp.subsamplingRate,
-      "featureSubsetStrategy" -> hp.featureSubsetStrategy,
-      "impurity" -> hp.impurity
-    )
-
-    combinations
+  private def cleanupTempModel(modelPath: String)(implicit spark: SparkSession): Unit = {
+    try {
+      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val path = new Path(modelPath)
+      if (fs.exists(path)) {
+        fs.delete(path, true)
+        println(s"    🧹 Cleaned up temp model: $modelPath")
+      }
+    } catch {
+      case e: Exception =>
+        println(s"    ⚠️  Warning: Could not delete temp model $modelPath: ${e.getMessage}")
+    }
   }
 
-  /**
-   * Calculate average and standard deviation of metrics across folds
-   */
+  private def validateWithGridSearch(
+                                      devData: DataFrame,
+                                      experiment: ExperimentConfig,
+                                      numFolds: Int
+                                    )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
+
+    println(s"\n[Grid Search] Building parameter grid...")
+
+    val paramGrid = buildParameterGrid(experiment)
+
+    println(s"  - Total combinations: ${paramGrid.size}")
+    println(s"  - Evaluation metric: ${experiment.train.gridSearch.evaluationMetric}")
+
+    val gridResults = paramGrid.zipWithIndex.map { case (params, idx) =>
+      println(s"\n[Grid Search] Testing combination ${idx + 1}/${paramGrid.size}")
+      params.foreach { case (k, v) => println(s"    $k: $v") }
+
+      val cvResult = validateWithParams(devData, experiment, params, numFolds)
+      val metricValue = getMetricValue(cvResult.avgMetrics, experiment.train.gridSearch.evaluationMetric)
+
+      println(f"    → Avg ${experiment.train.gridSearch.evaluationMetric}: $metricValue%.4f")
+
+      (params, cvResult, metricValue)
+    }
+
+    val (bestParams, bestCVResult, bestMetricValue) = gridResults.maxBy(_._3)
+
+    println(s"\n" + "=" * 80)
+    println("[Grid Search] BEST COMBINATION FOUND")
+    println("=" * 80)
+    bestParams.toSeq.sortBy(_._1).foreach { case (k, v) =>
+      println(f"  $k%-25s : $v")
+    }
+    println(f"  Best ${experiment.train.gridSearch.evaluationMetric}%-25s : $bestMetricValue%.6f")
+    println("=" * 80)
+
+    bestCVResult.copy(bestHyperparameters = bestParams)
+  }
+
+  private def buildParameterGrid(experiment: ExperimentConfig): Seq[Map[String, Any]] = {
+    val hp = experiment.train.hyperparameters
+    val modelType = experiment.model.modelType.toLowerCase
+
+    modelType match {
+      case "randomforest" | "rf" =>
+        val numTreesValues = hp.numTrees.getOrElse(Seq(100))
+        val maxDepthValues = hp.maxDepth.getOrElse(Seq(5))
+        val maxBinsValues = hp.maxBins.getOrElse(Seq(32))
+        val minInstancesPerNodeValues = hp.minInstancesPerNode.getOrElse(Seq(1))
+        val subsamplingRateValues = hp.subsamplingRate.getOrElse(Seq(1.0))
+        val featureSubsetStrategyValues = hp.featureSubsetStrategy.getOrElse(Seq("auto"))
+        val impurityValue = hp.impurity.getOrElse("gini")
+
+        val combinations = for {
+          numTrees <- numTreesValues
+          maxDepth <- maxDepthValues
+          maxBins <- maxBinsValues
+          minInstancesPerNode <- minInstancesPerNodeValues
+          subsamplingRate <- subsamplingRateValues
+          featureSubsetStrategy <- featureSubsetStrategyValues
+        } yield Map[String, Any](
+          "numTrees" -> numTrees,
+          "maxDepth" -> maxDepth,
+          "maxBins" -> maxBins,
+          "minInstancesPerNode" -> minInstancesPerNode,
+          "subsamplingRate" -> subsamplingRate,
+          "featureSubsetStrategy" -> featureSubsetStrategy,
+          "impurity" -> impurityValue
+        )
+        combinations
+
+      case "gbt" | "gradientboostedtrees" =>
+        val maxIterValues = hp.maxIter.getOrElse(Seq(100))
+        val maxDepthValues = hp.maxDepth.getOrElse(Seq(5))
+        val maxBinsValues = hp.maxBins.getOrElse(Seq(32))
+        val minInstancesPerNodeValues = hp.minInstancesPerNode.getOrElse(Seq(1))
+        val subsamplingRateValues = hp.subsamplingRate.getOrElse(Seq(1.0))
+        val stepSizeValues = hp.stepSize.getOrElse(Seq(0.1))
+
+        val combinations = for {
+          maxIter <- maxIterValues
+          maxDepth <- maxDepthValues
+          maxBins <- maxBinsValues
+          minInstancesPerNode <- minInstancesPerNodeValues
+          subsamplingRate <- subsamplingRateValues
+          stepSize <- stepSizeValues
+        } yield Map[String, Any](
+          "maxIter" -> maxIter,
+          "maxDepth" -> maxDepth,
+          "maxBins" -> maxBins,
+          "minInstancesPerNode" -> minInstancesPerNode,
+          "subsamplingRate" -> subsamplingRate,
+          "stepSize" -> stepSize
+        )
+        combinations
+
+      case "logisticregression" | "lr" =>
+        val maxIterValues = hp.maxIter.getOrElse(Seq(100))
+        val regParamValues = hp.regParam.getOrElse(Seq(0.0))
+        val elasticNetParamValues = hp.elasticNetParam.getOrElse(Seq(0.0))
+
+        val combinations = for {
+          maxIter <- maxIterValues
+          regParam <- regParamValues
+          elasticNetParam <- elasticNetParamValues
+        } yield Map[String, Any](
+          "maxIter" -> maxIter,
+          "regParam" -> regParam,
+          "elasticNetParam" -> elasticNetParam
+        )
+        combinations
+
+      case other =>
+        throw new IllegalArgumentException(s"Unsupported model type in buildParameterGrid: $other")
+    }
+  }
+
   private def calculateStatistics(
-    foldMetrics: Seq[EvaluationMetrics]
-  ): (EvaluationMetrics, EvaluationMetrics) = {
+                                   foldMetrics: Seq[EvaluationMetrics]
+                                 ): (EvaluationMetrics, EvaluationMetrics) = {
 
     val n = foldMetrics.length.toDouble
 
-    // Calculate means
     val avgAccuracy = foldMetrics.map(_.accuracy).sum / n
     val avgPrecision = foldMetrics.map(_.precision).sum / n
     val avgRecall = foldMetrics.map(_.recall).sum / n
@@ -244,7 +330,6 @@ object CrossValidator {
     val avgAUC = foldMetrics.map(_.areaUnderROC).sum / n
     val avgAUPR = foldMetrics.map(_.areaUnderPR).sum / n
 
-    // Calculate standard deviations
     val stdAccuracy = math.sqrt(foldMetrics.map(m => math.pow(m.accuracy - avgAccuracy, 2)).sum / n)
     val stdPrecision = math.sqrt(foldMetrics.map(m => math.pow(m.precision - avgPrecision, 2)).sum / n)
     val stdRecall = math.sqrt(foldMetrics.map(m => math.pow(m.recall - avgRecall, 2)).sum / n)
@@ -281,9 +366,6 @@ object CrossValidator {
     (avgMetrics, stdMetrics)
   }
 
-  /**
-   * Get specific metric value by name
-   */
   private def getMetricValue(metrics: EvaluationMetrics, metricName: String): Double = {
     metricName.toLowerCase match {
       case "accuracy" => metrics.accuracy

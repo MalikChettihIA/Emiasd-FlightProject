@@ -33,19 +33,23 @@ object WeatherPreprocessingPipeline {
     }
     println(s"  - Loaded ${originalDf.count()} raw records")
 
-    // Pour l'instant, on retourne le dataset tel quel
+    // Execute preprocessing pipeline (each step creates a new DataFrame)
     val processedWithSkyConditionFeatureDf = originalDf.transform(SkyConditionFeatures.createSkyConditionFeatures)
     val porcessedWithVisibilityFeaturesDf = processedWithSkyConditionFeatureDf.transform(VisibilityFeatures.createVisibilityFeatures)
     val porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf = porcessedWithVisibilityFeaturesDf.transform(WeatherInteractionFeatures.createInteractionFeatures)
-    val processedWeatherDf = WeatherDataCleaner.preprocess(porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf)
+    val porcessWithWeatherConditionFeaturesDf = porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf.transform(WeatherTypeFeatureGenerator.createFeatures)
+    val processedWeatherDf = WeatherDataCleaner.preprocess(porcessWithWeatherConditionFeaturesDf)
 
     println(s"\nSaving preprocessed data to parquet:")
     println(s"  - Path: $processedParquetPath")
-    processedWeatherDf.write
+
+    // OPTIMIZATION: Coalesce and use zstd compression
+    // Write directly without caching (write will trigger computation once)
+    processedWeatherDf
+      .write
       .mode("overwrite")
-      .option("compression", "snappy")
+      .option("compression", "zstd")
       .parquet(processedParquetPath)
-    println(s"  - Saved ${processedWeatherDf.count()} preprocessed records")
 
     println("\n" + "=" * 80)
     println("[Preprocessing] Weather Data Preprocessing Pipeline - End")

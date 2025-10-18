@@ -76,7 +76,7 @@ Le DataFrame transformé contient **uniquement 2 colonnes** :
 
 ```scala
 import org.apache.spark.sql.SparkSession
-import com.flightdelay.features.pipelines.BasicFlightFeaturePipeline
+import com.flightdelay.features.pipelines.BasicDataFeatureExtractorPipeline
 
 val spark = SparkSession.builder()
   .appName("BasicAutoPipeline Example")

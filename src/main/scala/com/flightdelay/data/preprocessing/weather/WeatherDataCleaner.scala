@@ -68,21 +68,45 @@ object WeatherDataCleaner extends DataPreprocessor {
 
   /**
    * Normalisation temporelle des données météo
-   * Filtre pour ne garder que les enregistrements à xx:15
-   * et transforme xx15 en xx00 pour alignement avec les heures de vol
+   * Filtre pour ne garder que les enregistrements plus proche de à xx:00
+   * et transforme xxmm en xx00 pour alignement avec les heures de vol
    */
+  import org.apache.spark.sql.expressions.Window
+  import org.apache.spark.sql.functions._
+
   private def normalizeWeatherTime(df: DataFrame): DataFrame = {
     println("\nPhase 2: Weather Time Normalization")
-    println("  - Filtering records at xx:15 only")
-    println("  - Normalizing time from xx15 to xx00")
+    println("  - Keeping only the closest record to HH:00 for each hour")
+    println("  - Normalizing selected times to HH:00")
 
     val countBefore = df.count()
 
-    val result = df
-      .filter(col("Time").cast("int") % 100 === 15)
-      .withColumn("Time",
-        format_string("%04d", col("Time").cast("int") - 15)
-      )
+    // Étape 1 : Extraire l'heure (partie HH de Time)
+    val dfWithHour = df.withColumn(
+      "hour",
+      (col("Time").cast("int") / 100).cast("int")
+    )
+
+    // Étape 2 : Calculer la distance en minutes par rapport à HH:00
+    val dfWithDistance = dfWithHour.withColumn(
+      "distance_to_hour",
+      abs(col("Time").cast("int") % 100)  // Minutes après l'heure
+    )
+
+    // Étape 3 : Créer une fenêtre pour chaque (WBAN, Date, Hour)
+    val window = Window
+      .partitionBy("WBAN", "Date", "hour")
+      .orderBy("distance_to_hour")
+
+    // Étape 4 : Attribuer un rang (1 = le plus proche de HH:00)
+    val dfWithRank = dfWithDistance
+      .withColumn("rank", row_number().over(window))
+
+    // Étape 5 : Garder seulement le plus proche et normaliser à HH:00
+    val result = dfWithRank
+      .filter(col("rank") === 1)
+      .withColumn("Time", format_string("%04d", col("hour") * 100))
+      .drop("hour", "distance_to_hour", "rank")
 
     val countAfter = result.count()
     val filteredOut = countBefore - countAfter

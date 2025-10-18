@@ -5,6 +5,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 
 import com.flightdelay.config.AppConfiguration
+import com.flightdelay.data.loaders.WBANAirportTimezoneLoader
 
 
 /**
@@ -26,11 +27,20 @@ object FlightWBANEnricher {
     println("[Preprocessing] Flight WBAN Enrichment - Start")
     println("=" * 80)
 
-    // Load WBAN-Airport-Timezone mapping
+    // Load WBAN-Airport-Timezone mapping with automatic fallback to CSV if parquet doesn't exist
     val wbanParquetPath = s"${configuration.common.output.basePath}/common/data/raw_wban_airport_timezone.parquet"
     println(s"\nLoading WBAN-Airport-Timezone mapping:")
-    println(s"  - Path: $wbanParquetPath")
-    val wbanMappingDf = spark.read.parquet(wbanParquetPath)
+    println(s"  - Parquet path: $wbanParquetPath")
+
+    val wbanMappingDf = if (parquetFileExists(wbanParquetPath)) {
+      println(s"  ✓ Loading from existing Parquet")
+      spark.read.parquet(wbanParquetPath)
+    } else {
+      println(s"  ⚠ Parquet not found - loading from CSV and creating Parquet")
+      // WBANAirportTimezoneLoader will automatically load CSV and save to Parquet
+      WBANAirportTimezoneLoader.loadFromConfiguration()
+    }
+
     println(s"  - Loaded ${wbanMappingDf.count()} airport-WBAN mappings")
 
     // Join with origin airport to get origin WBAN and timezone
@@ -118,6 +128,18 @@ object FlightWBANEnricher {
     println("=" * 80)
 
     enrichedDf
+  }
+
+  /**
+   * Check if Parquet file exists
+   */
+  private def parquetFileExists(path: String)(implicit spark: SparkSession): Boolean = {
+    try {
+      val fs = org.apache.hadoop.fs.FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      fs.exists(new org.apache.hadoop.fs.Path(path))
+    } catch {
+      case _: Exception => false
+    }
   }
 
 }

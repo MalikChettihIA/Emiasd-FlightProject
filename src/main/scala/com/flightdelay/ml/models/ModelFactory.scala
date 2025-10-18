@@ -37,16 +37,12 @@ object ModelFactory {
         new RandomForestModel(experiment)
 
       case "gbt" | "gradientboostedtrees" =>
-        throw new NotImplementedError(
-          "Gradient Boosted Trees not yet implemented. " +
-            "Available models: randomforest"
-        )
+        println("  → Gradient Boosted Trees Classifier")
+        new GradientBoostedTreesModel(experiment)
 
       case "logisticregression" | "lr" =>
-        throw new NotImplementedError(
-          "Logistic Regression not yet implemented. " +
-            "Available models: randomforest"
-        )
+        println("  → Logistic Regression Classifier")
+        new LogisticRegressionModel(experiment)
 
       case "decisiontree" | "dt" =>
         throw new NotImplementedError(
@@ -84,6 +80,8 @@ object ModelFactory {
     val normalized = modelType.toLowerCase
     normalized match {
       case "randomforest" | "rf" => true
+      case "gbt" | "gradientboostedtrees" => true
+      case "logisticregression" | "lr" => true
       case _ => false
     }
   }
@@ -94,7 +92,9 @@ object ModelFactory {
    * @return Sequence of supported model type names
    */
   def supportedModels: Seq[String] = Seq(
-    "randomforest"
+    "randomforest",
+    "gbt",
+    "logisticregression"
   )
 
   /**
@@ -103,8 +103,6 @@ object ModelFactory {
    * @return Sequence of planned model type names
    */
   def plannedModels: Seq[String] = Seq(
-    "gbt",
-    "logisticregression",
     "decisiontree",
     "xgboost",
     "lightgbm"

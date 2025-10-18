@@ -1,6 +1,7 @@
 package com.flightdelay.ml
 
 import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
+import com.flightdelay.features.FeatureExtractor
 import com.flightdelay.ml.evaluation.ModelEvaluator
 import com.flightdelay.ml.evaluation.ModelEvaluator.EvaluationMetrics
 import com.flightdelay.ml.tracking.MLFlowTracker
@@ -92,13 +93,13 @@ object MLPipeline {
     }
     println("=" * 100)
 
-    // Load extracted features (unified path for both PCA and non-PCA)
-    val featuresPath = s"${configuration.common.output.basePath}/${experiment.name}/features/extracted_features"
+    // Load joined and exploded data (before feature extraction)
+    val joinedDataPath = s"${configuration.common.output.basePath}/${experiment.name}/data/joined_exploded_data.parquet"
 
-    println(s"\nLoading features:")
-    println(s"  - Path: $featuresPath")
-    val data = spark.read.parquet(featuresPath)
-    println(f"  - Loaded ${data.count()}%,d feature records")
+    println(s"\nLoading prepared data:")
+    println(s"  - Path: $joinedDataPath")
+    val rawData = spark.read.parquet(joinedDataPath)
+    println(f"  - Loaded ${rawData.count()}%,d records")
 
     val startTime = System.currentTimeMillis()
 
@@ -129,24 +130,49 @@ object MLPipeline {
     }
 
     // ========================================================================
-    // STEP 1: Initial split (dev/test)
+    // STEP 1: Initial split (dev/test) BEFORE feature extraction
     // ========================================================================
-    println("\n[STEP 1] Initial Hold-out Split")
+    println("\n[STEP 1] Initial Hold-out Split (before feature extraction)")
     println("-" * 80)
+    println("Note: Splitting BEFORE feature extraction to avoid data leakage")
 
     val testRatio = 1.0 - experiment.train.trainRatio
-    val Array(devData, testData) = data.randomSplit(
+    val Array(devDataRaw, testDataRaw) = rawData.randomSplit(
       Array(experiment.train.trainRatio, testRatio),
       seed = configuration.common.seed
     )
 
-    println(f"  - Development set: ${devData.count()}%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
-    println(f"  - Hold-out test:   ${testData.count()}%,d samples (${testRatio * 100}%.0f%%)")
+    println(f"  - Development set: ${devDataRaw.count()}%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
+    println(f"  - Hold-out test:   ${testDataRaw.count()}%,d samples (${testRatio * 100}%.0f%%)")
 
     // ========================================================================
-    // STEP 2: K-fold CV + Grid Search on dev set
+    // STEP 2: Feature extraction (fit on TRAIN only, transform both)
     // ========================================================================
-    println("\n[STEP 2] Cross-Validation on Development Set")
+    println("\n[STEP 2] Feature Extraction (fit on dev set only)")
+    println("-" * 80)
+    println("✓ CRITICAL: Feature transformers are fit ONLY on training data")
+    println("            to prevent data leakage from test set")
+
+    // Extract features from dev set (fit + transform)
+    // Returns both transformed data AND fitted models for reuse on test set
+    val (devData, featureModels) = FeatureExtractor.extract(devDataRaw, experiment)
+    println(f"\n  ✓ Dev features extracted: ${devData.count()}%,d records")
+
+    // Transform test set using pre-fitted models from dev set (NO REFITTING)
+    println("\n" + "-" * 80)
+    println("[STEP 2b] Feature Extraction (test set)")
+    println("-" * 80)
+    println("✓ Using pre-fitted models from dev set - NO DATA LEAKAGE")
+    println("  - StringIndexer: uses categories learned from dev set only")
+    println("  - Scaler: uses statistics (mean/std) from dev set only")
+    println("  - PCA: uses components fitted on dev set only\n")
+    val testData = FeatureExtractor.transform(testDataRaw, featureModels, experiment)
+    println(f"\n  ✓ Test features extracted: ${testData.count()}%,d records")
+
+    // ========================================================================
+    // STEP 3: K-fold CV + Grid Search on dev set
+    // ========================================================================
+    println("\n[STEP 3] Cross-Validation on Development Set")
     println("-" * 80)
 
     val cvResult = CrossValidator.validate(devData, experiment)
@@ -188,9 +214,9 @@ object MLPipeline {
     }
 
     // ========================================================================
-    // STEP 3: Train final model on full dev set
+    // STEP 4: Train final model on full dev set
     // ========================================================================
-    println("\n[STEP 3] Training Final Model on Full Development Set")
+    println("\n[STEP 4] Training Final Model on Full Development Set")
     println("-" * 80)
 
     val finalModel = Trainer.trainFinal(
@@ -200,12 +226,24 @@ object MLPipeline {
     )
 
     // ========================================================================
-    // STEP 4: Final evaluation on hold-out test set
+    // STEP 5: Final evaluation on hold-out test set
     // ========================================================================
-    println("\n[STEP 4] Final Evaluation on Hold-out Test Set")
+    println("\n[STEP 5] Final Evaluation on Hold-out Test Set")
     println("-" * 80)
 
-    val testPredictions = finalModel.transform(testData)
+    // ✅ OPTIMIZATION: Save final model then reload to avoid broadcast OOM
+    // This is critical for large models (e.g., Random Forest with 300 trees)
+    val experimentOutputPath = s"${configuration.common.output.basePath}/${experiment.name}"
+    val modelPath = s"$experimentOutputPath/models/${experiment.model.modelType}_final"
+
+    println(s"  💾 Saving final model to: $modelPath")
+    finalModel.asInstanceOf[PipelineModel].write.overwrite().save(modelPath)
+
+    println(s"  📂 Reloading model for evaluation to avoid broadcast...")
+    val reloadedModel = PipelineModel.load(modelPath)
+
+    println(s"  🔍 Evaluating on hold-out test set...")
+    val testPredictions = reloadedModel.transform(testData)
     val holdOutMetrics = ModelEvaluator.evaluate(testPredictions)
 
     println(f"\n  Hold-out Test Metrics:")
@@ -227,17 +265,11 @@ object MLPipeline {
     }
 
     // ========================================================================
-    // STEP 5: Save model and metrics
+    // STEP 6: Save metrics
     // ========================================================================
-    println("\n[STEP 5] Saving Model and Metrics")
+    println("\n[STEP 6] Saving Metrics")
     println("-" * 80)
-
-    val experimentOutputPath = s"${configuration.common.output.basePath}/${experiment.name}"
-    val modelPath = s"$experimentOutputPath/models/${experiment.model.modelType}_final"
-
-    println(s"  - Model path: $modelPath")
-    finalModel.asInstanceOf[PipelineModel].write.overwrite().save(modelPath)
-    println("  ✓ Model saved")
+    println("  ✓ Model already saved in Step 5 (to avoid broadcast OOM)")
 
     // Save comprehensive metrics
     saveMetrics(experiment, cvResult, holdOutMetrics, testPredictions, experimentOutputPath)
@@ -257,10 +289,10 @@ object MLPipeline {
       MLFlowTracker.logArtifact(rid, modelPath)
 
       // Log PCA artifacts if available
-      val pcaMetricsPath = s"$metricsPath/pca_variance.csv"
-      if (new java.io.File(pcaMetricsPath).exists()) {
-        MLFlowTracker.logArtifact(rid, pcaMetricsPath)
-      }
+      //val pcaMetricsPath = s"$metricsPath/pca_variance.csv"
+      //if (new java.io.File(pcaMetricsPath).exists()) {
+      //  MLFlowTracker.logArtifact(rid, pcaMetricsPath)
+      //}
     }
 
     // ========================================================================
@@ -294,7 +326,7 @@ object MLPipeline {
 
     MLResult(
       experiment = experiment,
-      model = finalModel,
+      model = reloadedModel,
       cvMetrics = cvMetrics,
       holdOutMetrics = holdOutMetrics,
       bestHyperparameters = cvResult.bestHyperparameters,
