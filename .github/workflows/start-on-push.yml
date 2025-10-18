@@ -14,9 +14,9 @@ jobs:
 
     - name: Set up environment
       run: |
-        echo "📦 Setting up JDK 17..."
-        apt-get update
-        apt-get install -y sbt
+        echo "📦 Setting up sbt..."
+        sudo apt-get update
+        sudo apt-get install -y sbt
         
         echo "🐳 Enabling Docker experimental features..."
         mkdir -p ~/.docker
