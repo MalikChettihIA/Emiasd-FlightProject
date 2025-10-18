@@ -39,26 +39,35 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-sbt-
 
-    - name: Build and start Docker services
+    - name: Build Docker images with docker compose
       run: |
         cd docker
+        echo "🔨 Building Docker images from docker-compose.yml..."
+        docker compose build --progress=plain 2>&1 | tee build.log
         
-        echo "🔨 Building Docker images..."
-        docker compose build --no-cache || exit 1
-        
-        echo "🚀 Starting Docker services (with retry)..."
+        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+          echo "❌ Build failed"
+          exit 1
+        fi
+        echo "✅ Docker images built successfully"
+
+    - name: Start Docker services with docker compose
+      run: |
+        cd docker
+        echo "🚀 Starting Docker services from docker-compose.yml (with retry)..."
         MAX_RETRIES=3
         RETRY_COUNT=0
         
         while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-          if docker compose up -d; then
+          echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+          if docker compose -f docker-compose.yml up -d; then
             echo "✅ Services started successfully"
             break
           else
             RETRY_COUNT=$((RETRY_COUNT + 1))
             if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "⚠️  Attempt $RETRY_COUNT failed, retrying in 10s..."
-              docker compose down || true
+              echo "⚠️  Attempt $((RETRY_COUNT)) failed, retrying in 10s..."
+              docker compose down -v 2>/dev/null || true
               sleep 10
             fi
           fi
@@ -74,29 +83,40 @@ jobs:
         echo "⏳ Waiting 15s for services to stabilize..."
         sleep 15
         
-        echo "📊 Running service checks..."
-        echo "✅ Docker containers:"
-        docker ps
+        echo "📊 Docker Compose services status:"
+        cd docker
+        docker compose ps
         
         echo ""
-        echo "📋 Service logs and status:"
-        docker ps -a --format "table {{.Names}}\t{{.Status}}"
+        echo "📋 All running containers:"
+        docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
     - name: Debug services on failure
       if: failure()
       run: |
-        echo "📋 Docker logs for failed services:"
+        echo "📋 Build logs (if available):"
+        [ -f docker/build.log ] && tail -50 docker/build.log || echo "No build log found"
+        
+        echo ""
+        echo "📋 Docker Compose configuration:"
+        cd docker && docker compose config 2>&1 | head -50
+        
+        echo ""
+        echo "📋 Container logs for failed services:"
         for container in $(docker ps -a --format "{{.Names}}" 2>/dev/null); do
           echo ""
           echo "=== Logs for $container ==="
-          docker logs --tail 30 $container 2>&1 || true
+          docker logs --tail 30 "$container" 2>&1 || true
         done
 
     - name: Cleanup Docker resources
       if: always()
       run: |
         cd docker
-        echo "🧹 Cleaning up Docker services..."
-        docker compose down -v 2>/dev/null || true
-        docker system prune -f 2>/dev/null || true
+        echo "🧹 Stopping and removing Docker Compose services..."
+        docker compose down -v --remove-orphans 2>/dev/null || true
+        
+        echo ""
+        echo "🧹 Pruning unused Docker resources..."
+        docker system prune -f --volumes 2>/dev/null || true
         echo "✅ Cleanup complete"
