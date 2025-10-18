@@ -9,43 +9,86 @@ object FeaturePipeline {
 
   def execute(
     flightData: DataFrame,
-    weatherData: DataFrame,
+    weatherData: Option[DataFrame],
     experiment: ExperimentConfig,
-  )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  )(implicit spark: SparkSession, configuration: AppConfiguration): String = {
 
     val pipelineStartTime = System.currentTimeMillis()
 
     println("\n" + "=" * 80)
-    println("[FeaturePipeline] Feature Extraction Pipeline - Start")
+    println("[FeaturePipeline] Data Preparation Pipeline - Start")
+    println("=" * 80)
+    println("Note: Feature extraction will be done after train/test split to avoid data leakage")
     println("=" * 80)
 
-    // Jointure des données
-    println("\n[Step 1/3] Join flight & Weather data...")
-    var stepStartTime = System.currentTimeMillis()
-    val joinedData = join(flightData, weatherData, experiment)
-    var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 1/3] Join Completed in ${stepDuration}s")
+    // Conditional: Join and explode only if weather data is provided
+    val dataForML = weatherData match {
+      case Some(weather) =>
+        println("\n[Mode] Weather features enabled - performing join and explode")
 
-    // Explosion de la jointure en données exploitable par ML
-    println("\n[Step 2/3] Exploding Joined flight & Weather data...")
-    stepStartTime = System.currentTimeMillis()
-    val explosedData = explose(joinedData, experiment)
-    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 2/3] Exploding Completed in ${stepDuration}s")
+        // Jointure des données
+        println("\n[Step 1/2] Join flight & Weather data...")
+        var stepStartTime = System.currentTimeMillis()
+        val joinedData = join(flightData, weather, experiment)
+        var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+        println(s"[Step 1/2] Join Completed in ${stepDuration}s")
 
-    // Extraction des features
-    println("\n[Step 3/3] Extracting features from Joined flight & Weather data...")
-    stepStartTime = System.currentTimeMillis()
-    val extractedData = extractFeature(explosedData, experiment)
-    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 3/3] Feature Extraction Completed in ${stepDuration}s")
+        // Explosion de la jointure en données exploitable par ML
+        println("\n[Step 2/2] Exploding Joined flight & Weather data...")
+        stepStartTime = System.currentTimeMillis()
+        val explodedData = explose(joinedData, experiment)
+        stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+        println(s"[Step 2/2] Exploding Completed in ${stepDuration}s")
+
+        explodedData
+
+      case None =>
+        println("\n⚠️  Weather features disabled - using flight data only (no join, no explode)")
+
+        // Just select flight features + target
+        val flightFeaturesWithTarget = experiment.featureExtraction.flightSelectedFeatures.map { features =>
+          val featureNames = features.keys.toSeq
+          if (featureNames.contains(experiment.target)) {
+            featureNames
+          } else {
+            println(s"  - Automatically adding target '${experiment.target}' to flight features")
+            featureNames :+ experiment.target
+          }
+        }.getOrElse {
+          // If no flight features specified, use all columns
+          flightData.columns.toSeq
+        }
+
+        val selectedFlightData = flightData.select(flightFeaturesWithTarget.map(flightData(_)): _*)
+        println(s"  - Selected ${flightFeaturesWithTarget.length} flight features")
+
+        // Cache the data
+        val cachedFlightData = selectedFlightData.cache()
+        val count = cachedFlightData.count()
+        println(s"  - Flight records: ${count}")
+
+        cachedFlightData
+    }
+
+    // Save prepared data (feature extraction will be done in MLPipeline after split)
+    val explodedDataPath = s"${configuration.common.output.basePath}/${experiment.name}/data/joined_exploded_data.parquet"
+    println(s"\n[Saving] Prepared data for ML Pipeline:")
+    println(s"  - Path: $explodedDataPath")
+    println(s"  - Records: ${dataForML.count()}")
+
+    dataForML.coalesce(8)
+      .write
+      .mode("overwrite")
+      .option("compression", "zstd")
+      .parquet(explodedDataPath)
+    println(s"  - Saved successfully")
 
     val totalDuration = (System.currentTimeMillis() - pipelineStartTime) / 1000.0
     println("\n" + "=" * 80)
-    println(s"[FeaturePipeline] Feature Extraction Pipeline - End (Total: ${totalDuration}s)")
+    println(s"[FeaturePipeline] Data Preparation Pipeline - End (Total: ${totalDuration}s)")
     println("=" * 80 + "\n")
 
-    extractedData
+    explodedDataPath
   }
 
   def join(
@@ -58,13 +101,25 @@ object FeaturePipeline {
     println("\nJoining flight and weather data...")
 
     val stepStartTime = System.currentTimeMillis()
+
+    // Add target column to flight features if not already present
+    val flightFeaturesWithTarget = experimentConfig.featureExtraction.flightSelectedFeatures.map { features =>
+      val featureNames = features.keys.toSeq
+      if (featureNames.contains(experimentConfig.target)) {
+        featureNames
+      } else {
+        println(s"  - Automatically adding target '${experimentConfig.target}' to flight features")
+        featureNames :+ experimentConfig.target
+      }
+    }
+
     val joinedData = FlightWeatherDataJoiner.joinFlightsWithWeather(
       flightData,
       weatherData,
       weatherDepthHours = experimentConfig.featureExtraction.weatherDepthHours,
       removeLeakageColumns = true,
-      experimentConfig.featureExtraction.flightSelectedFeatures,
-      experimentConfig.featureExtraction.weatherSelectedFeatures)
+      flightFeaturesWithTarget,
+      experimentConfig.featureExtraction.weatherSelectedFeatures.map(_.keys.toSeq))
 
     // OPTIMIZATION: Cache joined data to avoid recomputation
     // This is critical since we'll need it for count, explode, and potentially save
@@ -97,27 +152,31 @@ object FeaturePipeline {
     import org.apache.spark.sql.functions._
 
     // Get weather feature names from config, or auto-detect from schema
-    val weatherFeatures = experimentConfig.featureExtraction.weatherSelectedFeatures.getOrElse {
-      // Auto-detect: extract all field names from origin_weather_observations array struct
-      if (data.columns.contains("origin_weather_observations")) {
-        import org.apache.spark.sql.types.{ArrayType, StructType}
-        val arraySchema = data.schema("origin_weather_observations").dataType
-        arraySchema match {
-          case ArrayType(elementType: StructType, _) =>
-            val fields = elementType.fieldNames.toSeq
-            println(s"\n[Auto-detect] No weatherSelectedFeatures defined, using all ${fields.length} fields from schema:")
-            println(s"  ${fields.mkString(", ")}")
-            fields
-          case _ =>
-            throw new IllegalArgumentException(
-              "weatherSelectedFeatures not defined and cannot auto-detect from origin_weather_observations schema"
-            )
+    val weatherFeatures: Seq[String] = experimentConfig.featureExtraction.weatherSelectedFeatures match {
+      case Some(featuresMap) =>
+        // Extract keys from the Map[String, FeatureTransformationConfig]
+        featuresMap.keys.toSeq
+      case None =>
+        // Auto-detect: extract all field names from origin_weather_observations array struct
+        if (data.columns.contains("origin_weather_observations")) {
+          import org.apache.spark.sql.types.{ArrayType, StructType}
+          val arraySchema = data.schema("origin_weather_observations").dataType
+          arraySchema match {
+            case ArrayType(elementType: StructType, _) =>
+              val fields = elementType.fieldNames.toSeq
+              println(s"\n[Auto-detect] No weatherSelectedFeatures defined, using all ${fields.length} fields from schema:")
+              println(s"  ${fields.mkString(", ")}")
+              fields
+            case _ =>
+              throw new IllegalArgumentException(
+                "weatherSelectedFeatures not defined and cannot auto-detect from origin_weather_observations schema"
+              )
+          }
+        } else {
+          throw new IllegalArgumentException(
+            "weatherSelectedFeatures must be defined in configuration when origin_weather_observations column is missing"
+          )
         }
-      } else {
-        throw new IllegalArgumentException(
-          "weatherSelectedFeatures must be defined in configuration when origin_weather_observations column is missing"
-        )
-      }
     }
 
     val weatherDepthHours = experimentConfig.featureExtraction.weatherDepthHours
@@ -198,10 +257,5 @@ object FeaturePipeline {
     }
 
     cachedResult
-  }
-
-  def extractFeature(data: DataFrame, experimentConfig: ExperimentConfig)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
-    val extractedData = FeatureExtractor.extract(data, experimentConfig)
-    extractedData
   }
 }

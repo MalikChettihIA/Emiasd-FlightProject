@@ -443,8 +443,5 @@ object FlightDataGenerator extends DataPreprocessor {
     println(s"Dataset size: ${enrichedDf.count()}")
     println("")
 
-    // Lister les nouvelles colonnes par catégorie
-    val newColumns = enrichedDf.columns.filterNot(originalDf.columns.contains)
-    println(s"New Features Created : \n\n${newColumns.mkString(",\n")}")
   }
 }

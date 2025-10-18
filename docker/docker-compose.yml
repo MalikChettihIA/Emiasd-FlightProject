@@ -163,6 +163,15 @@ services:
     # Maintien le container actif sans démarrer de service Spark
     command: tail -f /dev/null
     restart: unless-stopped
+    # Resource limits to support large model broadcasts
+    deploy:
+      resources:
+        limits:
+          memory: 32G
+          cpus: '10'
+        reservations:
+          memory: 20G
+          cpus: '8'
   # ============================================================================
   # Jupyter - Notebooks
   # ============================================================================

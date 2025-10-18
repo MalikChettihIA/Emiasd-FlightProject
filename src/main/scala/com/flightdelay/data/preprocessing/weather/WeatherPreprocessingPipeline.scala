@@ -34,31 +34,22 @@ object WeatherPreprocessingPipeline {
     val porcessWithWeatherConditionFeaturesDf = porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf.transform(WeatherTypeFeatureGenerator.createFeatures)
     val processedWeatherDf = WeatherDataCleaner.preprocess(porcessWithWeatherConditionFeaturesDf)
 
-
-    // OPTIMIZATION: Cache final data because it will be:
-    // 1. Counted once
-    // 2. Written to parquet
-    // 3. Returned and used by DataPipeline (cached again there)
-    val cachedProcessedWeatherDf = processedWeatherDf.cache()
-    val processedCount = cachedProcessedWeatherDf.count()
-
     println(s"\nSaving preprocessed data to parquet:")
     println(s"  - Path: $processedParquetPath")
-    println(s"  - Records to save: ${processedCount}")
 
     // OPTIMIZATION: Coalesce and use zstd compression
-    cachedProcessedWeatherDf.coalesce(8)
+    // Write directly without caching (write will trigger computation once)
+    processedWeatherDf
       .write
       .mode("overwrite")
       .option("compression", "zstd")
       .parquet(processedParquetPath)
-    println(s"  - Saved ${processedCount} preprocessed records")
 
     println("\n" + "=" * 80)
     println("[Preprocessing] Weather Data Preprocessing Pipeline - End")
     println("=" * 80 + "\n")
 
-    cachedProcessedWeatherDf
+    processedWeatherDf
   }
 
 }

@@ -30,22 +30,25 @@ object FlightDelayPredictionApp {
 
     val appStartTime = System.currentTimeMillis()
 
-    implicit val spark: SparkSession = SparkSession.builder()
-      .appName("Flight Delay Prediction App")
-      .master("local[*]")
-      .config("spark.sql.adaptive.enabled", "true")
-      .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
-      .getOrCreate()
-
-    // Réduire les logs pour plus de clarté
-    spark.sparkContext.setLogLevel("WARN")
-
     println("\n" + "=" * 80)
     println("Flight Delay Prediction App Starting...")
     println("=" * 80)
 
     implicit val configuration: AppConfiguration = ConfigurationLoader.loadConfiguration(args)
     println(s"Configuration '${configuration.environment}' loaded successfully")
+
+
+    implicit val spark: SparkSession = SparkSession.builder()
+      .appName("Flight Delay Prediction App")
+      .master("local[*]")
+      .config("spark.sql.adaptive.enabled", "true")
+      .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+      .getOrCreate()
+    //Set CheckPoint Dir
+    spark.sparkContext.setCheckpointDir(s"${configuration.common.output.basePath}/spark-checkpoints")
+    // Réduire les logs pour plus de clarté
+    spark.sparkContext.setLogLevel("WARN")
+
 
     // Get enabled experiments
     val enabledExperiments = configuration.enabledExperiments
@@ -72,15 +75,30 @@ object FlightDelayPredictionApp {
       val (flightData, weatherData) = if (tasks.contains("data-pipeline")) {
         val (flights, weather) = DataPipeline.execute()
         println(f"\n- Final Flights dataset: ${flights.count()}%,d records with ${flights.columns.length}%3d columns")
-        println(f"\n- Final Weather dataset: ${weather.count()}%,d records with ${weather.columns.length}%3d columns")
+        weather match {
+          case Some(w) =>
+            println(f"\n- Final Weather dataset: ${w.count()}%,d records with ${w.columns.length}%3d columns")
+          case None =>
+            println(f"\n- Weather data: DISABLED (no weather features configured)")
+        }
         (flights, weather)
       } else {
         println("\n[STEP 1] Data pipeline (load & preprocess)... SKIPPED")
         println("\n[STEP 1] Loading preprocessed data from parquet...")
         val flights = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_flights.parquet")
-        val weather = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_weather.parquet")
+
+        // Check if ANY ENABLED experiment needs weather data
+        val isWeatherNeeded = configuration.enabledExperiments.exists(_.featureExtraction.isWeatherEnabled)
+        val weather = if (isWeatherNeeded) {
+          val w = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_weather.parquet")
+          println(f"- Loaded Weather: ${w.count()}%,d records")
+          Some(w)
+        } else {
+          println(f"- Weather data: SKIPPED (no weather features configured)")
+          None
+        }
+
         println(f"- Loaded Flights: ${flights.count()}%,d records")
-        println(f"- Loaded Weather: ${weather.count()}%,d records")
         (flights, weather)
       }
 
@@ -144,7 +162,7 @@ object FlightDelayPredictionApp {
     experiment: ExperimentConfig,
     tasks: Set[String],
     flightData: DataFrame,
-    weatherData: DataFrame
+    weatherData: Option[DataFrame]
   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
     // =====================================================================================

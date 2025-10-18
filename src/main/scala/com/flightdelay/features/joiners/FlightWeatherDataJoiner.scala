@@ -92,14 +92,10 @@ object FlightWeatherDataJoiner {
       "CANCELLATION_CODE",
       "DIVERTED",
       "DISTANCE",
-      "feature_departure_hour_rounded",
-      "feature_utc_departure_hour_rounded",
       "feature_arrival_hour_rounded",
       "feature_utc_arrival_hour_rounded",
       "feature_arrival_hour",
       "feature_utc_arrival_hour",
-      "feature_departure_hour",
-      "feature_utc_departure_hour",
       "UTC_ARR_TIME",
       "UTC_ARR_DATE"
     )

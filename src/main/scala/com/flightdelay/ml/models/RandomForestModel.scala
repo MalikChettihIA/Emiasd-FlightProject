@@ -64,6 +64,10 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
       .setFeatureSubsetStrategy(featureSubsetStrategy)
       .setImpurity(impurity)
       .setSubsamplingRate(subsamplingRate)
+      // OPTIMISATIONS CRITIQUES
+      .setCacheNodeIds(true)             // Active le cache (améliore perf)
+      .setCheckpointInterval(5)         // CRITIQUE : checkpoint tous les 5 arbres
+      .setMaxMemoryInMB(2048)            // 2 GB (au lieu de 512 MB)
 
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(rf))
@@ -101,6 +105,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
 
   /**
    * Display top feature importances from the trained model
+   * Enhanced formatting with feature name abbreviation and grouping
    */
   private def displayFeatureImportance(model: RandomForestClassificationModel): Unit = {
     val importances = model.featureImportances.toArray
@@ -109,18 +114,73 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     // Try to load feature names from file
     val featureNames = loadFeatureNames()
 
+    // Helper function to shorten feature names for display
+    def shortenFeatureName(name: String, maxLen: Int = 55): String = {
+      if (name.length <= maxLen) {
+        name
+      } else {
+        // Smart truncation: keep the most important parts
+        val patterns = Map(
+          "indexed_" -> "idx_",
+          "origin_weather_" -> "org_w_",
+          "destination_weather_" -> "dst_w_",
+          "feature_" -> "f_",
+          "_operations_risk_level" -> "_opr_risk",
+          "_weather_severity_index" -> "_wsev_idx",
+          "_is_ifr_conditions" -> "_ifr",
+          "_is_vfr_conditions" -> "_vfr",
+          "_requires_cat_ii" -> "_cat2"
+        )
+
+        var shortened = name
+        patterns.foreach { case (long, short) =>
+          shortened = shortened.replace(long, short)
+        }
+
+        if (shortened.length <= maxLen) {
+          shortened
+        } else {
+          shortened.take(maxLen - 3) + "..."
+        }
+      }
+    }
+
     println(f"\nTop $topN Feature Importances:")
-    println("-" * 50)
+    println("=" * 90)
+    println(f"${"Rank"}%-6s ${"Index"}%-7s ${"Feature Name"}%-60s ${"Importance"}%12s")
+    println("=" * 90)
 
     importances.zipWithIndex
       .sortBy(-_._1)
       .take(topN)
-      .foreach { case (importance, idx) =>
-        val featureName = featureNames.lift(idx).getOrElse(s"Feature_$idx")
-        println(f"[$idx%3d] $featureName%-50s: ${importance * 100}%6.2f%%")
+      .zipWithIndex
+      .foreach { case ((importance, featureIdx), rank) =>
+        val featureName = featureNames.lift(featureIdx).getOrElse(s"Feature_$featureIdx")
+        val shortName = shortenFeatureName(featureName, 60)
+        val importancePercent = importance * 100
+
+        // Visual indicator for importance level
+        val indicator = if (importancePercent >= 10) "█"
+                       else if (importancePercent >= 5) "▓"
+                       else if (importancePercent >= 1) "▒"
+                       else "░"
+
+        println(f"${rank + 1}%-6d [${featureIdx}%3d]  ${shortName}%-60s ${indicator} ${importancePercent}%6.2f%%")
       }
 
-    println("-" * 50)
+    println("=" * 90)
+
+    // Print legend
+    println("\nImportance Levels: █ ≥10%  ▓ ≥5%  ▒ ≥1%  ░ <1%")
+
+    // Print abbreviations used
+    println("\nAbbreviations:")
+    println("  idx_    = indexed_")
+    println("  org_w_  = origin_weather_")
+    println("  dst_w_  = destination_weather_")
+    println("  f_      = feature_")
+    println("  wsev    = weather_severity")
+    println("  opr_risk = operations_risk_level")
   }
 
   /**

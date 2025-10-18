@@ -185,13 +185,23 @@ object ConfigurationLoader {
       .getOrElse(50)
 
     // Parse flightSelectedFeatures (optional, for feature_selection type)
-    val flightSelectedFeatures = data.get("flightSelectedFeatures").map { featureList =>
-      featureList.asInstanceOf[java.util.List[_]].asScala.map(_.toString).toSeq
+    // New format: Map[String, FeatureTransformationConfig]
+    val flightSelectedFeatures = data.get("flightSelectedFeatures").map { featuresMap =>
+      featuresMap.asInstanceOf[java.util.Map[String, Any]].asScala.toMap.map { case (featureName, config) =>
+        val configMap = config.asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+        val transformation = configMap("transformation").toString
+        (featureName, FeatureTransformationConfig(transformation))
+      }
     }
 
     // Parse weatherSelectedFeatures (optional, for feature_selection type)
-    val weatherSelectedFeatures = data.get("weatherSelectedFeatures").map { featureList =>
-      featureList.asInstanceOf[java.util.List[_]].asScala.map(_.toString).toSeq
+    // New format: Map[String, FeatureTransformationConfig]
+    val weatherSelectedFeatures = data.get("weatherSelectedFeatures").map { featuresMap =>
+      featuresMap.asInstanceOf[java.util.Map[String, Any]].asScala.toMap.map { case (featureName, config) =>
+        val configMap = config.asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+        val transformation = configMap("transformation").toString
+        (featureName, FeatureTransformationConfig(transformation))
+      }
     }
 
     FeatureExtractionConfig(

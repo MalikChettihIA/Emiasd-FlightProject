@@ -189,14 +189,5 @@ object FlightArrivalDataGenerator {
     println(s"  - Flies eastward: ${fliesEastward} (${(fliesEastward * 100.0 / totalFlights).round}%)")
     println(s"  - Flies westward: ${fliesWestward} (${(fliesWestward * 100.0 / totalFlights).round}%)")
 
-    println(s"\nSample of generated arrival features:")
-    df.select(
-      "FL_DATE", "UTC_FL_DATE",
-      "CRS_DEP_TIME", "UTC_CRS_DEP_TIME",
-      "CRS_ARR_TIME", "UTC_ARR_TIME",
-      "CRS_ARR_DATE", "UTC_ARR_DATE",
-      "ORIGIN_TIMEZONE", "DEST_TIMEZONE",
-      "feature_timezone_difference"
-    ).show(5, truncate = false)
   }
 }

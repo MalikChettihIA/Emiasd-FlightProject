@@ -15,15 +15,19 @@ object DataPipeline {
    * Charge les données depuis la configuration, preprocesse les données de vols et météo, puis les joint
    * @param spark Session Spark
    * @param configuration Configuration de l'application
-   * @return DataFrame final contenant les données jointes et préprocessées
+   * @return Tuple (FlightData, Option[WeatherData]) - Weather is None if no experiments use weather features
    */
-  def execute()(implicit spark: SparkSession, configuration: AppConfiguration): (DataFrame, DataFrame) = {
+  def execute()(implicit spark: SparkSession, configuration: AppConfiguration): (DataFrame, Option[DataFrame]) = {
 
     val pipelineStartTime = System.currentTimeMillis()
 
     println("\n" + "=" * 80)
     println("[DataPipeline] Complete Data Pipeline - Start")
     println("=" * 80)
+
+    // Check if ANY ENABLED experiment uses weather features
+    val isWeatherNeeded = configuration.enabledExperiments.exists(_.featureExtraction.isWeatherEnabled)
+    println(s"\n[DataPipeline] Weather features required: $isWeatherNeeded")
 
     // Chargement des données brutes
     println("\n[Step 1/5] Loading raw flight data...")
@@ -32,56 +36,70 @@ object DataPipeline {
     var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     println(s"[Step 1/5] Completed in ${stepDuration}s")
 
-    println("\n[Step 2/5] Loading raw weather data...")
-    stepStartTime = System.currentTimeMillis()
-    WeatherDataLoader.loadFromConfiguration()
-    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 2/5] Completed in ${stepDuration}s")
-
-    println("\n[Step 3/5] Loading WBAN-Airport-Timezone mapping...")
-    stepStartTime = System.currentTimeMillis()
-    WBANAirportTimezoneLoader.loadFromConfiguration()
-    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 3/5] Completed in ${stepDuration}s")
-
     // Preprocessing des données de vols
-    println("\n[Step 4/5] Preprocessing flight data...")
+    println("\n[Step 2/5] Preprocessing flight data...")
     stepStartTime = System.currentTimeMillis()
     val processedFlightData = FlightPreprocessingPipeline.execute()
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 4/5] Completed in ${stepDuration}s")
+    println(s"[Step 2/5] Completed in ${stepDuration}s")
 
-    // Preprocessing des données météo
-    println("\n[Step 5/5] Preprocessing weather data...")
-    stepStartTime = System.currentTimeMillis()
-    val processedWeatherData = WeatherPreprocessingPipeline.execute()
-    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 5/5] Completed in ${stepDuration}s")
+    // Conditional: Weather data loading and preprocessing
+    val processedWeatherData = if (isWeatherNeeded) {
+      println("\n[Step 3/5] Loading raw weather data...")
+      stepStartTime = System.currentTimeMillis()
+      WeatherDataLoader.loadFromConfiguration()
+      stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+      println(s"[Step 3/5] Completed in ${stepDuration}s")
+
+      println("\n[Step 4/5] Loading WBAN-Airport-Timezone mapping...")
+      stepStartTime = System.currentTimeMillis()
+      WBANAirportTimezoneLoader.loadFromConfiguration()
+      stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+      println(s"[Step 4/5] Completed in ${stepDuration}s")
+
+      println("\n[Step 5/5] Preprocessing weather data...")
+      stepStartTime = System.currentTimeMillis()
+      val weather = WeatherPreprocessingPipeline.execute()
+      stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+      println(s"[Step 5/5] Completed in ${stepDuration}s")
+      Some(weather)
+    } else {
+      println("\n⚠️  Weather features disabled - Skipping steps 3/4/5 (weather loading & preprocessing)")
+      None
+    }
 
     // Validate and normalize schemas
-    println("\n[Step 6/6] Validating and normalizing schemas...")
+    println("\n[Step 6/7] Validating and normalizing schemas...")
     stepStartTime = System.currentTimeMillis()
 
     println("\n--- Flight Data Schema Validation ---")
     val normalizedFlightData = SchemaValidator.validateAndNormalize(processedFlightData, strictMode = false)
 
-    println("\n--- Weather Data Schema Validation ---")
-    val normalizedWeatherData = SchemaValidator.validateAndNormalize(processedWeatherData, strictMode = false)
+    val normalizedWeatherData = processedWeatherData.map { weather =>
+      println("\n--- Weather Data Schema Validation ---")
+      SchemaValidator.validateAndNormalize(weather, strictMode = false)
+    }
 
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 6/6] Completed in ${stepDuration}s")
+    println(s"[Step 6/7] Completed in ${stepDuration}s")
 
     // OPTIMIZATION: Cache normalized data since it will be used by all experiments
     println("\n[Step 7/7] Caching normalized data for reuse across experiments...")
     stepStartTime = System.currentTimeMillis()
     val cachedFlightData = normalizedFlightData.cache()
-    val cachedWeatherData = normalizedWeatherData.cache()
+    val cachedWeatherData = normalizedWeatherData.map(_.cache())
 
     // Force materialization
     val flightCount = cachedFlightData.count()
-    val weatherCount = cachedWeatherData.count()
     println(s"  - Cached flight data: ${flightCount} records")
-    println(s"  - Cached weather data: ${weatherCount} records")
+
+    cachedWeatherData match {
+      case Some(weather) =>
+        val weatherCount = weather.count()
+        println(s"  - Cached weather data: ${weatherCount} records")
+      case None =>
+        println(s"  - No weather data (disabled)")
+    }
 
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     println(s"[Step 7/7] Completed in ${stepDuration}s")

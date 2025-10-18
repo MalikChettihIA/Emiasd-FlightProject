@@ -34,9 +34,15 @@ object FlightPreprocessingPipeline {
     val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
     val enrichedWithWBAN = FlightWBANEnricher.preprocess(cleanedFlightData)
     val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithWBAN)
-    val generatedFightData = FlightDataGenerator.preprocess(enrichedWithArrival)
-    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFightData)
-    val finalCleanedData = FlightDataBalancer.preprocess(generatedFightDataWithLabels)
+    val generatedFlightData = FlightDataGenerator.preprocess(enrichedWithArrival)
+    val generatedPreviousLateFlightData = PreviousLateFlightFeatureGenerator.createLateAircraftFeature(generatedFlightData)
+    generatedPreviousLateFlightData.checkpoint()
+    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedPreviousLateFlightData)
+    generatedFightDataWithLabels.checkpoint()
+    // Calculate avg delay features for ALL delay thresholds (15min, 30min, 45min, 60min, 90min)
+    val generatedFlightsWithAvgDelay = AvgDelayFeatureGenerator.enrichFlightsWithAvgDelay(generatedFightDataWithLabels)
+    generatedFightDataWithLabels.checkpoint()
+    val finalCleanedData = FlightDataBalancer.preprocess(generatedFlightsWithAvgDelay)
 
     // Validate schema
     validatePreprocessedSchema(finalCleanedData)
@@ -60,6 +66,9 @@ object FlightPreprocessingPipeline {
       .option("compression", "zstd")
       .parquet(processedParquetPath)
     println(s"  - Saved ${processedCount} preprocessed records")
+    cachedFinalData.printSchema()
+
+    println(s"\nSaving preprocessed data to parquet:")
 
     println("\n" + "=" * 80)
     println("[Preprocessing] Flight Data Preprocessing Pipeline - End")

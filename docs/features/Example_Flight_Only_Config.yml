@@ -1,0 +1,97 @@
+# Example Configuration: Training with ONLY Flight Features (No Weather)
+# This demonstrates how to configure an experiment without weather data processing
+
+environment: "local"
+
+common:
+  seed: 42
+
+  data:
+    basePath: "/data"
+    flight:
+      path: "/data/FLIGHT-3Y/Flights/*.csv"
+    weather:
+      path: "/data/FLIGHT-3Y/Weather/*.txt"
+    airportMapping:
+      path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
+
+  output:
+    basePath: "/output"
+
+  mlflow:
+    enabled: true
+    trackingUri: "http://mlflow-server:5000"
+
+experiments:
+
+  # =========================================================================
+  # Flight-Only Experiment
+  # Model: RandomForest with ONLY flight features (no weather)
+  # =========================================================================
+  - name: "Flight-Only-Experiment"
+    description: "Random Forest trained with flight features only - no weather data"
+    enabled: true
+    target: "label_is_delayed_15min"
+
+    featureExtraction:
+      type: "feature_selection"
+      storeJoinData: false           # No join data since weather is disabled
+      storeExplodeJoinData: false    # No explode data since weather is disabled
+      weatherDepthHours: 0           # Ignored since no weather features
+      maxCategoricalCardinality: 50
+
+      # Flight features configuration
+      flightSelectedFeatures:
+        CRS_DEP_TIME:
+          transformation: "None"
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "StringIndexer"
+        ORIGIN_AIRPORT_ID:
+          transformation: "StringIndexer"
+        DEST_AIRPORT_ID:
+          transformation: "StringIndexer"
+        CRS_ELAPSED_TIME:
+          transformation: "None"
+        PREV_AIRCRAFT_ARR_DELAY:
+          transformation: "None"
+        feature_departure_hour_rounded:
+          transformation: "StringIndexer"
+        feature_flight_week_of_year:
+          transformation: "StringIndexer"
+        feature_proportion_delayed_15min:
+          transformation: "None"
+        feature_avg_delay:
+          transformation: "None"
+
+      # ⚠️ IMPORTANT: weatherSelectedFeatures is ABSENT or commented out
+      # This signals the pipeline to skip ALL weather processing:
+      # - No weather data loading
+      # - No weather preprocessing
+      # - No WBAN mapping
+      # - No flight-weather join
+      # - No weather array explode
+
+      # weatherSelectedFeatures: {}  # Option 1: Empty map (weather disabled)
+      # weatherSelectedFeatures:     # Option 2: Completely omitted (weather disabled)
+
+    model:
+      modelType: "randomforest"
+
+    train:
+      trainRatio: 0.9
+
+      crossValidation:
+        numFolds: 2
+
+      gridSearch:
+        enabled: true
+        evaluationMetric: "f1"
+
+      hyperparameters:
+        numTrees: [20]
+        maxDepth: [7]
+        maxBins: [256]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"]
+        impurity: "gini"

@@ -148,9 +148,15 @@ object FlightDataCleaner extends DataPreprocessor {
   private def cleanFlightOutliers(df: DataFrame): DataFrame = {
     println("\nPhase 4: Outlier Filtering")
 
+    // Clean based on inherited removeOutlier methode
+    val withoutOutliersDf = removeOutliers(
+      df = df,
+      columns = Seq("ARR_DELAY_NEW")
+    )
+
     // Filter extreme delays (> 10 hours = 600 minutes)
     println("  - Filtering delays > 600 minutes")
-    val reasonableDelays = df.filter(
+    val reasonableDelays = withoutOutliersDf.filter(
       col("ARR_DELAY_NEW").isNull ||
         col("ARR_DELAY_NEW") <= 600
     )
