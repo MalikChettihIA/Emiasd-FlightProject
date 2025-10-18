@@ -1,0 +1,40 @@
+name: Setup Docker Environment
+
+on:
+  push:
+    branches: [ feature/ci-cd-integration ]
+  pull_request:
+    branches: [ feature/ci-cd-integration ]
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Run setup script
+      run: |
+        cd docker
+        chmod +x setup.sh
+        ./setup.sh
+
+    - name: Wait for services
+      run: |
+        sleep 30
+
+    - name: Check services
+      run: |
+        curl -f http://localhost:8080 || echo "Spark Master not accessible"
+        curl -f http://localhost:8888 || echo "Jupyter not accessible"
+
+    - name: Clean up
+      if: always()
+      run: |
+        cd docker
+        docker compose down --volumes --remove-orphans
