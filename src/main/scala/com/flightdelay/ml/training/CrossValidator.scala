@@ -240,7 +240,7 @@ object CrossValidator {
   }
 
   private def buildParameterGrid(experiment: ExperimentConfig): Seq[Map[String, Any]] = {
-    val hp = experiment.train.hyperparameters
+    val hp = experiment.model.hyperparameters
     val modelType = experiment.model.modelType.toLowerCase
 
     modelType match {

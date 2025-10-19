@@ -108,7 +108,7 @@ object MLPipeline {
     // ========================================================================
     MLFlowTracker.initialize(configuration.common.mlflow.trackingUri, configuration.common.mlflow.enabled)
     val experimentId = MLFlowTracker.getOrCreateExperiment()
-    val runId = experimentId.flatMap(expId => MLFlowTracker.startRun(expId, experiment.name))
+    val runId = experimentId.flatMap(expId => MLFlowTracker.startRun(expId, experiment.name, Some(experiment.description)))
 
     // Log experiment configuration
     runId.foreach { rid =>
@@ -127,6 +127,8 @@ object MLPipeline {
       ))
       MLFlowTracker.setTag(rid, "experiment_description", experiment.description)
       MLFlowTracker.setTag(rid, "environment", configuration.environment)
+
+      MLFlowTracker.logDatasetsFromConfig(rid, configuration)
     }
 
     // ========================================================================
@@ -360,7 +362,7 @@ object MLPipeline {
       }
     } else {
       // Display default hyperparameters from config
-      val hp = experiment.train.hyperparameters
+      val hp = experiment.model.hyperparameters
       println(s"   - ${"numTrees".padTo(25, ' ')} : ${hp.numTrees.head}")
       println(s"   - ${"maxDepth".padTo(25, ' ')} : ${hp.maxDepth.head}")
       println(s"   - ${"maxBins".padTo(25, ' ')} : ${hp.maxBins}")

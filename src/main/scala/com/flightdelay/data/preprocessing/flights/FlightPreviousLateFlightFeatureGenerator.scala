@@ -5,7 +5,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.DataFrame
 
-object PreviousLateFlightFeatureGenerator {
+object FlightPreviousLateFlightFeatureGenerator {
   /**
    * Crée la feature 'Late Aircraft' qui capture le retard de l'avion
    * sur son vol précédent de la journée.

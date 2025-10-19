@@ -29,7 +29,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
    * @return Trained RandomForest model wrapped in a Pipeline
    */
   def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
-    val hp = experiment.train.hyperparameters
+    val hp = experiment.model.hyperparameters
 
     // Use first value from arrays for single training
     // (Grid Search will iterate over all combinations)

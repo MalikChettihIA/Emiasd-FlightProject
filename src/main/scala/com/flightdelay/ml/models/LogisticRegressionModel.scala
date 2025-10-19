@@ -28,7 +28,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
    * @return Trained LogisticRegression model wrapped in a Pipeline
    */
   def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
-    val hp = experiment.train.hyperparameters
+    val hp = experiment.model.hyperparameters
 
     // Use first value from arrays for single training
     val maxIter = hp.maxIter.getOrElse(Seq(100)).head

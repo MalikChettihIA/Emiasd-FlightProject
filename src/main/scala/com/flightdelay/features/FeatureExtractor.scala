@@ -468,9 +468,9 @@ object FeatureExtractor {
     println(s"  - Records to save: ${recordCount}")
 
     // OPTIMIZATION: Coalesce to reduce number of output files (improves write performance)
-    // Use 8 partitions for balance between parallelism and file count
+    // Use 100 partitions for balance between parallelism and file count
     // OPTIMIZATION: Use zstd compression (better than snappy)
-    data.coalesce(8)
+    data.coalesce(100)
       .write
       .mode("overwrite")
       .option("compression", "zstd")

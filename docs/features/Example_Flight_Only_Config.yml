@@ -76,6 +76,14 @@ experiments:
 
     model:
       modelType: "randomforest"
+      hyperparameters:
+        numTrees: [20]
+        maxDepth: [7]
+        maxBins: [256]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"]
+        impurity: "gini"
 
     train:
       trainRatio: 0.9
@@ -86,12 +94,3 @@ experiments:
       gridSearch:
         enabled: true
         evaluationMetric: "f1"
-
-      hyperparameters:
-        numTrees: [20]
-        maxDepth: [7]
-        maxBins: [256]
-        minInstancesPerNode: [5]
-        subsamplingRate: [1.0]
-        featureSubsetStrategy: ["all"]
-        impurity: "gini"

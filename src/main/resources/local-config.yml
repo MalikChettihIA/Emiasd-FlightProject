@@ -11,9 +11,9 @@ common:
   data:
     basePath: "/data"
     flight:
-      path: "/data/FLIGHT-3Y/Flights/2012*.csv"
+      path: "/data/FLIGHT-3Y/Flights/201201*.csv"
     weather:
-      path: "/data/FLIGHT-3Y/Weather/2012*.txt"
+      path: "/data/FLIGHT-3Y/Weather/201201*.txt"
     airportMapping:
       path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
@@ -61,14 +61,20 @@ experiments:
           transformation: "StringIndexer"
         feature_flight_week_of_year:
           transformation: "StringIndexer"
-        #feature_flight_day_of_year:
-        #  transformation: "StringIndexer"
         feature_proportion_delayed_15min:
           transformation: "None"
         feature_avg_delay:
             transformation: "None"
     model:
       modelType: "randomforest"
+      hyperparameters:
+        numTrees: [15]
+        maxDepth: [7]
+        maxBins: [280]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
+        impurity: "gini"
 
     train:
       trainRatio: 0.9
@@ -79,16 +85,6 @@ experiments:
       gridSearch:
         enabled: true
         evaluationMetric: "f1"
-
-      hyperparameters:
-
-        numTrees: [15]
-        maxDepth: [7]
-        maxBins: [280]
-        minInstancesPerNode: [5]
-        subsamplingRate: [1.0]
-        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
-        impurity: "gini"
 
   # =========================================================================
   # Experiment 2:
@@ -122,8 +118,6 @@ experiments:
           transformation: "StringIndexer"
         feature_flight_week_of_year:
           transformation: "StringIndexer"
-        #feature_flight_day_of_year:
-        #  transformation: "StringIndexer"
         feature_proportion_delayed_15min:
           transformation: "None"
         feature_avg_delay:
@@ -177,6 +171,14 @@ experiments:
           transformation: "None"
     model:
       modelType: "randomforest"
+      hyperparameters:
+        numTrees: [20]
+        maxDepth: [7]
+        maxBins: [256]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
+        impurity: "gini"
 
     train:
       trainRatio: 0.9
@@ -187,13 +189,3 @@ experiments:
       gridSearch:
         enabled: true
         evaluationMetric: "f1"
-
-      hyperparameters:
-
-        numTrees: [20]
-        maxDepth: [7]
-        maxBins: [256]
-        minInstancesPerNode: [5]
-        subsamplingRate: [1.0]
-        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
-        impurity: "gini"

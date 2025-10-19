@@ -4,7 +4,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Window
 
-object AvgDelayFeatureGenerator {
+object FlightAvgDelayFeatureGenerator {
 
   // Delay thresholds (en minutes)
   private val DELAY_THRESHOLDS = Map(

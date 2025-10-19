@@ -222,8 +222,13 @@ object ConfigurationLoader {
   private def parseExperimentModelConfig(data: Map[String, Any]): ExperimentModelConfig = {
     val modelType = data("modelType").toString
 
+    // Parse hyperparameters (now under model)
+    val hyperparametersData = data("hyperparameters").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+    val hyperparametersConfig = parseHyperparametersConfig(hyperparametersData)
+
     ExperimentModelConfig(
-      modelType = modelType
+      modelType = modelType,
+      hyperparameters = hyperparametersConfig
     )
   }
 
@@ -246,15 +251,10 @@ object ConfigurationLoader {
       evaluationMetric = gridSearchData("evaluationMetric").toString
     )
 
-    // Parse hyperparameters
-    val hyperparametersData = trainData("hyperparameters").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
-    val hyperparametersConfig = parseHyperparametersConfig(hyperparametersData)
-
     TrainConfig(
       trainRatio = trainRatio,
       crossValidation = crossValidationConfig,
-      gridSearch = gridSearchConfig,
-      hyperparameters = hyperparametersConfig
+      gridSearch = gridSearchConfig
     )
   }
 

@@ -44,6 +44,14 @@ experiments:
 
     model:
       modelType: "randomforest"
+      hyperparameters:
+        numTrees: [50]
+        maxDepth: [5]
+        maxBins: 32
+        minInstancesPerNode: 1
+        subsamplingRate: 1.0
+        featureSubsetStrategy: "auto"
+        impurity: "gini"
 
     train:
       trainRatio: 0.8
@@ -55,14 +63,7 @@ experiments:
         enabled: true
         evaluationMetric: "f1"
 
-      hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
-        impurity: "gini"
+
 
   # =========================================================================
   # Experiment 5:

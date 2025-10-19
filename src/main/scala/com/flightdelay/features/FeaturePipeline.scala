@@ -76,7 +76,7 @@ object FeaturePipeline {
     println(s"  - Path: $explodedDataPath")
     println(s"  - Records: ${dataForML.count()}")
 
-    dataForML.coalesce(8)
+    dataForML.coalesce(100)
       .write
       .mode("overwrite")
       .option("compression", "zstd")
@@ -136,7 +136,7 @@ object FeaturePipeline {
       println(s"  - Path: $joinedParquetPath")
 
       // Coalesce to reduce number of output files (improves write performance)
-      cachedJoinedData.coalesce(8)
+      cachedJoinedData.coalesce(100)
         .write
         .mode("overwrite")
         .option("compression", "zstd")  // Better compression than snappy
@@ -243,7 +243,7 @@ object FeaturePipeline {
       println(s"  - Exploded records: ${explodedCount}")
 
       // Coalesce to reduce number of output files
-      cachedResult.coalesce(8)
+      cachedResult.coalesce(100)
         .write
         .mode("overwrite")
         .option("compression", "zstd")  // Better compression
