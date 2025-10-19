@@ -234,7 +234,7 @@ object FeaturePipeline {
 
     // Optionally save exploded data
     if (experimentConfig.featureExtraction.storeExplodeJoinData) {
-      val explodedParquetPath = s"${configuration.common.output.basePath}/${experimentConfig.name}/data/exploded_joined_data.parquet"
+      val explodedParquetPath = s"${configuration.common.output.basePath}/${experimentConfig.name}/data/joined_exploded_data.parquet"
       println(s"\nSaving exploded data to parquet:")
       println(s"  - Path: $explodedParquetPath")
 

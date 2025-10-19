@@ -30,9 +30,9 @@ object FlightDelayPredictionApp {
 
     val appStartTime = System.currentTimeMillis()
 
-    println("\n" + "=" * 80)
+    println("\n" + "=" * 160)
     println("Flight Delay Prediction App Starting...")
-    println("=" * 80)
+    println("=" * 160)
 
     implicit val configuration: AppConfiguration = ConfigurationLoader.loadConfiguration(args)
     println(s"Configuration '${configuration.environment}' loaded successfully")
@@ -74,6 +74,8 @@ object FlightDelayPredictionApp {
       // =====================================================================================
       val (flightData, weatherData) = if (tasks.contains("data-pipeline")) {
         val (flights, weather) = DataPipeline.execute()
+        println("\n[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... ")
+
         println(f"\n- Final Flights dataset: ${flights.count()}%,d records with ${flights.columns.length}%3d columns")
         weather match {
           case Some(w) =>
@@ -83,8 +85,8 @@ object FlightDelayPredictionApp {
         }
         (flights, weather)
       } else {
-        println("\n[STEP 1] Data pipeline (load & preprocess)... SKIPPED")
-        println("\n[STEP 1] Loading preprocessed data from parquet...")
+        println("\n[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... SKIPPED")
+        println("\n- Loading preprocessed data from parquet...")
         val flights = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_flights.parquet")
 
         // Check if ANY ENABLED experiment needs weather data
@@ -186,7 +188,7 @@ object FlightDelayPredictionApp {
     // =====================================================================================
     if (tasks.contains("train")) {
       println("\n" + "-" * 80)
-      println(s"[STEP 3] Model Training for ${experiment.name}")
+      println(s"[FlightDelayPredictionApp][STEP 3] Model Training for ${experiment.name}")
       println("-" * 80)
 
       // Train model using new MLPipeline (Option B: K-fold + Hold-out)
@@ -202,18 +204,9 @@ object FlightDelayPredictionApp {
       println("-" * 80 + "\n")
 
     } else {
-      println(s"\n[STEP 3] Training model for ${experiment.name}... SKIPPED")
+      println(s"\n[FlightDelayPredictionApp][STEP 3] Training model for ${experiment.name}... SKIPPED")
     }
 
-    // =====================================================================================
-    // STEP 4: Evaluate Model
-    // =====================================================================================
-    if (tasks.contains("evaluate")) {
-      println(s"\n[STEP 4] Evaluating model for ${experiment.name}...")
-      println("⚠ Evaluation not yet implemented")
-    } else {
-      println(s"\n[STEP 4] Evaluating model for ${experiment.name}... SKIPPED")
-    }
   }
 
 }

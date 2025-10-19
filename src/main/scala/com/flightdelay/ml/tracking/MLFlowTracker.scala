@@ -577,6 +577,34 @@ object MLFlowTracker {
   }
 
   /**
+   * Log an artifact (file or directory) to MLFlow with a custom artifact path (subdirectory)
+   *
+   * @param runId Run ID
+   * @param localPath Local file or directory path
+   * @param artifactPath Subdirectory in artifacts (e.g., "metrics", "configuration")
+   */
+  def logArtifactWithPath(runId: String, localPath: String, artifactPath: String): Unit = {
+    if (!enabled || client.isEmpty) return
+
+    Try {
+      val file = new java.io.File(localPath)
+      if (file.exists()) {
+        if (file.isDirectory) {
+          client.get.logArtifacts(runId, file, artifactPath)
+        } else {
+          client.get.logArtifact(runId, file, artifactPath)
+        }
+      } else {
+        println(s"[MLFlow] Warning: Artifact not found: $localPath")
+      }
+    } match {
+      case Success(_) => // Silent success
+      case Failure(e) =>
+        println(s"[MLFlow] Warning: Failed to log artifact $localPath to $artifactPath: ${e.getMessage}")
+    }
+  }
+
+  /**
    * Set a tag on a run
    */
   def setTag(runId: String, key: String, value: String): Unit = {

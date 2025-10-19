@@ -1,0 +1,43 @@
+# Dockerfile.spark-mlflow
+# Custom Spark image with MLFlow support for artifact logging
+# Extends the official Bitnami Spark 3.5.3 image
+
+FROM bitnami/spark:3.5.3
+
+# Switch to root to install packages
+USER root
+
+# Install Python3 and pip (if not already present in base image)
+# The bitnami/spark image already has Python, but we ensure pip is available
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3-pip \
+        python3-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install MLFlow Python package (matching MLFlow server version 3.4.0)
+# This enables artifact logging via the MLFlow CLI
+# Also install visualization libraries for plot generation
+RUN pip3 install --no-cache-dir \
+    mlflow==3.4.0 \
+    matplotlib==3.8.2 \
+    seaborn==0.13.0 \
+    pandas==2.1.4 \
+    numpy==1.26.2 \
+    scikit-learn==1.3.2
+
+# Set matplotlib config directory to writable location
+ENV MPLCONFIGDIR=/tmp/matplotlib
+
+# Verify installation
+RUN python3 -c "import mlflow; print(f'MLFlow {mlflow.__version__} installed successfully')" && \
+    python3 -c "import matplotlib; print(f'Matplotlib {matplotlib.__version__} installed successfully')" && \
+    python3 -c "import seaborn; print(f'Seaborn {seaborn.__version__} installed successfully')"
+
+# Switch back to non-root user for security (bitnami default user is 1001)
+USER 1001
+
+# Inherit the default command from base image
+# For spark-submit: tail -f /dev/null
+# For spark-worker: spark worker startup

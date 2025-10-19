@@ -1,14 +1,13 @@
 #!/bin/bash
 
-# Tasks to execute (comma-separated): load,preprocess,feature-extraction,train,evaluate
+# Tasks to execute (comma-separated): load,preprocess,feature-extraction,train
 # Default: all tasks
 
 #TASKS="${1:-data-pipeline}"
 #TASKS="${1:-data-pipeline,feature-extraction}"
 #TASKS="${1:-data-pipeline,feature-extraction,train}"
-#TASKS="${1:-data-pipeline,feature-extraction,train,evaluate}"
 
-TASKS="${1:-train,evaluate}"
+TASKS="${1:-train}"
 
 spark-submit \
   --master "$SPARK_MASTER_URL" \
