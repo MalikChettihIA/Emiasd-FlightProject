@@ -45,44 +45,49 @@ class ConfigurationBasedFeatureExtractorPipeline(
    */
   private def groupFeaturesByTransformation(data: DataFrame): (Array[String], Array[String], Array[String]) = {
     val availableFeatures = data.columns.toSet - target
-    val weatherDepthHours = featureConfig.weatherDepthHours
+
+    // Separate depth configurations for origin and destination weather features
+    val weatherOriginDepthHours: Int = featureConfig.weatherOriginDepthHours
+    val weatherDestinationDepthHours: Int = featureConfig.weatherDestinationDepthHours
 
     /**
-     * Find all columns that match a feature name pattern
-     * Handles both exact matches and exploded weather features
+     * Finds all columns that match a given feature name pattern.
      *
-     * Example: "feature_weather_severity_index" matches:
-     *   - origin_weather_feature_weather_severity_index-0
-     *   - origin_weather_feature_weather_severity_index-1
-     *   - origin_weather_feature_weather_severity_index-2
-     *   - destination_weather_feature_weather_severity_index-0
-     *   - destination_weather_feature_weather_severity_index-1
-     *   - destination_weather_feature_weather_severity_index-2
+     * Logic:
+     * 1) Try an exact match first (for standard flight-level features).
+     * 2) If not found, try exploded weather features, which can appear as:
+     *      - origin_weather_<featureName>-<index>
+     *      - destination_weather_<featureName>-<index>
+     *    where the index ranges depend on weatherOriginDepthHours and weatherDestinationDepthHours.
+     *
+     * Example:
+     *   featureName = "feature_weather_severity_index" matches:
+     *     - origin_weather_feature_weather_severity_index-0
+     *     - origin_weather_feature_weather_severity_index-1
+     *     - destination_weather_feature_weather_severity_index-0
+     *     - destination_weather_feature_weather_severity_index-1
      */
     def findMatchingColumns(featureName: String): Seq[String] = {
-      // First try exact match (for flight features)
+      // 1) Try exact match first
       if (availableFeatures.contains(featureName)) {
-        Seq(featureName)
-      } else {
-        // Try pattern matching for exploded weather features
-        // Pattern: (origin|destination)_weather_${featureName}-${index}
-        // Index range: 0 to (weatherDepthHours - 1)
-
-        val indices = 0 until weatherDepthHours
-        val patterns = for {
-          prefix <- Seq("origin_weather", "destination_weather")
-          index <- indices
-        } yield s"${prefix}_${featureName}-${index}"
-
-        val matchingCols = patterns.filter(availableFeatures.contains).sorted
-
-        if (matchingCols.nonEmpty) {
-          matchingCols
-        } else {
-          // Feature not found in data - will be silently skipped
-          Seq.empty
-        }
+        return Seq(featureName)
       }
+
+      // 2) Generate exploded weather feature patterns
+      val safeOriginDepth = math.max(0, weatherOriginDepthHours)
+      val safeDestDepth   = math.max(0, weatherDestinationDepthHours)
+
+      val originPatterns =
+        (0 until safeOriginDepth).map(i => s"origin_weather_${featureName}-$i")
+
+      val destPatterns =
+        (0 until safeDestDepth).map(i => s"destination_weather_${featureName}-$i")
+
+      val candidates = originPatterns ++ destPatterns
+      val matching   = candidates.filter(availableFeatures.contains).sorted
+
+      // 3) Return all matching columns (empty sequence if none found)
+      matching
     }
 
     // Filter and group features with pattern matching

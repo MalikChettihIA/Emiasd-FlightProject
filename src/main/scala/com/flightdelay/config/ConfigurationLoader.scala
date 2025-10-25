@@ -132,6 +132,7 @@ object ConfigurationLoader {
     val enabled = expData("enabled").toString.toBoolean
     val target = expData("target").toString
 
+
     // Parse feature extraction
     val featureExtractionData = expData("featureExtraction").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
     val featureExtractionConfig = parseFeatureExtractionConfig(featureExtractionData)
@@ -160,9 +161,15 @@ object ConfigurationLoader {
    */
   private def parseFeatureExtractionConfig(data: Map[String, Any]): FeatureExtractionConfig = {
     val featureType = data("type").toString
+    val dxCol = data("dxCol").toString
+
     val pcaVarianceThreshold = data.get("pcaVarianceThreshold")
       .map(_.toString.toDouble)
       .getOrElse(0.95)
+
+    val delayThresholdMin = data.get("delayThresholdMin")
+      .map(_.toString.toInt)
+      .getOrElse(60)
 
     // Parse storeJoinData (optional, defaults to false)
     val storeJoinData = data.get("storeJoinData")
@@ -174,10 +181,15 @@ object ConfigurationLoader {
       .map(_.toString.toBoolean)
       .getOrElse(false)
 
-    // Parse weatherDepthHours (optional, defaults to 12)
-    val weatherDepthHours = data.get("weatherDepthHours")
+    // Parse weatherDepartureDepthHours (optional, defaults to 0)
+    val weatherOriginDepthHours = data.get("weatherOriginDepthHours")
       .map(_.toString.toInt)
-      .getOrElse(12)
+      .getOrElse(0)
+
+    // Parse weatherArrivalDepthHours (optional, defaults to 0)
+    val weatherDestinationDepthHours = data.get("weatherDestinationDepthHours")
+      .map(_.toString.toInt)
+      .getOrElse(0)
 
     // Parse maxCategoricalCardinality (optional, defaults to 50)
     val maxCategoricalCardinality = data.get("maxCategoricalCardinality")
@@ -206,10 +218,13 @@ object ConfigurationLoader {
 
     FeatureExtractionConfig(
       featureType = featureType,
+      dxCol = dxCol,
+      delayThresholdMin = delayThresholdMin,
       pcaVarianceThreshold = pcaVarianceThreshold,
       storeJoinData = storeJoinData,
       storeExplodeJoinData = storeExplodeJoinData,
-      weatherDepthHours = weatherDepthHours,
+      weatherOriginDepthHours = weatherOriginDepthHours,
+      weatherDestinationDepthHours = weatherDestinationDepthHours,
       maxCategoricalCardinality = maxCategoricalCardinality,
       flightSelectedFeatures = flightSelectedFeatures,
       weatherSelectedFeatures = weatherSelectedFeatures

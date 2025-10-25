@@ -11,9 +11,9 @@ common:
   data:
     basePath: "/data"
     flight:
-      path: "/data/FLIGHT-3Y/Flights/2012*.csv"
+      path: "/data/FLIGHT-3Y/Flights/201201*.csv"
     weather:
-      path: "/data/FLIGHT-3Y/Weather/2012*.txt"
+      path: "/data/FLIGHT-3Y/Weather/201201*.txt"
     airportMapping:
       path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
@@ -33,17 +33,21 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-1-local-flight-data"
+  - name: "Experience-1-D2_60-weatherDepthHours_0-0"
     description: "Baseline Random Forest with hyperparameters tuning"
-    enabled: false
-    target: "label_is_delayed_15min"
+    enabled: true
+    target: "is_delayed"
 
     featureExtraction:
       type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
       storeJoinData: true
       storeExplodeJoinData: true
-      weatherDepthHours: 3
+      weatherOriginDepthHours: 0
+      weatherDestinationDepthHours: 0
       maxCategoricalCardinality: 50
+
       flightSelectedFeatures:
         CRS_DEP_TIME:
           transformation: "None"
@@ -57,14 +61,13 @@ experiments:
           transformation: "None"
         PREV_AIRCRAFT_ARR_DELAY:
           transformation: "None"
+        feature_avg_delay:
+          transformation: "None"
         feature_departure_hour_rounded:
           transformation: "StringIndexer"
         feature_flight_week_of_year:
           transformation: "StringIndexer"
-        feature_proportion_delayed_15min:
-          transformation: "None"
-        feature_avg_delay:
-            transformation: "None"
+
     model:
       modelType: "randomforest"
       hyperparameters:
@@ -77,10 +80,10 @@ experiments:
         impurity: "gini"
 
     train:
-      trainRatio: 0.9
+      trainRatio: 0.75
 
       crossValidation:
-        numFolds: 2
+        numFolds: 5
 
       gridSearch:
         enabled: true
@@ -90,17 +93,21 @@ experiments:
   # Experiment 2:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-2-local-all-data"
+  - name: "Experience-2-D2_60-weatherDepthHours_1-0"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
-    target: "label_is_delayed_15min"
+    target: "is_delayed"
 
     featureExtraction:
       type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
       storeJoinData: true
       storeExplodeJoinData: true
-      weatherDepthHours: 3
+      weatherOriginDepthHours: 1
+      weatherDestinationDepthHours: 0
       maxCategoricalCardinality: 50
+
       flightSelectedFeatures:
         CRS_DEP_TIME:
           transformation: "None"
@@ -114,14 +121,13 @@ experiments:
           transformation: "None"
         PREV_AIRCRAFT_ARR_DELAY:
           transformation: "None"
+        feature_avg_delay:
+          transformation: "None"
         feature_departure_hour_rounded:
           transformation: "StringIndexer"
         feature_flight_week_of_year:
           transformation: "StringIndexer"
-        feature_proportion_delayed_15min:
-          transformation: "None"
-        feature_avg_delay:
-          transformation: "None"
+
       weatherSelectedFeatures:
         feature_weather_severity_index:
           transformation: "None"
@@ -172,19 +178,340 @@ experiments:
     model:
       modelType: "randomforest"
       hyperparameters:
-        numTrees: [20]
+        numTrees: [15]
         maxDepth: [7]
-        maxBins: [256]
+        maxBins: [280]
         minInstancesPerNode: [5]
         subsamplingRate: [1.0]
         featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
         impurity: "gini"
 
     train:
-      trainRatio: 0.9
+      trainRatio: 0.75
 
       crossValidation:
-        numFolds: 2
+        numFolds: 5
+
+      gridSearch:
+        enabled: true
+        evaluationMetric: "f1"
+
+  # =========================================================================
+  # Experiment 3:
+  # Model : RandomForest, feature_selection
+  # =========================================================================
+  - name: "Experience-3-D2_60-weatherDepthHours_3-0"
+    description: "Baseline Random Forest with hyperparameters tuning"
+    enabled: true
+    target: "is_delayed"
+
+    featureExtraction:
+      type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
+      storeJoinData: true
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: 3
+      weatherDestinationDepthHours: 0
+      maxCategoricalCardinality: 50
+
+      flightSelectedFeatures:
+        CRS_DEP_TIME:
+          transformation: "None"
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "StringIndexer"
+        ORIGIN_AIRPORT_ID:
+          transformation: "StringIndexer"
+        DEST_AIRPORT_ID:
+          transformation: "StringIndexer"
+        CRS_ELAPSED_TIME:
+          transformation: "None"
+        PREV_AIRCRAFT_ARR_DELAY:
+          transformation: "None"
+        feature_avg_delay:
+          transformation: "None"
+        feature_departure_hour_rounded:
+          transformation: "StringIndexer"
+        feature_flight_week_of_year:
+          transformation: "StringIndexer"
+
+      weatherSelectedFeatures:
+        feature_weather_severity_index:
+          transformation: "None"
+        feature_is_vfr_conditions:
+          transformation: "None"
+        feature_is_ifr_conditions:
+          transformation: "None"
+        feature_requires_cat_ii:
+          transformation: "None"
+        feature_operations_risk_level:
+          transformation: "None"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_most_critical_sky:
+          transformation: "StringIndexer"
+        feature_lowest_cloud_height:
+          transformation: "None"
+        feature_visibility_risk_score:
+          transformation: "None"
+        weather_intensity:
+          transformation: "StringIndexer"
+        has_thunderstorm:
+          transformation: "None"
+        has_freezing_precip:
+          transformation: "None"
+        has_freezing:
+          transformation: "None"
+        has_precipitation:
+          transformation: "None"
+        has_obscuration:
+          transformation: "None"
+        has_visible_moisture:
+          transformation: "None"
+        has_hazardous:
+          transformation: "None"
+        has_rain:
+          transformation: "None"
+        has_snow:
+          transformation: "None"
+        has_hail:
+          transformation: "None"
+        weather_hazard_level:
+          transformation: "None"
+        Icing_Risk_Flag:
+          transformation: "None"
+        Icing_Risk_Level:
+          transformation: "None"
+    model:
+      modelType: "randomforest"
+      hyperparameters:
+        numTrees: [15]
+        maxDepth: [7]
+        maxBins: [280]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
+        impurity: "gini"
+
+    train:
+      trainRatio: 0.75
+
+      crossValidation:
+        numFolds: 5
+
+      gridSearch:
+        enabled: true
+        evaluationMetric: "f1"
+
+  # =========================================================================
+  # Experiment 4:
+  # Model : RandomForest, feature_selection
+  # =========================================================================
+  - name: "Experience-4-D2_60-weatherDepthHours_7-0"
+    description: "Baseline Random Forest with hyperparameters tuning"
+    enabled: true
+    target: "is_delayed"
+
+    featureExtraction:
+      type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
+      storeJoinData: true
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: 7
+      weatherDestinationDepthHours: 0
+      maxCategoricalCardinality: 50
+
+      flightSelectedFeatures:
+        CRS_DEP_TIME:
+          transformation: "None"
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "StringIndexer"
+        ORIGIN_AIRPORT_ID:
+          transformation: "StringIndexer"
+        DEST_AIRPORT_ID:
+          transformation: "StringIndexer"
+        CRS_ELAPSED_TIME:
+          transformation: "None"
+        PREV_AIRCRAFT_ARR_DELAY:
+          transformation: "None"
+        feature_avg_delay:
+          transformation: "None"
+        feature_departure_hour_rounded:
+          transformation: "StringIndexer"
+        feature_flight_week_of_year:
+          transformation: "StringIndexer"
+
+      weatherSelectedFeatures:
+        feature_weather_severity_index:
+          transformation: "None"
+        feature_is_vfr_conditions:
+          transformation: "None"
+        feature_is_ifr_conditions:
+          transformation: "None"
+        feature_requires_cat_ii:
+          transformation: "None"
+        feature_operations_risk_level:
+          transformation: "None"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_most_critical_sky:
+          transformation: "StringIndexer"
+        feature_lowest_cloud_height:
+          transformation: "None"
+        feature_visibility_risk_score:
+          transformation: "None"
+        weather_intensity:
+          transformation: "StringIndexer"
+        has_thunderstorm:
+          transformation: "None"
+        has_freezing_precip:
+          transformation: "None"
+        has_freezing:
+          transformation: "None"
+        has_precipitation:
+          transformation: "None"
+        has_obscuration:
+          transformation: "None"
+        has_visible_moisture:
+          transformation: "None"
+        has_hazardous:
+          transformation: "None"
+        has_rain:
+          transformation: "None"
+        has_snow:
+          transformation: "None"
+        has_hail:
+          transformation: "None"
+        weather_hazard_level:
+          transformation: "None"
+        Icing_Risk_Flag:
+          transformation: "None"
+        Icing_Risk_Level:
+          transformation: "None"
+    model:
+      modelType: "randomforest"
+      hyperparameters:
+        numTrees: [15]
+        maxDepth: [7]
+        maxBins: [280]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
+        impurity: "gini"
+
+    train:
+      trainRatio: 0.75
+
+      crossValidation:
+        numFolds: 5
+
+      gridSearch:
+        enabled: true
+        evaluationMetric: "f1"
+
+  # =========================================================================
+  # Experiment 5:
+  # Model : RandomForest, feature_selection
+  # =========================================================================
+  - name: "Experience-5-D2_60-weatherDepthHours_11-0"
+    description: "Baseline Random Forest with hyperparameters tuning"
+    enabled: true
+    target: "is_delayed"
+
+    featureExtraction:
+      type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
+      storeJoinData: true
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: 11
+      weatherDestinationDepthHours: 0
+      maxCategoricalCardinality: 50
+
+      flightSelectedFeatures:
+        CRS_DEP_TIME:
+          transformation: "None"
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "StringIndexer"
+        ORIGIN_AIRPORT_ID:
+          transformation: "StringIndexer"
+        DEST_AIRPORT_ID:
+          transformation: "StringIndexer"
+        CRS_ELAPSED_TIME:
+          transformation: "None"
+        PREV_AIRCRAFT_ARR_DELAY:
+          transformation: "None"
+        feature_avg_delay:
+          transformation: "None"
+        feature_departure_hour_rounded:
+          transformation: "StringIndexer"
+        feature_flight_week_of_year:
+          transformation: "StringIndexer"
+
+      weatherSelectedFeatures:
+        feature_weather_severity_index:
+          transformation: "None"
+        feature_is_vfr_conditions:
+          transformation: "None"
+        feature_is_ifr_conditions:
+          transformation: "None"
+        feature_requires_cat_ii:
+          transformation: "None"
+        feature_operations_risk_level:
+          transformation: "None"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_most_critical_sky:
+          transformation: "StringIndexer"
+        feature_lowest_cloud_height:
+          transformation: "None"
+        feature_visibility_risk_score:
+          transformation: "None"
+        weather_intensity:
+          transformation: "StringIndexer"
+        has_thunderstorm:
+          transformation: "None"
+        has_freezing_precip:
+          transformation: "None"
+        has_freezing:
+          transformation: "None"
+        has_precipitation:
+          transformation: "None"
+        has_obscuration:
+          transformation: "None"
+        has_visible_moisture:
+          transformation: "None"
+        has_hazardous:
+          transformation: "None"
+        has_rain:
+          transformation: "None"
+        has_snow:
+          transformation: "None"
+        has_hail:
+          transformation: "None"
+        weather_hazard_level:
+          transformation: "None"
+        Icing_Risk_Flag:
+          transformation: "None"
+        Icing_Risk_Level:
+          transformation: "None"
+    model:
+      modelType: "randomforest"
+      hyperparameters:
+        numTrees: [15]
+        maxDepth: [7]
+        maxBins: [280]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
+        impurity: "gini"
+
+    train:
+      trainRatio: 0.75
+
+      crossValidation:
+        numFolds: 5
 
       gridSearch:
         enabled: true

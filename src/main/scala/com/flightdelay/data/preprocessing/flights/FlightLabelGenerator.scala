@@ -103,16 +103,16 @@ object FlightLabelGenerator extends DataPreprocessor {
     println("")
     println("Phase 2: Adding basic labels for different thresholds")
     /**println("- Add label_is_delayed_15min")
-    println("- Add label_is_delayed_30min")
-    println("- Add label_is_delayed_45min")
-    println("- Add label_is_delayed_60min")
-    println("- Add label_is_delayed_90min")
-    println("- Add label_has_weather_delay")
-    println("- Add label_has_nas_delay")
-    println("- Add label_has_any_weather_nas_delay")
-    println("- Add label_total_weather_nas_delay")
-    println("- Add label_is_on_time")
-    println("- Add label_is_early")**/
+     println("- Add label_is_delayed_30min")
+     println("- Add label_is_delayed_45min")
+     println("- Add label_is_delayed_60min")
+     println("- Add label_is_delayed_90min")
+     println("- Add label_has_weather_delay")
+     println("- Add label_has_nas_delay")
+     println("- Add label_has_any_weather_nas_delay")
+     println("- Add label_total_weather_nas_delay")
+     println("- Add label_is_on_time")
+     println("- Add label_is_early")**/
 
 
     val columnExpressions = Map[String, Column](

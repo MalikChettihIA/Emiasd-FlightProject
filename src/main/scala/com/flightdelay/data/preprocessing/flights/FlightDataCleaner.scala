@@ -36,11 +36,8 @@ object FlightDataCleaner extends DataPreprocessor {
     // Étape 3: Conversion et validation des types de données
     val typedData = convertAndValidateDataTypes(filteredData)
 
-    // Étape 4: Nettoyage des valeurs aberrantes
-    val cleanedOutliers = cleanFlightOutliers(typedData)
-
     // Étape 5: Validation finale
-    val finalData = performFinalValidation(cleanedOutliers)
+    val finalData = performFinalValidation(typedData)
 
     // Cleaning summary
     logCleaningSummary(rawFlightData, finalData)
@@ -140,36 +137,6 @@ object FlightDataCleaner extends DataPreprocessor {
 
     println(s"  - Current count: ${validDates.count()} records")
     validDates
-  }
-
-  /**
-   * Nettoyage des valeurs aberrantes spécifiques aux vols
-   */
-  private def cleanFlightOutliers(df: DataFrame): DataFrame = {
-    println("\nPhase 4: Outlier Filtering")
-
-    // Clean based on inherited removeOutlier methode
-    val withoutOutliersDf = removeOutliers(
-      df = df,
-      columns = Seq("ARR_DELAY_NEW")
-    )
-
-    // Filter extreme delays (> 10 hours = 600 minutes)
-    println("  - Filtering delays > 600 minutes")
-    val reasonableDelays = withoutOutliersDf.filter(
-      col("ARR_DELAY_NEW").isNull ||
-        col("ARR_DELAY_NEW") <= 600
-    )
-
-    // Filter invalid flight times (between 10 minutes and 24 hours)
-    println("  - Filtering flight times (10 min - 24 hours)")
-    val validFlightTimes = reasonableDelays.filter(
-      col("CRS_ELAPSED_TIME").isNull ||
-        (col("CRS_ELAPSED_TIME") >= 10 && col("CRS_ELAPSED_TIME") <= 1440)
-    )
-
-    println(s"  - Current count: ${validFlightTimes.count()} records")
-    validFlightTimes
   }
 
   /**

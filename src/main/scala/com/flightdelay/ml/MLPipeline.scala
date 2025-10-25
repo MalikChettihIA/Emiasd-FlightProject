@@ -2,6 +2,7 @@ package com.flightdelay.ml
 
 import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import com.flightdelay.features.FeatureExtractor
+import com.flightdelay.features.balancer.DelayBalancedDatasetBuilder
 import com.flightdelay.ml.evaluation.ModelEvaluator
 import com.flightdelay.ml.evaluation.ModelEvaluator.EvaluationMetrics
 import com.flightdelay.ml.tracking.MLFlowTracker
@@ -139,9 +140,9 @@ object MLPipeline {
     println("Note: Splitting BEFORE feature extraction to avoid data leakage")
 
     val testRatio = 1.0 - experiment.train.trainRatio
-    val Array(devDataRaw, testDataRaw) = rawData.randomSplit(
-      Array(experiment.train.trainRatio, testRatio),
-      seed = configuration.common.seed
+    val Array(devDataRaw, testDataRaw) = DelayBalancedDatasetBuilder.buildBalancedTrainTest(
+      labeledDf = rawData,
+      trainRatio = experiment.train.trainRatio
     )
 
     println(f"  - Development set: ${devDataRaw.count()}%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
@@ -262,7 +263,9 @@ object MLPipeline {
         "test_precision" -> holdOutMetrics.precision,
         "test_recall" -> holdOutMetrics.recall,
         "test_f1" -> holdOutMetrics.f1Score,
-        "test_auc" -> holdOutMetrics.areaUnderROC
+        "test_auc" -> holdOutMetrics.areaUnderROC,
+        "test_recall_delayed" -> holdOutMetrics.recallDelayed,
+        "test_recall_ontime" -> holdOutMetrics.recallOnTime
       ))
     }
 
@@ -431,6 +434,8 @@ object MLPipeline {
     println(f"     Recall    : ${holdOutMetrics.recall * 100}%6.2f%%")
     println(f"     F1-Score  : ${holdOutMetrics.f1Score * 100}%6.2f%%")
     println(f"     AUC-ROC   : ${holdOutMetrics.areaUnderROC}%6.4f")
+    println(f"     RECd      : ${holdOutMetrics.recallDelayed * 100}%6.2f%%  (Recall Delayed)")
+    println(f"     RECo      : ${holdOutMetrics.recallOnTime * 100}%6.2f%%  (Recall On-time)")
 
     // Display confusion matrix
     println(s"\n   Confusion Matrix (Test Set):")
@@ -494,6 +499,8 @@ object MLPipeline {
       Seq("f1_score", f"${holdOutMetrics.f1Score}%.6f"),
       Seq("auc_roc", f"${holdOutMetrics.areaUnderROC}%.6f"),
       Seq("auc_pr", f"${holdOutMetrics.areaUnderPR}%.6f"),
+      Seq("recall_delayed", f"${holdOutMetrics.recallDelayed}%.6f"),
+      Seq("recall_ontime", f"${holdOutMetrics.recallOnTime}%.6f"),
       Seq("true_positives", holdOutMetrics.truePositives.toString),
       Seq("true_negatives", holdOutMetrics.trueNegatives.toString),
       Seq("false_positives", holdOutMetrics.falsePositives.toString),
@@ -609,6 +616,8 @@ object MLPipeline {
     summary.append(f"  Recall:       ${holdOutMetrics.recall * 100}%6.2f%%\n")
     summary.append(f"  F1-Score:     ${holdOutMetrics.f1Score * 100}%6.2f%%\n")
     summary.append(f"  AUC-ROC:      ${holdOutMetrics.areaUnderROC}%6.4f\n")
+    summary.append(f"  RECd:         ${holdOutMetrics.recallDelayed * 100}%6.2f%%  (Recall Delayed)\n")
+    summary.append(f"  RECo:         ${holdOutMetrics.recallOnTime * 100}%6.2f%%  (Recall On-time)\n")
     summary.append("\n")
 
     // Confusion Matrix

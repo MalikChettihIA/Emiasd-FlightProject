@@ -1,7 +1,7 @@
 package com.flightdelay.features
 
 import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
-import com.flightdelay.data.loaders.FlightDataLoader
+import com.flightdelay.features.balancer.DelayBalancedDatasetBuilder
 import com.flightdelay.features.joiners.FlightWeatherDataJoiner
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -9,7 +9,7 @@ object FeaturePipeline {
 
   def execute(
     flightData: DataFrame,
-    weatherData: Option[DataFrame],
+    weatherData: DataFrame,
     experiment: ExperimentConfig,
   )(implicit spark: SparkSession, configuration: AppConfiguration): String = {
 
@@ -21,15 +21,27 @@ object FeaturePipeline {
     println("Note: Feature extraction will be done after train/test split to avoid data leakage")
     println("=" * 80)
 
+    // Balance Flight Dataset
+    val labeledFlightData =  DelayBalancedDatasetBuilder.prepareLabeledDataset(
+      df = flightData,
+      dxCol = experiment.featureExtraction.dxCol,
+      delayThresholdMin = experiment.featureExtraction.delayThresholdMin,
+      filterOnDxEquals1 = false  // Keep both delayed and on-time flights
+    )
+
     // Conditional: Join and explode only if weather data is provided
-    val dataForML = weatherData match {
-      case Some(weather) =>
+    val weatherOriginDepthHours = experiment.featureExtraction.weatherOriginDepthHours
+    val weatherDestinationDepthHours = experiment.featureExtraction.weatherDestinationDepthHours
+    val weatherTotalDepthHours = weatherOriginDepthHours + weatherDestinationDepthHours
+
+    val dataForML = if (weatherTotalDepthHours > 0) {
+
         println("\n[Mode] Weather features enabled - performing join and explode")
 
         // Jointure des données
         println("\n[Step 1/2] Join flight & Weather data...")
         var stepStartTime = System.currentTimeMillis()
-        val joinedData = join(flightData, weather, experiment)
+        val joinedData = join(labeledFlightData, weatherData, experiment)
         var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
         println(s"[Step 1/2] Join Completed in ${stepDuration}s")
 
@@ -42,7 +54,7 @@ object FeaturePipeline {
 
         explodedData
 
-      case None =>
+    } else {
         println("\n⚠️  Weather features disabled - using flight data only (no join, no explode)")
 
         // Just select flight features + target
@@ -56,10 +68,10 @@ object FeaturePipeline {
           }
         }.getOrElse {
           // If no flight features specified, use all columns
-          flightData.columns.toSeq
+          labeledFlightData.columns.toSeq
         }
 
-        val selectedFlightData = flightData.select(flightFeaturesWithTarget.map(flightData(_)): _*)
+        val selectedFlightData = labeledFlightData.select(flightFeaturesWithTarget.map(labeledFlightData(_)): _*)
         println(s"  - Selected ${flightFeaturesWithTarget.length} flight features")
 
         // Cache the data
@@ -100,6 +112,14 @@ object FeaturePipeline {
     // Jointure des données
     println("\nJoining flight and weather data...")
 
+    val weatherOriginDepthHours = experimentConfig.featureExtraction.weatherOriginDepthHours
+    val weatherDestinationDepthHours = experimentConfig.featureExtraction.weatherDestinationDepthHours
+    val weatherTotalDepthHours = weatherOriginDepthHours + weatherDestinationDepthHours
+    if(weatherTotalDepthHours == 0) {
+      println("WeatherTotalDepthHours is 0, flightData is returned")
+      return flightData
+    }
+
     val stepStartTime = System.currentTimeMillis()
 
     // Add target column to flight features if not already present
@@ -116,7 +136,8 @@ object FeaturePipeline {
     val joinedData = FlightWeatherDataJoiner.joinFlightsWithWeather(
       flightData,
       weatherData,
-      weatherDepthHours = experimentConfig.featureExtraction.weatherDepthHours,
+      weatherOriginDepthHours= experimentConfig.featureExtraction.weatherOriginDepthHours,
+      weatherDestinationDepthHours= experimentConfig.featureExtraction.weatherDestinationDepthHours,
       removeLeakageColumns = true,
       flightFeaturesWithTarget,
       experimentConfig.featureExtraction.weatherSelectedFeatures.map(_.keys.toSeq))
@@ -151,6 +172,14 @@ object FeaturePipeline {
 
     import org.apache.spark.sql.functions._
 
+    val weatherOriginDepthHours = experimentConfig.featureExtraction.weatherOriginDepthHours
+    val weatherDestinationDepthHours = experimentConfig.featureExtraction.weatherDestinationDepthHours
+    val weatherTotalDepthHours = weatherOriginDepthHours + weatherDestinationDepthHours
+    if(weatherTotalDepthHours == 0) {
+      println("WeatherTotalDepthHours is 0, flightData is returned")
+      return data
+    }
+
     // Get weather feature names from config, or auto-detect from schema
     val weatherFeatures: Seq[String] = experimentConfig.featureExtraction.weatherSelectedFeatures match {
       case Some(featuresMap) =>
@@ -179,11 +208,10 @@ object FeaturePipeline {
         }
     }
 
-    val weatherDepthHours = experimentConfig.featureExtraction.weatherDepthHours
-
     println(s"\nExploding weather observation arrays:")
     println(s"  - Weather features: ${weatherFeatures.mkString(", ")}")
-    println(s"  - Depth hours: $weatherDepthHours observations")
+    println(s"  - Depth Origin hours: $weatherOriginDepthHours observations")
+    println(s"  - Depth Destination hours: $weatherDestinationDepthHours observations")
     println(s"  - Input columns: ${data.columns.length}")
 
     var result = data
@@ -193,8 +221,8 @@ object FeaturePipeline {
     // Pattern: origin_weather_SkyCondition-11, origin_weather_Visibility-11, ..., origin_weather_SkyCondition-0, origin_weather_Visibility-0
     // Mapping: array[0] (oldest) → suffix -11, array[11] (most recent) → suffix -0
     if (data.columns.contains("origin_weather_observations")) {
-      (0 until weatherDepthHours).foreach { arrayIdx =>
-        val suffixIdx = weatherDepthHours - 1 - arrayIdx  // Reverse: array[0]→-11, array[11]→-0
+      (0 until weatherOriginDepthHours).foreach { arrayIdx =>
+        val suffixIdx = weatherOriginDepthHours - 1 - arrayIdx  // Reverse: array[0]→-11, array[11]→-0
         weatherFeatures.foreach { feature =>
           result = result.withColumn(
             s"origin_weather_${feature}-${suffixIdx}",
@@ -204,14 +232,14 @@ object FeaturePipeline {
         }
       }
       result = result.drop("origin_weather_observations")
-      println(s"  - Exploded origin_weather_observations into ${weatherDepthHours * weatherFeatures.length} columns")
+      println(s"  - Exploded origin_weather_observations into ${weatherOriginDepthHours * weatherFeatures.length} columns")
     }
 
     // Explode destination_weather_observations
     // Pattern: destination_weather_SkyCondition-11, destination_weather_Visibility-11, ..., destination_weather_SkyCondition-0, destination_weather_Visibility-0
     if (data.columns.contains("destination_weather_observations")) {
-      (0 until weatherDepthHours).foreach { arrayIdx =>
-        val suffixIdx = weatherDepthHours - 1 - arrayIdx  // Reverse: array[0]→-11, array[11]→-0
+      (0 until weatherDestinationDepthHours).foreach { arrayIdx =>
+        val suffixIdx = weatherDestinationDepthHours - 1 - arrayIdx  // Reverse: array[0]→-11, array[11]→-0
         weatherFeatures.foreach { feature =>
           result = result.withColumn(
             s"destination_weather_${feature}-${suffixIdx}",
@@ -221,12 +249,11 @@ object FeaturePipeline {
         }
       }
       result = result.drop("destination_weather_observations")
-      println(s"  - Exploded destination_weather_observations into ${weatherDepthHours * weatherFeatures.length} columns")
+      println(s"  - Exploded destination_weather_observations into ${weatherDestinationDepthHours * weatherFeatures.length} columns")
     }
 
     println(s"  - Total added columns: ${totalAddedColumns}")
     println(s"  - Output columns: ${result.columns.length}")
-    println(s"  - Column organization: grouped by index (${weatherDepthHours-1} to 0)")
 
     // OPTIMIZATION: Cache exploded data before any action (count or save)
     println("  - Caching exploded data...")

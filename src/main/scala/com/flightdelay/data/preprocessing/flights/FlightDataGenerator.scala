@@ -56,21 +56,6 @@ object FlightDataGenerator extends DataPreprocessor {
   def addTemporalFeatures(df: DataFrame): DataFrame = {
     println("")
     println("Phase 1: Add Temporal Features")
-    /**println("- Add feature_flight_timestamp")
-    println("- Add feature_flight_year")
-    println("- Add feature_flight_month")
-    println("- Add feature_flight_quarter")
-    println("- Add feature_flight_day_of_month")
-    println("- Add feature_flight_day_of_week")
-    println("- Add feature_flight_day_of_year")
-    println("- Add feature_flight_week_of_year")
-    println("- Add feature_departure_hour")
-    println("- Add feature_departure_minute")
-    println("- Add feature_departure_hour_decimal")
-    println("- Add feature_departure_quarter_day")
-    println("- Add feature_departure_quarter_name")
-    println("- Add feature_departure_time_period")
-    println("- Add feature_minutes_since_midnight")**/
 
     val columnExpressions = Map[String, Column](
       // Conversion de la date en timestamp

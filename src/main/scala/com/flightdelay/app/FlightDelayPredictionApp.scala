@@ -44,6 +44,7 @@ object FlightDelayPredictionApp {
       .config("spark.sql.adaptive.enabled", "true")
       .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
       .getOrCreate()
+
     //Set CheckPoint Dir
     spark.sparkContext.setCheckpointDir(s"${configuration.common.output.basePath}/spark-checkpoints")
     // Réduire les logs pour plus de clarté
@@ -61,7 +62,7 @@ object FlightDelayPredictionApp {
     val tasks = if (args.length > 1) {
       args(1).split(",").map(_.trim.toLowerCase).toSet
     } else {
-      Set("data-pipeline", "feature-extraction", "train", "evaluate")
+      Set("data-pipeline", "feature-extraction", "train")
     }
 
     println(s"Tasks to execute: ${tasks.mkString(", ")}")
@@ -75,32 +76,17 @@ object FlightDelayPredictionApp {
       val (flightData, weatherData) = if (tasks.contains("data-pipeline")) {
         val (flights, weather) = DataPipeline.execute()
         println("\n[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... ")
-
         println(f"\n- Final Flights dataset: ${flights.count()}%,d records with ${flights.columns.length}%3d columns")
-        weather match {
-          case Some(w) =>
-            println(f"\n- Final Weather dataset: ${w.count()}%,d records with ${w.columns.length}%3d columns")
-          case None =>
-            println(f"\n- Weather data: DISABLED (no weather features configured)")
-        }
+        println(f"\n- Final Weather dataset: ${weather.count()}%,d records with ${weather.columns.length}%3d columns")
+
         (flights, weather)
       } else {
         println("\n[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... SKIPPED")
         println("\n- Loading preprocessed data from parquet...")
         val flights = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_flights.parquet")
-
-        // Check if ANY ENABLED experiment needs weather data
-        val isWeatherNeeded = configuration.enabledExperiments.exists(_.featureExtraction.isWeatherEnabled)
-        val weather = if (isWeatherNeeded) {
-          val w = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_weather.parquet")
-          println(f"- Loaded Weather: ${w.count()}%,d records")
-          Some(w)
-        } else {
-          println(f"- Weather data: SKIPPED (no weather features configured)")
-          None
-        }
-
+        val weather = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_weather.parquet")
         println(f"- Loaded Flights: ${flights.count()}%,d records")
+        println(f"- Loaded Weathers: ${weather.count()}%,d records")
         (flights, weather)
       }
 
@@ -112,7 +98,6 @@ object FlightDelayPredictionApp {
         println(s"EXPERIMENT ${index + 1}/${enabledExperiments.length}: ${experiment.name}")
         println("=" * 80)
         println(s"Description: ${experiment.description}")
-        println(s"Target: ${experiment.target}")
         println(s"Model Type: ${experiment.model.modelType}")
         println(s"Feature Extraction: ${experiment.featureExtraction.featureType}")
         println("=" * 80 + "\n")
@@ -164,7 +149,7 @@ object FlightDelayPredictionApp {
     experiment: ExperimentConfig,
     tasks: Set[String],
     flightData: DataFrame,
-    weatherData: Option[DataFrame]
+    weatherData: DataFrame
   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
     // =====================================================================================
@@ -198,8 +183,11 @@ object FlightDelayPredictionApp {
       println("\n" + "-" * 80)
       println("Training Summary")
       println("-" * 80)
+      println(f"Accuracy:          ${mlResult.holdOutMetrics.accuracy * 100}%6.2f%%")
       println(f"CV F1-Score:       ${mlResult.cvMetrics.avgF1 * 100}%6.2f%% ± ${mlResult.cvMetrics.stdF1 * 100}%.2f%%")
       println(f"Hold-out F1-Score: ${mlResult.holdOutMetrics.f1Score * 100}%6.2f%%")
+      println(f"RECd (Delayed):    ${mlResult.holdOutMetrics.recallDelayed * 100}%6.2f%%")
+      println(f"RECo (On-time):    ${mlResult.holdOutMetrics.recallOnTime * 100}%6.2f%%")
       println(f"Training time:     ${mlResult.trainingTimeSeconds}%.2f seconds")
       println("-" * 80 + "\n")
 

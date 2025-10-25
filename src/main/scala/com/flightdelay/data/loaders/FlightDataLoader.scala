@@ -2,12 +2,9 @@ package com.flightdelay.data.loaders
 
 import com.flightdelay.config.AppConfiguration
 import com.flightdelay.data.models.Flight
-import io.netty.handler.codec.http2.Http2FrameWriter.Configuration
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.functions._
-
-import scala.util.{Failure, Success, Try}
 
 /**
  * Data loader specifically designed for flight data
@@ -76,7 +73,6 @@ object FlightDataLoader extends DataLoader[Flight] {
     loadFromFilePath(filePath, validate, Some(outputPath))
   }
 
-
   /**
    * Load flight data with full preprocessing and transformation
    * @param filePath Path to CSV input file
@@ -91,42 +87,33 @@ object FlightDataLoader extends DataLoader[Flight] {
     println("=" * 80)
 
     // Check if Parquet file exists and load from it if available
-    val rawDf = outputPath match {
-      case Some(parquetPath) if parquetFileExists(parquetPath) =>
-        println(s"\nLoading from existing Parquet file:")
-        println(s"  - Path: $parquetPath")
-        val df = spark.read.parquet(parquetPath)
-        val count = df.count
-        println(s"  - Loaded $count records from Parquet (optimized)")
-        df
+    val rawDf = {
+      println(s"\nLoading from CSV file:")
+      println(s"  - Path: $filePath")
+      val df = spark.read.format("csv")
+        .option("header", "true")
+        .schema(expectedSchema)
+        .option("timestampFormat", DEFAULT_DATE_FORMAT)
+        .option("multiline", "true")
+        .option("escape", "\"")
+        .load(filePath)
+        .withColumn("FL_DATE", to_date(col("FL_DATE"), DEFAULT_DATE_FORMAT))
 
-      case _ =>
-        println(s"\nLoading from CSV file:")
-        println(s"  - Path: $filePath")
-        val df = spark.read.format("csv")
-          .option("header", "true")
-          .schema(expectedSchema)
-          .option("timestampFormat", DEFAULT_DATE_FORMAT)
-          .option("multiline", "true")
-          .option("escape", "\"")
-          .load(filePath)
-          .withColumn("FL_DATE", to_date(col("FL_DATE"), DEFAULT_DATE_FORMAT))
+      val count = df.count
+      println(s"  - Loaded $count records from CSV")
 
-        val count = df.count
-        println(s"  - Loaded $count records from CSV")
+      // Save as Parquet for future use
+      outputPath.foreach { path =>
+        println(s"\nSaving to Parquet format:")
+        println(s"  - Path: $path")
+        df.write
+          .mode("overwrite")
+          .option("compression", "snappy")
+          .parquet(path)
+        println(s"  - Saved $count records to Parquet")
+      }
 
-        // Save as Parquet for future use
-        outputPath.foreach { path =>
-          println(s"\nSaving to Parquet format:")
-          println(s"  - Path: $path")
-          df.write
-            .mode("overwrite")
-            .option("compression", "snappy")
-            .parquet(path)
-          println(s"  - Saved $count records to Parquet")
-        }
-
-        df
+      df
     }
 
     println("\nSchema:")
@@ -136,19 +123,6 @@ object FlightDataLoader extends DataLoader[Flight] {
       println("! Schema validation failed")
 
     rawDf
-  }
-
-  /**
-   * Check if Parquet file exists
-   */
-  private def parquetFileExists(path: String)(implicit spark: SparkSession): Boolean = {
-    try {
-      val fs = org.apache.hadoop.fs.FileSystem.get(spark.sparkContext.hadoopConfiguration)
-      val exists = fs.exists(new org.apache.hadoop.fs.Path(path))
-      exists
-    } catch {
-      case _: Exception => false
-    }
   }
 
   // ===========================================================================================

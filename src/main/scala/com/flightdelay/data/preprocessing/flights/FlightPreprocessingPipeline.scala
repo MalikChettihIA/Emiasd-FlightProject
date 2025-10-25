@@ -35,8 +35,11 @@ object FlightPreprocessingPipeline {
     println("\n[Pipeline Step 1/9] Cleaning flight data...")
     val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
 
+    println("[Pipeline Step 2/9] Enriching with Datasets ...")
+    val enrichedWithDataset = FlightDataSetFilterGenerator.preprocess(cleanedFlightData)
+
     println("[Pipeline Step 2/9] Enriching with WBAN...")
-    val enrichedWithWBAN = FlightWBANEnricher.preprocess(cleanedFlightData)
+    val enrichedWithWBAN = FlightWBANEnricher.preprocess(enrichedWithDataset)
 
     println("[Pipeline Step 3/9] Generating arrival data...")
     val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithWBAN)
@@ -76,15 +79,12 @@ object FlightPreprocessingPipeline {
     checkpointed3.count()
     logMemoryUsage("After avg delay")
 
-    println("[Pipeline Step 8/9] Balancing data...")
-    val finalCleanedData = FlightDataBalancer.preprocess(checkpointed3)
-
     // Validate schema
     println("[Pipeline Step 9/9] Validating schema...")
-    validatePreprocessedSchema(finalCleanedData)
+    validatePreprocessedSchema(checkpointed3)
 
     // ⭐ OPTIMIZED WRITE STRATEGY
-    writeFlightDataSafely(finalCleanedData, processedParquetPath)
+    writeFlightDataSafely(checkpointed3, processedParquetPath)
 
     // Cleanup checkpoints
     checkpointed1.unpersist()

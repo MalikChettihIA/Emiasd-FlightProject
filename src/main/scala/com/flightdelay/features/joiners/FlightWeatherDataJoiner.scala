@@ -10,7 +10,8 @@ object FlightWeatherDataJoiner {
    *
    * @param flightDF DataFrame des vols
    * @param weatherDF DataFrame météo
-   * @param weatherDepthHours Nombre d'heures d'observations météo à récupérer avant le vol (par défaut: 12)
+   * @param weatherOriginDepthHours Nombre d'heures d'observations météo à récupérer avant le vol (par défaut: 0)
+   * @param weatherDestinationDepthHours Nombre d'heures d'observations météo à récupérer avant le vol (par défaut: 0)
    * @param removeLeakageColumns Si true, supprime automatiquement les colonnes qui causent du data leakage (par défaut: false)
    * @param selectedFlightColumns Colonnes du DataFrame vols à conserver (si None, toutes les colonnes)
    * @param selectedWeatherColumns Colonnes du DataFrame météo à inclure dans les observations (si None, toutes les colonnes)
@@ -19,21 +20,29 @@ object FlightWeatherDataJoiner {
   def joinFlightsWithWeather(
                               flightDF: DataFrame,
                               weatherDF: DataFrame,
-                              weatherDepthHours: Int = 12,
+                              weatherOriginDepthHours: Int = 0,
+                              weatherDestinationDepthHours: Int = 0,
                               removeLeakageColumns: Boolean = true,
                               selectedFlightColumns: Option[Seq[String]] = None,
                               selectedWeatherColumns: Option[Seq[String]] = None
                             ): DataFrame = {
 
-    require(weatherDepthHours > 0 && weatherDepthHours <= 24,
-      s"weatherDepthHours doit être entre 1 et 24, valeur fournie: $weatherDepthHours")
+    require(weatherOriginDepthHours >= 0 && weatherOriginDepthHours <= 11,
+      s"weatherOriginDepthHours doit être entre 0 et 11, valeur fournie: $weatherOriginDepthHours")
+
+    require(weatherDestinationDepthHours >= 0 && weatherDestinationDepthHours <= 11,
+      s"weatherDestinationDepthHours doit être entre 0 et 11, valeur fournie: $weatherDestinationDepthHours")
+
+    if(weatherOriginDepthHours+weatherDestinationDepthHours == 0){
+      flightDF
+    }
 
     // Première jointure : aéroport d'origine
     val withOriginWeather = joinWeatherForAirport(
       flightDF,
       weatherDF,
       "origin",
-      weatherDepthHours,
+      weatherOriginDepthHours,
       selectedFlightColumns,
       selectedWeatherColumns
     )
@@ -43,7 +52,7 @@ object FlightWeatherDataJoiner {
       withOriginWeather,
       weatherDF,
       "destination",
-      weatherDepthHours,
+      weatherDestinationDepthHours,
       selectedFlightColumns,
       selectedWeatherColumns
     )
@@ -75,7 +84,6 @@ object FlightWeatherDataJoiner {
                               ): DataFrame = {
 
     val leakagePatterns = Set(
-      "DEP_TIME",
       "DEP_DELAY",
       "DEP_DELAY_NEW",
       "ARR_TIME",
@@ -208,8 +216,8 @@ object FlightWeatherDataJoiner {
       "airportType doit être 'origin' ou 'destination'"
     )
 
-    require(weatherDepthHours > 0 && weatherDepthHours <= 24,
-      s"weatherDepthHours doit être entre 1 et 24, valeur fournie: $weatherDepthHours")
+    require(weatherDepthHours >= 0 && weatherDepthHours <= 11,
+      s"weatherDepthHours doit être entre 0 et 11, valeur fournie: $weatherDepthHours")
 
     import flightDF.sparkSession.implicits._
 

@@ -471,6 +471,87 @@ def plot_hyperparameters_summary(metrics, output_dir):
     print(f"✓ Saved: {output_file}")
     plt.close()
 
+def plot_per_class_recall(metrics, output_dir):
+    """Plot RECd (Recall Delayed) and RECo (Recall On-time) comparison"""
+    if 'holdout' not in metrics:
+        print("✗ No hold-out data found for per-class recall")
+        return
+
+    holdout_df = metrics['holdout']
+
+    try:
+        # Extract recall values for both classes
+        recall_delayed = float(holdout_df[holdout_df['metric'] == 'recall_delayed']['value'].values[0])
+        recall_ontime = float(holdout_df[holdout_df['metric'] == 'recall_ontime']['value'].values[0])
+    except Exception as e:
+        print(f"✗ Could not extract per-class recall: {e}")
+        return
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3))
+
+    # Plot 1: Bar chart comparison
+    classes = ['Delayed\n(Class 1)', 'On-time\n(Class 0)']
+    recalls = [recall_delayed * 100, recall_ontime * 100]
+    colors = ['#e74c3c', '#2ecc71']
+
+    bars = ax1.bar(classes, recalls, color=colors, alpha=0.8, edgecolor='black', linewidth=2)
+
+    # Add value labels
+    for bar, recall in zip(bars, recalls):
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2., height + 1,
+                f'{recall:.2f}%',
+                ha='center', va='bottom', fontsize=7, fontweight='bold')
+
+    ax1.set_ylabel('Recall (%)', fontweight='bold', fontsize=7)
+    ax1.set_title('Per-Class Recall Comparison', fontsize=8, fontweight='bold')
+    ax1.set_ylim([0, 105])
+    ax1.grid(axis='y', alpha=0.3)
+    ax1.axhline(y=50, color='gray', linestyle='--', linewidth=1, alpha=0.5, label='50% baseline')
+    ax1.legend(fontsize=6)
+
+    # Add performance assessment
+    avg_recall = (recall_delayed + recall_ontime) / 2
+    if avg_recall >= 80:
+        performance = "Excellent"
+        color = '#2ecc71'
+    elif avg_recall >= 70:
+        performance = "Good"
+        color = '#f39c12'
+    else:
+        performance = "Needs Improvement"
+        color = '#e74c3c'
+
+    textstr = f'Average: {avg_recall:.2f}%\nBalance: {performance}'
+    props = dict(boxstyle='round', facecolor=color, alpha=0.3, edgecolor=color, linewidth=2)
+    ax1.text(0.98, 0.98, textstr, transform=ax1.transAxes, fontsize=6,
+            verticalalignment='top', horizontalalignment='right',
+            bbox=props, fontweight='bold')
+
+    # Plot 2: Donut chart for visual representation
+    recalls_data = [recall_delayed, recall_ontime]
+    recalls_labels = [f'RECd\n{recall_delayed*100:.1f}%', f'RECo\n{recall_ontime*100:.1f}%']
+
+    wedges, texts, autotexts = ax2.pie(recalls_data, labels=recalls_labels,
+                                         colors=colors, autopct='',
+                                         startangle=90, wedgeprops=dict(width=0.5, edgecolor='white', linewidth=2))
+
+    for text in texts:
+        text.set_fontsize(7)
+        text.set_fontweight('bold')
+
+    ax2.set_title('Recall Distribution by Class', fontsize=8, fontweight='bold')
+
+    # Add center text
+    ax2.text(0, 0, f'Balanced\nRecall', ha='center', va='center',
+            fontsize=7, fontweight='bold', color='#34495e')
+
+    plt.tight_layout()
+    output_file = output_dir / "per_class_recall.png"
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    print(f"✓ Saved: {output_file}")
+    plt.close()
+
 def plot_roc_curve(metrics, output_dir):
     """Plot ROC curve from hold-out test set predictions"""
     if 'roc_data' not in metrics:
@@ -638,8 +719,10 @@ def generate_comprehensive_report(metrics, output_dir):
         metric_rows = holdout_df[~holdout_df['metric'].str.contains('positive|negative')]
         for _, row in metric_rows.iterrows():
             value = float(row['value'])
-            if row['metric'] in ['accuracy', 'precision', 'recall', 'f1_score', 'auc_roc', 'auc_pr']:
-                report.append(f"  {row['metric']:20s}: {value*100:>8.2f}%")
+            if row['metric'] in ['accuracy', 'precision', 'recall', 'f1_score', 'auc_roc', 'auc_pr',
+                                  'recall_delayed', 'recall_ontime']:
+                metric_name = row['metric'].replace('recall_delayed', 'RECd (Delayed)').replace('recall_ontime', 'RECo (On-time)')
+                report.append(f"  {metric_name:20s}: {value*100:>8.2f}%")
             else:
                 report.append(f"  {row['metric']:20s}: {value:>8.4f}")
         report.append("")
@@ -776,6 +859,7 @@ def main():
     plot_box_plot_stability(metrics, output_dir)
     plot_confusion_matrix_holdout(metrics, output_dir)
     plot_metrics_radar(metrics, output_dir)
+    plot_per_class_recall(metrics, output_dir)
     plot_hyperparameters_summary(metrics, output_dir)
     plot_roc_curve(metrics, output_dir)
 
@@ -793,6 +877,7 @@ def main():
     print("  - cv_stability_boxplot.png       : Stability analysis (box plots)")
     print("  - confusion_matrix_holdout.png   : Confusion matrix (counts & normalized)")
     print("  - metrics_radar.png              : Performance radar chart")
+    print("  - per_class_recall.png           : Per-class recall (RECd & RECo)")
     print("  - roc_curve_holdout.png          : ROC curve with optimal threshold")
     print("  - best_hyperparameters.png       : Best hyperparameters (if available)")
     print("  - ml_pipeline_report.txt         : Comprehensive text report")
