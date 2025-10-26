@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "--> Build Spark job..."
-sbt package
+sbt clean package
 echo "--> Spark job built."
 
 echo "--> Submitting Spark job..."

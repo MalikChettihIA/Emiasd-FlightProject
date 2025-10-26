@@ -10,8 +10,14 @@ object FlightWeatherDataJoiner {
    *
    * @param flightDF DataFrame des vols
    * @param weatherDF DataFrame météo
-   * @param weatherOriginDepthHours Nombre d'heures d'observations météo à récupérer avant le vol (par défaut: 0)
-   * @param weatherDestinationDepthHours Nombre d'heures d'observations météo à récupérer avant le vol (par défaut: 0)
+   * @param weatherOriginDepthHours Nombre d'heures d'observations météo à récupérer avant le vol
+   *                                - Valeur négative : pas de jointure météo pour l'origine
+   *                                - 0 : jointure à l'heure exacte du départ
+   *                                - >0 : jointure avec historique (max 11)
+   * @param weatherDestinationDepthHours Nombre d'heures d'observations météo à récupérer avant le vol
+   *                                     - Valeur négative : pas de jointure météo pour la destination
+   *                                     - 0 : jointure à l'heure exacte de l'arrivée
+   *                                     - >0 : jointure avec historique (max 11)
    * @param removeLeakageColumns Si true, supprime automatiquement les colonnes qui causent du data leakage (par défaut: false)
    * @param selectedFlightColumns Colonnes du DataFrame vols à conserver (si None, toutes les colonnes)
    * @param selectedWeatherColumns Colonnes du DataFrame météo à inclure dans les observations (si None, toutes les colonnes)
@@ -27,45 +33,73 @@ object FlightWeatherDataJoiner {
                               selectedWeatherColumns: Option[Seq[String]] = None
                             ): DataFrame = {
 
-    require(weatherOriginDepthHours >= 0 && weatherOriginDepthHours <= 11,
-      s"weatherOriginDepthHours doit être entre 0 et 11, valeur fournie: $weatherOriginDepthHours")
+    // Validation : valeurs négatives acceptées (= pas de jointure), sinon max 11
+    require(weatherOriginDepthHours <= 11,
+      s"weatherOriginDepthHours doit être <= 11 (ou négatif pour désactiver), valeur fournie: $weatherOriginDepthHours")
 
-    require(weatherDestinationDepthHours >= 0 && weatherDestinationDepthHours <= 11,
-      s"weatherDestinationDepthHours doit être entre 0 et 11, valeur fournie: $weatherDestinationDepthHours")
+    require(weatherDestinationDepthHours <= 11,
+      s"weatherDestinationDepthHours doit être <= 11 (ou négatif pour désactiver), valeur fournie: $weatherDestinationDepthHours")
 
-    if(weatherOriginDepthHours+weatherDestinationDepthHours == 0){
+    // Si les deux sont négatifs, pas de jointure du tout
+    if (weatherOriginDepthHours < 0 && weatherDestinationDepthHours < 0) {
+      println("[FlightWeatherJoiner] ⚠️  Both weatherOriginDepthHours and weatherDestinationDepthHours are negative - NO weather join")
+      return flightDF
+    }
+
+    // Première jointure : aéroport d'origine (seulement si >= 0)
+    val withOriginWeather = if (weatherOriginDepthHours >= 0) {
+      joinWeatherForAirport(
+        flightDF,
+        weatherDF,
+        "origin",
+        weatherOriginDepthHours,
+        selectedFlightColumns,
+        selectedWeatherColumns
+      )
+    } else {
+      println(s"[FlightWeatherJoiner] Skipping origin weather join (weatherOriginDepthHours=$weatherOriginDepthHours)")
       flightDF
     }
 
-    // Première jointure : aéroport d'origine
-    val withOriginWeather = joinWeatherForAirport(
-      flightDF,
-      weatherDF,
-      "origin",
-      weatherOriginDepthHours,
-      selectedFlightColumns,
-      selectedWeatherColumns
-    )
+    // Deuxième jointure : aéroport de destination (seulement si >= 0)
+    val withBothWeather = if (weatherDestinationDepthHours >= 0) {
+      joinWeatherForAirport(
+        withOriginWeather,
+        weatherDF,
+        "destination",
+        weatherDestinationDepthHours,
+        selectedFlightColumns,
+        selectedWeatherColumns
+      )
+    } else {
+      println(s"[FlightWeatherJoiner] Skipping destination weather join (weatherDestinationDepthHours=$weatherDestinationDepthHours)")
+      withOriginWeather
+    }
 
-    // Deuxième jointure : aéroport de destination
-    val withBothWeather = joinWeatherForAirport(
-      withOriginWeather,
-      weatherDF,
-      "destination",
-      weatherDestinationDepthHours,
-      selectedFlightColumns,
-      selectedWeatherColumns
-    )
+    // Supprimer les colonnes météo non désirées basées sur les valeurs négatives
+    var finalResult = withBothWeather
+
+    // Si weatherOriginDepthHours < 0, supprimer origin_weather_observations si elle existe
+    if (weatherOriginDepthHours < 0 && finalResult.columns.contains("origin_weather_observations")) {
+      println(s"[FlightWeatherJoiner] Removing origin_weather_observations column (weatherOriginDepthHours=$weatherOriginDepthHours)")
+      finalResult = finalResult.drop("origin_weather_observations")
+    }
+
+    // Si weatherDestinationDepthHours < 0, supprimer destination_weather_observations si elle existe
+    if (weatherDestinationDepthHours < 0 && finalResult.columns.contains("destination_weather_observations")) {
+      println(s"[FlightWeatherJoiner] Removing destination_weather_observations column (weatherDestinationDepthHours=$weatherDestinationDepthHours)")
+      finalResult = finalResult.drop("destination_weather_observations")
+    }
 
     // Supprimer les colonnes de leakage si demandé
     if (removeLeakageColumns) {
       removeDataLeakageColumns(
-        withBothWeather,
+        finalResult,
         keepRelativeTime = removeLeakageColumns,  // ou true si tu veux garder hours_before_flight
         selectedWeatherColumns = selectedWeatherColumns
       )
     } else {
-      withBothWeather
+      finalResult
     }
   }
 
@@ -201,6 +235,9 @@ object FlightWeatherDataJoiner {
   }
   /**
    * Jointure spatio-temporelle pour UN aéroport (origine OU destination)
+   *
+   * Note: Cette fonction ne doit être appelée que si weatherDepthHours >= 0
+   *       (les valeurs négatives sont gérées dans joinFlightsWithWeather)
    */
   def joinWeatherForAirport(
                              flightDF: DataFrame,
@@ -217,7 +254,7 @@ object FlightWeatherDataJoiner {
     )
 
     require(weatherDepthHours >= 0 && weatherDepthHours <= 11,
-      s"weatherDepthHours doit être entre 0 et 11, valeur fournie: $weatherDepthHours")
+      s"weatherDepthHours doit être entre 0 et 11, valeur fournie: $weatherDepthHours (utilisez des valeurs négatives dans joinFlightsWithWeather pour désactiver)")
 
     import flightDF.sparkSession.implicits._
 

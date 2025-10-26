@@ -23,6 +23,13 @@ object WeatherTypeFeatureGenerator extends Serializable {
         when(col("WeatherType").startsWith("+"), "heavy")
           .when(col("WeatherType").startsWith("-"), "light")
           .otherwise("moderate"))
+      // Version ordinale de l'intensité des précipitations (-1, 0, +1)
+      // Plus pratique pour les modèles ML que deux colonnes binaires séparées
+      .withColumn("feature_precipitation_intensity",
+        when(col("WeatherType").startsWith("+"), lit(1))   // Heavy precipitation (+)
+          .when(col("WeatherType").startsWith("-"), lit(-1))  // Light precipitation (-)
+          .otherwise(lit(0))  // Moderate precipitation (no prefix)
+          .cast(IntegerType))
 
       // 2. ORAGE (TS)
       .withColumn("has_thunderstorm",

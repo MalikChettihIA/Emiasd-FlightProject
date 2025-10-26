@@ -101,6 +101,9 @@ object MLPipeline {
     println(s"  - Path: $joinedDataPath")
     val rawData = spark.read.parquet(joinedDataPath)
     println(f"  - Loaded ${rawData.count()}%,d records")
+    println(f"  - Schema")
+    rawData.printSchema()
+
 
     val startTime = System.currentTimeMillis()
 

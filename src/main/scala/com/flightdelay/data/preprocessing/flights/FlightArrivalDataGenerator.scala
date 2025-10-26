@@ -146,6 +146,17 @@ object FlightArrivalDataGenerator {
       .withColumn("feature_utc_arrival_date",
         date_format(col("UTC_ARR_DATE"), "yyyy-MM-dd")
       )
+      // Période de temps de l'arrivée (8 périodes de 3h)
+      .withColumn("feature_arrival_time_period",
+        when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(3), "Late_Night")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(6), "Early_Morning")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(9), "Morning")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(12), "Late_Morning")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(15), "Early_Afternoon")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(18), "Late_Afternoon")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(21), "Evening")
+          .otherwise("Night")
+      )
       // Indicateur si le vol traverse minuit (en temps local)
       .withColumn("feature_crosses_midnight_local",
         when(col("CRS_ARR_DATE") > col("FL_DATE"), 1).otherwise(0)

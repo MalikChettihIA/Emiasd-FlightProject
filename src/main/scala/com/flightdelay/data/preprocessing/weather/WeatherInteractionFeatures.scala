@@ -73,6 +73,37 @@ object WeatherInteractionFeatures {
           .otherwise(lit(0))                       // None
       )
 
+      // 6. Flight Category selon les règles officielles FAA
+      // Combine visibility ET ceiling height pour déterminer les conditions de vol
+      // Règles : utilise OR pour visibilité et plafond (la condition la plus restrictive s'applique)
+      .withColumn("feature_flight_category",
+        when(
+          (col("feature_visibility_miles") < 1.0) ||
+          (col("feature_ceiling") < 500),
+          lit("LIFR")  // Low Instrument Flight Rules - Conditions les plus sévères
+        )
+        .when(
+          (col("feature_visibility_miles") < 3.0) ||
+          (col("feature_ceiling") < 1000),
+          lit("IFR")  // Instrument Flight Rules - Conditions sévères
+        )
+        .when(
+          (col("feature_visibility_miles") <= 5.0) ||
+          (col("feature_ceiling") <= 3000),
+          lit("MVFR")  // Marginal Visual Flight Rules - Conditions modérées
+        )
+        .otherwise(lit("VFR"))  // Visual Flight Rules - Bonnes conditions
+      )
+
+      // 7. Version ordinale de Flight Category pour les modèles ML
+      // Plus le score est élevé, plus les conditions sont sévères
+      .withColumn("feature_flight_category_ordinal",
+        when(col("feature_flight_category") === "LIFR", lit(3))  // Sévérité maximale
+          .when(col("feature_flight_category") === "IFR", lit(2))
+          .when(col("feature_flight_category") === "MVFR", lit(1))
+          .otherwise(lit(0))  // VFR = sévérité minimale
+      )
+
       // Nettoyer les colonnes temporaires
       .drop("_temp_base_score", "_temp_ceiling_penalty", "_temp_visibility_penalty")
   }

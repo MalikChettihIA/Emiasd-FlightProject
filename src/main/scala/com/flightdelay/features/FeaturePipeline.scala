@@ -29,14 +29,19 @@ object FeaturePipeline {
       filterOnDxEquals1 = false  // Keep both delayed and on-time flights
     )
 
-    // Conditional: Join and explode only if weather data is provided
+    // Conditional: Join and explode only if weather data is needed
     val weatherOriginDepthHours = experiment.featureExtraction.weatherOriginDepthHours
     val weatherDestinationDepthHours = experiment.featureExtraction.weatherDestinationDepthHours
-    val weatherTotalDepthHours = weatherOriginDepthHours + weatherDestinationDepthHours
 
-    val dataForML = if (weatherTotalDepthHours > 0) {
+    // Weather join is enabled if at least one depth is >= 0
+    // Negative values explicitly disable weather join for that airport
+    val weatherJoinEnabled = weatherOriginDepthHours >= 0 || weatherDestinationDepthHours >= 0
+
+    val dataForML = if (weatherJoinEnabled) {
 
         println("\n[Mode] Weather features enabled - performing join and explode")
+        println(s"  - Origin depth: $weatherOriginDepthHours hours ${if (weatherOriginDepthHours < 0) "(DISABLED)" else ""}")
+        println(s"  - Destination depth: $weatherDestinationDepthHours hours ${if (weatherDestinationDepthHours < 0) "(DISABLED)" else ""}")
 
         // Jointure des données
         println("\n[Step 1/2] Join flight & Weather data...")
@@ -114,9 +119,10 @@ object FeaturePipeline {
 
     val weatherOriginDepthHours = experimentConfig.featureExtraction.weatherOriginDepthHours
     val weatherDestinationDepthHours = experimentConfig.featureExtraction.weatherDestinationDepthHours
-    val weatherTotalDepthHours = weatherOriginDepthHours + weatherDestinationDepthHours
-    if(weatherTotalDepthHours == 0) {
-      println("WeatherTotalDepthHours is 0, flightData is returned")
+
+    // Check if weather join should be skipped (both negative)
+    if (weatherOriginDepthHours < 0 && weatherDestinationDepthHours < 0) {
+      println("⚠️  Both weather depth values are negative - NO weather join, returning flight data only")
       return flightData
     }
 
@@ -174,9 +180,10 @@ object FeaturePipeline {
 
     val weatherOriginDepthHours = experimentConfig.featureExtraction.weatherOriginDepthHours
     val weatherDestinationDepthHours = experimentConfig.featureExtraction.weatherDestinationDepthHours
-    val weatherTotalDepthHours = weatherOriginDepthHours + weatherDestinationDepthHours
-    if(weatherTotalDepthHours == 0) {
-      println("WeatherTotalDepthHours is 0, flightData is returned")
+
+    // Check if both are negative (no weather data at all)
+    if (weatherOriginDepthHours < 0 && weatherDestinationDepthHours < 0) {
+      println("⚠️  Both weather depth values are negative - NO weather explosion needed")
       return data
     }
 
@@ -210,19 +217,20 @@ object FeaturePipeline {
 
     println(s"\nExploding weather observation arrays:")
     println(s"  - Weather features: ${weatherFeatures.mkString(", ")}")
-    println(s"  - Depth Origin hours: $weatherOriginDepthHours observations")
-    println(s"  - Depth Destination hours: $weatherDestinationDepthHours observations")
+    println(s"  - Depth Origin hours: $weatherOriginDepthHours observations ${if (weatherOriginDepthHours < 0) "(DISABLED)" else ""}")
+    println(s"  - Depth Destination hours: $weatherDestinationDepthHours observations ${if (weatherDestinationDepthHours < 0) "(DISABLED)" else ""}")
     println(s"  - Input columns: ${data.columns.length}")
 
     var result = data
     var totalAddedColumns = 0
 
-    // Explode origin_weather_observations
-    // Pattern: origin_weather_SkyCondition-11, origin_weather_Visibility-11, ..., origin_weather_SkyCondition-0, origin_weather_Visibility-0
-    // Mapping: array[0] (oldest) → suffix -11, array[11] (most recent) → suffix -0
-    if (data.columns.contains("origin_weather_observations")) {
-      (0 until weatherOriginDepthHours).foreach { arrayIdx =>
-        val suffixIdx = weatherOriginDepthHours - 1 - arrayIdx  // Reverse: array[0]→-11, array[11]→-0
+    // Explode origin_weather_observations (only if depth >= 0 and column exists)
+    // Pattern: origin_weather_SkyCondition-3, origin_weather_Visibility-3, ..., origin_weather_SkyCondition-0, origin_weather_Visibility-0
+    // Mapping: array[0] (oldest) → suffix -N, array[N] (most recent) → suffix -0
+    // Example: depth=3 → 4 observations [0, 1, 2, 3] = heure départ, départ-1, départ-2, départ-3
+    if (weatherOriginDepthHours >= 0 && data.columns.contains("origin_weather_observations")) {
+      (0 to weatherOriginDepthHours).foreach { arrayIdx =>
+        val suffixIdx = weatherOriginDepthHours - arrayIdx  // Reverse: array[0]→-N, array[N]→-0
         weatherFeatures.foreach { feature =>
           result = result.withColumn(
             s"origin_weather_${feature}-${suffixIdx}",
@@ -232,14 +240,19 @@ object FeaturePipeline {
         }
       }
       result = result.drop("origin_weather_observations")
-      println(s"  - Exploded origin_weather_observations into ${weatherOriginDepthHours * weatherFeatures.length} columns")
+      val numObs = weatherOriginDepthHours + 1
+      println(s"  - Exploded origin_weather_observations into ${numObs * weatherFeatures.length} columns ($numObs observations)")
+    } else if (weatherOriginDepthHours < 0) {
+      println(s"  - Skipped origin_weather_observations explosion (disabled)")
     }
 
-    // Explode destination_weather_observations
-    // Pattern: destination_weather_SkyCondition-11, destination_weather_Visibility-11, ..., destination_weather_SkyCondition-0, destination_weather_Visibility-0
-    if (data.columns.contains("destination_weather_observations")) {
-      (0 until weatherDestinationDepthHours).foreach { arrayIdx =>
-        val suffixIdx = weatherDestinationDepthHours - 1 - arrayIdx  // Reverse: array[0]→-11, array[11]→-0
+    // Explode destination_weather_observations (only if depth >= 0 and column exists)
+    // Pattern: destination_weather_SkyCondition-3, destination_weather_Visibility-3, ..., destination_weather_SkyCondition-0, destination_weather_Visibility-0
+    // Mapping: array[0] (oldest) → suffix -N, array[N] (most recent) → suffix -0
+    // Example: depth=3 → 4 observations [0, 1, 2, 3] = heure arrivée, arrivée-1, arrivée-2, arrivée-3
+    if (weatherDestinationDepthHours >= 0 && data.columns.contains("destination_weather_observations")) {
+      (0 to weatherDestinationDepthHours).foreach { arrayIdx =>
+        val suffixIdx = weatherDestinationDepthHours - arrayIdx  // Reverse: array[0]→-N, array[N]→-0
         weatherFeatures.foreach { feature =>
           result = result.withColumn(
             s"destination_weather_${feature}-${suffixIdx}",
@@ -249,7 +262,21 @@ object FeaturePipeline {
         }
       }
       result = result.drop("destination_weather_observations")
-      println(s"  - Exploded destination_weather_observations into ${weatherDestinationDepthHours * weatherFeatures.length} columns")
+      val numObs = weatherDestinationDepthHours + 1
+      println(s"  - Exploded destination_weather_observations into ${numObs * weatherFeatures.length} columns ($numObs observations)")
+    } else if (weatherDestinationDepthHours < 0) {
+      println(s"  - Skipped destination_weather_observations explosion (disabled)")
+    }
+
+    // Cleanup: supprimer les colonnes weather_observations restantes si les valeurs sont négatives
+    if (weatherOriginDepthHours < 0 && result.columns.contains("origin_weather_observations")) {
+      println(s"  - Removing origin_weather_observations (depth=$weatherOriginDepthHours)")
+      result = result.drop("origin_weather_observations")
+    }
+
+    if (weatherDestinationDepthHours < 0 && result.columns.contains("destination_weather_observations")) {
+      println(s"  - Removing destination_weather_observations (depth=$weatherDestinationDepthHours)")
+      result = result.drop("destination_weather_observations")
     }
 
     println(s"  - Total added columns: ${totalAddedColumns}")
