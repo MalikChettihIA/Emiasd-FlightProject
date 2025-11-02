@@ -11,9 +11,9 @@ common:
   data:
     basePath: "/home/jovyan/work/data"
     flight:
-      path: "/home/jovyan/work/data/FLIGHT-3Y/Flights/201201*.csv"
+      path: "/home/jovyan/work/data/FLIGHT-3Y/Flights/*.csv"
     weather:
-      path: "/home/jovyan/work/data/FLIGHT-3Y/Weather/201201*.txt"
+      path: "/home/jovyan/work/data/FLIGHT-3Y/Weather/*.txt"
     airportMapping:
       path: "/home/jovyan/work/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
