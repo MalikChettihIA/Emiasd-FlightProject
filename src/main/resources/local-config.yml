@@ -30,127 +30,44 @@ common:
 experiments:
 
   # =========================================================================
-  # Experiment Test:
+  # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-Test"
+  - name: "Experience-1-D2_60-weatherDepthHours_0-0"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
 
     featureExtraction:
       type: "feature_selection"
-      dxCol: "D4"
+      dxCol: "D2_60"
       delayThresholdMin: 60
       storeJoinData: false
       storeExplodeJoinData: true
-      weatherOriginDepthHours: 7
-      weatherDestinationDepthHours: 7
+      weatherOriginDepthHours: -1
+      weatherDestinationDepthHours: -1
       maxCategoricalCardinality: 50
 
       flightSelectedFeatures:
-        FL_DATE:
-          transformation: "None"
-        OP_CARRIER_AIRLINE_ID:
-          transformation: "None"
-        OP_CARRIER_FL_NUM:
-          transformation: "None"
-        ORIGIN_AIRPORT_ID:
-          transformation: "None"
-        DEST_AIRPORT_ID:
-          transformation: "None"
         CRS_DEP_TIME:
           transformation: "None"
-        ARR_DELAY_NEW:
-          transformation: "None"
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "StringIndexer"
+        ORIGIN_AIRPORT_ID:
+          transformation: "StringIndexer"
+        DEST_AIRPORT_ID:
+          transformation: "StringIndexer"
         CRS_ELAPSED_TIME:
           transformation: "None"
-        WEATHER_DELAY:
+        PREV_AIRCRAFT_ARR_DELAY:
           transformation: "None"
-        NAS_DELAY:
+        feature_avg_delay:
           transformation: "None"
+        feature_departure_hour_rounded:
+          transformation: "StringIndexer"
+        feature_flight_week_of_year:
+          transformation: "StringIndexer"
 
-      weatherSelectedFeatures:
-        SkyCondition:
-          transformation: "None"
-        SkyConditionFlag:
-          transformation: "None"
-        Visibility:
-          transformation: "None"
-        VisibilityFlag:
-          transformation: "None"
-        WeatherType:
-          transformation: "None"
-        WeatherTypeFlag:
-          transformation: "None"
-        DryBulbFarenheit:
-          transformation: "None"
-        DryBulbFarenheitFlag:
-          transformation: "None"
-        DryBulbCelsius:
-          transformation: "None"
-        DryBulbCelsiusFlag:
-          transformation: "None"
-        WetBulbFarenheit:
-          transformation: "None"
-        WetBulbFarenheitFlag:
-          transformation: "None"
-        WetBulbCelsius:
-          transformation: "None"
-        WetBulbCelsiusFlag:
-          transformation: "None"
-        DewPointFarenheit:
-          transformation: "None"
-        DewPointFarenheitFlag:
-          transformation: "None"
-        DewPointCelsius:
-          transformation: "None"
-        DewPointCelsiusFlag:
-          transformation: "None"
-        RelativeHumidity:
-          transformation: "None"
-        RelativeHumidityFlag:
-          transformation: "None"
-        WindSpeed:
-          transformation: "None"
-        WindSpeedFlag:
-          transformation: "None"
-        WindDirection:
-          transformation: "None"
-        WindDirectionFlag:
-          transformation: "None"
-        ValueForWindCharacter:
-          transformation: "None"
-        ValueForWindCharacterFlag:
-          transformation: "None"
-        StationPressure:
-          transformation: "None"
-        StationPressureFlag:
-          transformation: "None"
-        PressureTendency:
-          transformation: "None"
-        PressureTendencyFlag:
-          transformation: "None"
-        PressureChange:
-          transformation: "None"
-        PressureChangeFlag:
-          transformation: "None"
-        SeaLevelPressure:
-          transformation: "None"
-        SeaLevelPressureFlag:
-          transformation: "None"
-        RecordType:
-          transformation: "None"
-        RecordTypeFlag:
-          transformation: "None"
-        HourlyPrecip:
-          transformation: "None"
-        HourlyPrecipFlag:
-          transformation: "None"
-        Altimeter:
-          transformation: "None"
-        AltimeterFlag:
-          transformation: "None"
     model:
       modelType: "randomforest"
       hyperparameters:
@@ -171,4 +88,3 @@ experiments:
       gridSearch:
         enabled: true
         evaluationMetric: "f1"
-
