@@ -55,7 +55,7 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
     // Ajouter D2_<seuil>
     val dfWithD2 = D2_THRESHOLDS_MINUTES.foldLeft(baseDf) { (acc, thr) =>
       val colName = s"D2_$thr"
-      val d2col = when((wthr > 0) && (nas >= thr), 1).otherwise(0)
+      val d2col = when((wthr > 0) && (nas >= thr) && (abs(arr - (wthr + nas)) <= epsilon), 1).otherwise(0)
       acc.withColumn(colName, d2col)
     }
 

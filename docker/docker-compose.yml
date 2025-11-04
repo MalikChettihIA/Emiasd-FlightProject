@@ -3,7 +3,7 @@ services:
   # Spark Master
   # ============================================================================
   spark-master:
-    image: bitnami/spark:3.5.3
+    image: bitnamilegacy/spark:3.5.3
     container_name: spark-master
     hostname: spark-master
     environment:
