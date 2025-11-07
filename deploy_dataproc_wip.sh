@@ -23,7 +23,7 @@ echo "Starting deployment with managed cluster..."
 
 # 1. Build JAR
 echo "1. Building JAR..."
-sbt clean assembly
+sbt clean package
 echo "✓ Built"
 
 # 2. Upload JARs
@@ -56,11 +56,17 @@ else
     echo "  No existing template found"
 fi
 
-# 6. Create workflow template
-echo "6. Creating workflow template..."
-gcloud dataproc workflow-templates create $WORKFLOW_NAME \
+# 6. Create workflow template (idempotent)
+echo "6. Creating workflow template (idempotent)..."
+if gcloud dataproc workflow-templates describe $WORKFLOW_NAME \
     --region=$REGION \
-    --project=$PROJECT_ID
+    --project=$PROJECT_ID &>/dev/null; then
+    echo "  Template already exists, skipping creation"
+else
+    gcloud dataproc workflow-templates create $WORKFLOW_NAME \
+        --region=$REGION \
+        --project=$PROJECT_ID
+fi
 
 # 7. Configure managed cluster
 echo "7. Configuring managed cluster..."
@@ -74,7 +80,7 @@ gcloud dataproc workflow-templates set-managed-cluster $WORKFLOW_NAME \
     --num-workers=2 \
     --worker-machine-type=n1-standard-8 \
     --worker-boot-disk-size=100GB \
-    --image-version=2.1-debian11
+    --image-version=2.2-debian12
 
 # 8. Add Spark job to template
 echo "8. Adding Spark job..."
