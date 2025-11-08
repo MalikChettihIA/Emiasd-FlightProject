@@ -11,7 +11,8 @@ ZONE="europe-west1-b"
 BUCKET="gs://tough-artwork-475804-h0-flight-data"
 
 # JARs
-APP_JAR="Emiasd-Flight-Data-Analysis-assembly-1.0.jar"
+# Use only the standard sbt package output (non-assembly): work/apps/Emiasd-Flight-Data-Analysis.jar
+APP_JAR="Emiasd-Flight-Data-Analysis.jar"
 MLFLOW_CLIENT_JAR="mlflow-client-3.4.0.jar"
 MLFLOW_SPARK_JAR="mlflow-spark_2.13-3.4.0.jar"
 
@@ -25,7 +26,12 @@ echo "Starting deployment with managed cluster..."
 # 1. Build JAR
 echo "1. Building JAR..."
 sbt clean package
-echo "✓ Built"
+if [ ! -f "./work/apps/$APP_JAR" ]; then
+    echo "[ERROR] Expected application JAR ./work/apps/$APP_JAR not found after build." >&2
+    ls -l ./work/apps 2>/dev/null || echo "(work/apps directory missing)"
+    exit 1
+fi
+echo "✓ Built: $APP_JAR"
 
 # 2. Upload JARs
 echo "2. Uploading JARs..."
@@ -102,7 +108,7 @@ gcloud dataproc workflow-templates set-managed-cluster $WORKFLOW_NAME \
     --zone=$ZONE \
     --master-machine-type=n1-standard-16 \
     --master-boot-disk-size=100GB \
-    --num-workers=2 \
+    --num-workers=4 \
     --worker-machine-type=n1-standard-8 \
     --worker-boot-disk-size=100GB \
     --image-version=2.2-debian12
