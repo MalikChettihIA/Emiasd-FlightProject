@@ -1,6 +1,7 @@
 #!/bin/bash
 
-set -e
+# Safer bash defaults
+set -euo pipefail
 
 # Configuration
 PROJECT_ID="tough-artwork-475804-h0"
@@ -42,31 +43,55 @@ echo "✓ Config uploaded"
 echo "4. Clearing outputs..."
 gsutil -m rm -r $BUCKET/output/ 2>/dev/null || echo "No previous outputs"
 
-# 5. Delete existing workflow template if exists
 echo "5. Preparing workflow template..."
-if gcloud dataproc workflow-templates describe $WORKFLOW_NAME \
-    --region=$REGION \
-    --project=$PROJECT_ID &>/dev/null; then
-    echo "  Deleting existing template..."
-    gcloud dataproc workflow-templates delete $WORKFLOW_NAME \
-        --region=$REGION \
-        --project=$PROJECT_ID \
-        --quiet
-else
-    echo "  No existing template found"
-fi
 
-# 6. Create workflow template (idempotent)
+# Ensure gcloud is authenticated and the right project is selected (best-effort, non-fatal)
+gcloud --version >/dev/null 2>&1 || { echo "gcloud is not installed or not in PATH"; exit 1; }
+gsutil version -l >/dev/null 2>&1 || { echo "gsutil is not installed or not in PATH"; exit 1; }
+
+# Try to set project to avoid context drift after re-auth
+gcloud config set project "$PROJECT_ID" >/dev/null 2>&1 || true
+gcloud config set dataproc/region "$REGION" >/dev/null 2>&1 || true
+
+# Helper: create template; if it already exists (possibly due to delayed auth), delete and recreate
+create_or_recreate_template() {
+    local create_out
+    set +e
+    create_out=$(gcloud dataproc workflow-templates create "$WORKFLOW_NAME" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" 2>&1)
+    local create_rc=$?
+    set -e
+    if [[ $create_rc -eq 0 ]]; then
+        echo "  Template created"
+        return 0
+    fi
+    if echo "$create_out" | grep -q "ALREADY_EXISTS"; then
+        echo "  Template already exists; ensuring clean state (delete → create)"
+        # Delete may fail if not found or due to perms; try once and continue on failure
+        gcloud dataproc workflow-templates delete "$WORKFLOW_NAME" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --quiet >/dev/null 2>&1 || true
+        # Recreate (now that auth context is warmed up)
+        gcloud dataproc workflow-templates create "$WORKFLOW_NAME" \
+            --region="$REGION" \
+            --project="$PROJECT_ID"
+        echo "  Template recreated"
+        return 0
+    fi
+    echo "$create_out"
+    return $create_rc
+}
+
+# First, try to delete quietly to avoid duplicate steps if it exists, ignore errors (e.g., not found or pre-auth)
+gcloud dataproc workflow-templates delete "$WORKFLOW_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --quiet >/dev/null 2>&1 || true
+
 echo "6. Creating workflow template (idempotent)..."
-if gcloud dataproc workflow-templates describe $WORKFLOW_NAME \
-    --region=$REGION \
-    --project=$PROJECT_ID &>/dev/null; then
-    echo "  Template already exists, skipping creation"
-else
-    gcloud dataproc workflow-templates create $WORKFLOW_NAME \
-        --region=$REGION \
-        --project=$PROJECT_ID
-fi
+create_or_recreate_template
 
 # 7. Configure managed cluster
 echo "7. Configuring managed cluster..."
