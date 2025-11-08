@@ -7,7 +7,7 @@
 #TASKS="${1:-data-pipeline,feature-extraction}"
 #TASKS="${1:-data-pipeline,feature-extraction,train}"
 
-TASKS="${1:-data-pipeline,feature-extraction,train}"
+TASKS="${1:-feature-extraction,train}"
 
 spark-submit \
   --master "$SPARK_MASTER_URL" \
@@ -31,4 +31,4 @@ spark-submit \
   --conf spark.memory.storageFraction=0.3 \
   --jars /apps/mlflow-client-3.4.0.jar,/apps/mlflow-spark_2.13-3.4.0.jar \
   /apps/Emiasd-Flight-Data-Analysis.jar \
-  local-d2_60_3_3 "$TASKS"
+  local "$TASKS"

@@ -11,9 +11,9 @@ common:
   data:
     basePath: "/data"
     flight:
-      path: "/data/FLIGHT-3Y/Flights/201201*.csv"
+      path: "/data/FLIGHT-3Y/Flights/*.csv"
     weather:
-      path: "/data/FLIGHT-3Y/Weather/201201*.txt"
+      path: "/data/FLIGHT-3Y/Weather/*.txt"
     airportMapping:
       path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
@@ -66,6 +66,10 @@ experiments:
         feature_departure_hour_rounded:
           transformation: "StringIndexer"
         feature_flight_week_of_year:
+          transformation: "StringIndexer"
+        feature_departure_time_period:
+          transformation: "StringIndexer"
+        feature_arrival_time_period:
           transformation: "StringIndexer"
 
     model:
