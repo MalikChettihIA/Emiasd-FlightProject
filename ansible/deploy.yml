@@ -1,5 +1,5 @@
 ---
-- name: Flight Project - Full Deployment
+- name: Flight Project - Deployment
   hosts: lamsade
   gather_facts: no
   
@@ -7,238 +7,60 @@
     local_project_dir: "/home/nribal/psl/06-flight/02-git/Emiasd-FlightProject"
     cluster_user: "hbalamou"
     workspace: "~/workspace"
-    cluster_workspace: "/opt/cephfs/users/students/p6emiasd2025/{{ cluster_user }}/workspace"
     hdfs_base: "/students/p6emiasd2025/{{ cluster_user }}"
     tasks_to_run: "data-pipeline,feature-extraction,train"
+    ssh_key: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key"
+    ssh_opts: "-p 5022 -o StrictHostKeyChecking=no -o LogLevel=ERROR"
     
   tasks:
-    # 1. Compilation locale (sur la machine locale)
-    - name: Fix permissions on target directory
+    # Compilation
+    - name: Compile with SBT
       delegate_to: localhost
-      file:
-        path: "{{ local_project_dir }}/target"
-        state: directory
-        mode: '0755'
-        recurse: yes
-      ignore_errors: yes
-      tags:
-        - compile
-        - build
+      shell: cd {{ local_project_dir }} && sbt clean package
+      tags: [compile, build]
     
-    - name: Compile with SBT (local)
+    # Déploiement
+    - name: Create remote directories
       delegate_to: localhost
-      shell: |
-        cd {{ local_project_dir }}
-        sbt clean package
-      register: sbt_compile
-      tags:
-        - compile
-        - build
-      
-    - name: Display compilation output
-      debug:
-        var: sbt_compile.stdout_lines
-      when: sbt_compile.stdout is defined
-      tags:
-        - compile
-        - build
-      
-    - name: Check compilation result
-      delegate_to: localhost
-      shell: find {{ local_project_dir }}/work/apps -name "Emiasd-Flight-Data-Analysis.jar"
-      register: jar_files
-      failed_when: jar_files.stdout == ""
-      tags:
-        - compile
-        - build
-      
-    - name: Display JAR files found
-      debug:
-        msg: "JAR found: {{ jar_files.stdout_lines }}"
-      tags:
-        - compile
-        - build
-    
-    # 2. Créer les répertoires distants
-    - name: Create remote directories (using SSH)
-      shell: |
-        ssh -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
-            -p 5022 \
-            -o StrictHostKeyChecking=no \
-            -o LogLevel=ERROR \
-            {{ cluster_user }}@ssh.lamsade.dauphine.fr \
-            "mkdir -p $HOME/workspace/apps $HOME/workspace/config $HOME/workspace/logs"
-      delegate_to: localhost
-      tags:
-        - setup
-        - deploy
+      shell: ssh -i {{ ssh_key }} {{ ssh_opts }} {{ cluster_user }}@ssh.lamsade.dauphine.fr "mkdir -p ~/workspace/{apps,config,logs}"
+      tags: [setup, deploy]
         
-    # 3. Déployer les JAR
-    - name: Find JAR files to deploy
+    - name: Deploy JAR files
       delegate_to: localhost
-      find:
-        paths: "{{ local_project_dir }}/work/apps"
-        patterns: "*.jar"
-      register: jar_files_to_deploy
-      tags:
-        - deploy-jar
-        - deploy
+      shell: scp -i {{ ssh_key }} -P 5022 -o StrictHostKeyChecking=no -o LogLevel=ERROR {{ local_project_dir }}/work/apps/*.jar {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/apps/
+      tags: [deploy]
         
-    - name: Deploy JAR files to cluster (using SCP)
-      shell: |
-        scp -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
-            -P 5022 \
-            -o StrictHostKeyChecking=no \
-            -o LogLevel=ERROR \
-            {{ local_project_dir }}/work/apps/*.jar \
-            {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/apps/
+    - name: Deploy configuration
       delegate_to: localhost
-      tags:
-        - deploy-jar
-        - deploy
-        
-    # 4. Déployer la configuration
-    - name: Deploy configuration file (using SCP)
-      shell: |
-        scp -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
-            -P 5022 \
-            -o StrictHostKeyChecking=no \
-            -o LogLevel=ERROR \
-            {{ local_project_dir }}/src/main/resources/prodlamsade-config.yml \
-            {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/config/prodlamsade-config.yml
-      delegate_to: localhost
-      tags:
-        - deploy-config
-        - deploy
-        
-    # 5. Déployer le répertoire data (si nécessaire)
-    - name: Check if data directory exists locally
-      delegate_to: localhost
-      stat:
-        path: "{{ local_project_dir }}/work/data"
-      register: local_data_dir
-      tags:
-        - deploy-data
-        - data
-      
-    - name: Create remote data directory
-      shell: |
-        ssh -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
-            -p 5022 \
-            -o StrictHostKeyChecking=no \
-            -o LogLevel=ERROR \
-            {{ cluster_user }}@ssh.lamsade.dauphine.fr \
-            "mkdir -p $HOME/workspace/data"
-      delegate_to: localhost
-      when: local_data_dir.stat.exists
-      tags:
-        - deploy-data
-        - data
-      
-    - name: Deploy data directory to remote workspace (using SCP)
-      shell: |
-        scp -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
-            -P 5022 \
-            -o StrictHostKeyChecking=no \
-            -o LogLevel=ERROR \
-            -r {{ local_project_dir }}/work/data/* \
-            {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/data/
-      delegate_to: localhost
-      when: local_data_dir.stat.exists
-      register: scp_result
-      tags:
-        - deploy-data
-        - data
-        
-    - name: Display data deployment result
-      debug:
-        msg: "Data deployed to {{ workspace }}/data/"
-      when: local_data_dir.stat.exists and scp_result.rc == 0
-      tags:
-        - deploy-data
-        - data
-        
-    # 6. Upload data to HDFS
-    - name: Check if HDFS directory exists
-      shell: /opt/shared/hadoop-current/bin/hdfs dfs -test -d {{ hdfs_base }}/data
-      register: hdfs_check
-      failed_when: false
-      changed_when: false
-      tags:
-        - hdfs
-        - data
-      
-    - name: Create HDFS directory if not exists
-      shell: /opt/shared/hadoop-current/bin/hdfs dfs -mkdir -p {{ hdfs_base }}/data
-      when: hdfs_check.rc != 0
-      tags:
-        - hdfs
-        - data
-      
-    - name: Count files in HDFS directory
-      shell: /opt/shared/hadoop-current/bin/hdfs dfs -count {{ hdfs_base }}/data | awk '{print $2}'
-      register: hdfs_file_count
-      changed_when: false
-      when: hdfs_check.rc == 0
-      tags:
-        - hdfs
-        - data
-      
-    - name: Upload data to HDFS
-      shell: |
-        cd $HOME/workspace
-        /opt/shared/hadoop-current/bin/hdfs dfs -put data/* {{ hdfs_base }}/data
-      when: hdfs_check.rc != 0 or (hdfs_file_count.stdout is defined and hdfs_file_count.stdout == "0")
-      tags:
-        - hdfs
-        - data
-      
+      shell: scp -i {{ ssh_key }} -P 5022 -o StrictHostKeyChecking=no -o LogLevel=ERROR {{ local_project_dir }}/src/main/resources/prodlamsade-config.yml {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/config/
+      tags: [deploy]
 
-    # 7. Nettoyer le dossier HDFS output et exécuter Spark directement
-    - name: Clean HDFS output directory on cluster
-      shell: |
-        ssh -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
-            -p 5022 \
-            -o StrictHostKeyChecking=no \
-            -o LogLevel=ERROR \
-            {{ cluster_user }}@ssh.lamsade.dauphine.fr \
-            "/opt/shared/hadoop-current/bin/hdfs dfs -test -d /students/p6emiasd2025/{{ cluster_user }}/output && \
-             /opt/shared/hadoop-current/bin/hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/{{ cluster_user }}/output || \
-             echo 'Output directory does not exist, skipping cleanup'"
+    # Exécution
+    - name: Clean HDFS output directory
       delegate_to: localhost
-      tags:
-        - run
-        - execute
-
-    - name: Run Spark job on cluster in screen session
       shell: |
-        ssh -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
-            -p 5022 \
-            -o StrictHostKeyChecking=no \
-            -o LogLevel=ERROR \
-            {{ cluster_user }}@ssh.lamsade.dauphine.fr \
-            "screen -dmS spark_job bash -c '
-        LOG_DIR=\$HOME/workspace/logs
-        mkdir -p \$LOG_DIR
-        TIMESTAMP=\$(date +%Y%m%d_%H%M%S)
-        LOG_FILE=\$LOG_DIR/flight-app-\${TIMESTAMP}.log
-        LATEST_LOG=\$LOG_DIR/latest.log
+        ssh -i {{ ssh_key }} {{ ssh_opts }} {{ cluster_user }}@ssh.lamsade.dauphine.fr \
+        "/opt/shared/hadoop-current/bin/hdfs dfs -rm -r -skipTrash {{ hdfs_base }}/output 2>/dev/null || true"
+      tags: [run]
+
+    - name: Run Spark job in screen
+      delegate_to: localhost
+      shell: |
+        ssh -i {{ ssh_key }} {{ ssh_opts }} {{ cluster_user }}@ssh.lamsade.dauphine.fr "screen -dmS spark_job bash -c '
+        LOG_DIR=\$HOME/workspace/logs && mkdir -p \$LOG_DIR
+        LOG_FILE=\$LOG_DIR/flight-app-\$(date +%Y%m%d_%H%M%S).log
         /opt/shared/spark-current/bin/spark-submit \
-          --master yarn \
-          --deploy-mode client \
+          --master yarn --deploy-mode client \
           --class com.flightdelay.app.FlightDelayPredictionApp \
           --files \$HOME/workspace/config/prodlamsade-config.yml \
-          --driver-memory 32G \
-          --driver-cores 8 \
-          --executor-memory 8G \
-          --num-executors 6 \
+          --driver-memory 32G --driver-cores 8 \
+          --executor-memory 8G --num-executors 6 \
           --conf spark.driver.maxResultSize=8g \
           --conf spark.sql.shuffle.partitions=400 \
           --conf spark.default.parallelism=400 \
           --conf spark.kryoserializer.buffer.max=1024m \
           --conf spark.memory.fraction=0.8 \
           --conf spark.rpc.message.maxSize=2047 \
-          --conf spark.sql.debug.maxToStringFields=1000 \
           --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
           --conf spark.network.timeout=800s \
           --conf spark.executor.heartbeatInterval=60s \
@@ -248,27 +70,11 @@
           --jars \$HOME/workspace/apps/mlflow-client-3.4.0.jar,\$HOME/workspace/apps/mlflow-spark_2.13-3.4.0.jar \
           \$HOME/workspace/apps/Emiasd-Flight-Data-Analysis.jar \
           prodlamsade {{ tasks_to_run }} 2>&1 | tee \$LOG_FILE
-        ln -sf \$LOG_FILE \$LATEST_LOG
-        ' && echo 'Screen session spark_job started'"
-      delegate_to: localhost
-      register: run_job
-      tags:
-        - run
-        - execute
+        ln -sf \$LOG_FILE \$HOME/workspace/logs/latest.log
+        '"
+      tags: [run]
     
-    - name: Display execution summary
+    - name: Display info
       debug:
-        msg: |
-          Spark job started in screen session 'spark_job'.
-          
-          To attach to the screen session:
-            ssh -i ~/.ssh/id_ed25519_hbalamou.key -p 5022 hbalamou@ssh.lamsade.dauphine.fr -t "screen -r spark_job"
-          
-          To list screen sessions:
-            ssh -i ~/.ssh/id_ed25519_hbalamou.key -p 5022 hbalamou@ssh.lamsade.dauphine.fr "screen -ls"
-          
-          To check logs:
-            ssh -i ~/.ssh/id_ed25519_hbalamou.key -p 5022 hbalamou@ssh.lamsade.dauphine.fr "tail -f ~/workspace/logs/latest.log"
-      tags:
-        - run
-        - execute
+        msg: "Job started in screen 'spark_job'. Logs: ssh {{ cluster_user }}@ssh.lamsade.dauphine.fr tail -f ~/workspace/logs/latest.log"
+      tags: [run]
