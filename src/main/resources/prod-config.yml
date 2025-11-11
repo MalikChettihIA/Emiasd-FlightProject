@@ -53,33 +53,63 @@ common:
 # EXPERIMENTS - Production experiments
 # ============================================================================
 experiments:
-  - name: "prod_rf_pca_cv_60min"
-    description: "Production Random Forest with PCA and CV for 60+ min delays"
+
+  # =========================================================================
+  # Experiment 1:
+  # Model : RandomForest, feature_selection
+  # =========================================================================
+  - name: "Experience-1-D2_60-weatherDepthHours_0-0"
+    description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
-    target: "label_is_delayed_60min"
+    target: "is_delayed"
 
     featureExtraction:
-      type: "pca"
+      type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      pcaVarianceThreshold: 0.7
       storeJoinData: false
-      storeExplodeJoinData: false
-      weatherOriginDepthHours: 0
-      weatherDestinationDepthHours: 0
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: -1
+      weatherDestinationDepthHours: -1
       maxCategoricalCardinality: 50
 
+      flightSelectedFeatures:
+        CRS_DEP_TIME:
+          transformation: "None"
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "StringIndexer"
+        ORIGIN_AIRPORT_ID:
+          transformation: "StringIndexer"
+        DEST_AIRPORT_ID:
+          transformation: "StringIndexer"
+        CRS_ELAPSED_TIME:
+          transformation: "None"
+        PREV_AIRCRAFT_ARR_DELAY:
+          transformation: "None"
+        feature_avg_delay:
+          transformation: "None"
+        feature_departure_hour_rounded:
+          transformation: "StringIndexer"
+        feature_flight_week_of_year:
+          transformation: "StringIndexer"
+
     model:
-      modelType: "random_forest"
+      modelType: "randomforest"
       hyperparameters:
-        numTrees: [100]
-        maxDepth: [10]
-        maxBins: [32]
+        numTrees: [15]
+        maxDepth: [7]
+        maxBins: [280]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
+        impurity: "gini"
 
     train:
-      trainRatio: 0.8
+      trainRatio: 0.75
+
       crossValidation:
         numFolds: 5
+
       gridSearch:
-        enabled: false
+        enabled: true
         evaluationMetric: "f1"
