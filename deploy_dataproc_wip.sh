@@ -108,7 +108,7 @@ gcloud dataproc workflow-templates set-managed-cluster $WORKFLOW_NAME \
     --zone=$ZONE \
     --master-machine-type=n1-standard-16 \
     --master-boot-disk-size=100GB \
-    --num-workers=4 \
+    --num-workers=2 \
     --worker-machine-type=n1-standard-8 \
     --worker-boot-disk-size=100GB \
     --image-version=2.2-debian12
@@ -153,6 +153,9 @@ WORKFLOW_OUTPUT=$(gcloud dataproc workflow-templates instantiate $WORKFLOW_NAME 
     --project=$PROJECT_ID 2>&1)
 
 echo "$WORKFLOW_OUTPUT"
+
+# Print the output of the workflow execution for debugging
+echo "Workflow Output: $WORKFLOW_OUTPUT"
 
 # Extract operation ID
 OPERATION_ID=$(echo "$WORKFLOW_OUTPUT" | grep -oP 'operations/\K[^\s]+' || echo "$WORKFLOW_OUTPUT" | grep -oP 'Waiting on operation \[\K[^\]]+')
