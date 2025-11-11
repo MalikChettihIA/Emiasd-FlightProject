@@ -1,0 +1,246 @@
+---
+- name: Flight Project - Full Deployment
+  hosts: lamsade
+  gather_facts: no
+  
+  vars:
+    local_project_dir: "/home/nribal/psl/06-flight/02-git/Emiasd-FlightProject"
+    cluster_user: "hbalamou"
+    workspace: "~/workspace"
+    cluster_workspace: "/opt/cephfs/users/students/p6emiasd2025/{{ cluster_user }}/workspace"
+    hdfs_base: "/students/p6emiasd2025/{{ cluster_user }}"
+    tasks_to_run: "data-pipeline,feature-extraction,train"
+    
+  tasks:
+    # 1. Compilation locale (sur la machine locale)
+    - name: Fix permissions on target directory
+      delegate_to: localhost
+      file:
+        path: "{{ local_project_dir }}/target"
+        state: directory
+        mode: '0755'
+        recurse: yes
+      ignore_errors: yes
+      tags:
+        - compile
+        - build
+    
+    - name: Compile with SBT (local)
+      delegate_to: localhost
+      shell: |
+        cd {{ local_project_dir }}
+        sbt clean package
+      register: sbt_compile
+      tags:
+        - compile
+        - build
+      
+    - name: Display compilation output
+      debug:
+        var: sbt_compile.stdout_lines
+      when: sbt_compile.stdout is defined
+      tags:
+        - compile
+        - build
+      
+    - name: Check compilation result
+      delegate_to: localhost
+      shell: find {{ local_project_dir }}/work/apps -name "Emiasd-Flight-Data-Analysis.jar"
+      register: jar_files
+      failed_when: jar_files.stdout == ""
+      tags:
+        - compile
+        - build
+      
+    - name: Display JAR files found
+      debug:
+        msg: "JAR found: {{ jar_files.stdout_lines }}"
+      tags:
+        - compile
+        - build
+    
+    # 2. Créer les répertoires distants
+    - name: Create remote directories (using SSH)
+      shell: |
+        ssh -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
+            -p 5022 \
+            -o StrictHostKeyChecking=no \
+            -o LogLevel=ERROR \
+            {{ cluster_user }}@ssh.lamsade.dauphine.fr \
+            "mkdir -p $HOME/workspace/apps $HOME/workspace/config $HOME/workspace/logs"
+      delegate_to: localhost
+      tags:
+        - setup
+        - deploy
+        
+    # 3. Déployer les JAR
+    - name: Find JAR files to deploy
+      delegate_to: localhost
+      find:
+        paths: "{{ local_project_dir }}/work/apps"
+        patterns: "*.jar"
+      register: jar_files_to_deploy
+      tags:
+        - deploy-jar
+        - deploy
+        
+    - name: Deploy JAR files to cluster (using SCP)
+      shell: |
+        scp -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
+            -P 5022 \
+            -o StrictHostKeyChecking=no \
+            -o LogLevel=ERROR \
+            {{ local_project_dir }}/work/apps/*.jar \
+            {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/apps/
+      delegate_to: localhost
+      tags:
+        - deploy-jar
+        - deploy
+        
+    # 4. Déployer la configuration
+    - name: Deploy configuration file (using SCP)
+      shell: |
+        scp -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
+            -P 5022 \
+            -o StrictHostKeyChecking=no \
+            -o LogLevel=ERROR \
+            {{ local_project_dir }}/src/main/resources/prodlamsade-config.yml \
+            {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/config/prodlamsade-config.yml
+      delegate_to: localhost
+      tags:
+        - deploy-config
+        - deploy
+        
+    # 5. Déployer le répertoire data (si nécessaire)
+    - name: Check if data directory exists locally
+      delegate_to: localhost
+      stat:
+        path: "{{ local_project_dir }}/work/data"
+      register: local_data_dir
+      tags:
+        - deploy-data
+        - data
+      
+    - name: Create remote data directory
+      shell: |
+        ssh -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
+            -p 5022 \
+            -o StrictHostKeyChecking=no \
+            -o LogLevel=ERROR \
+            {{ cluster_user }}@ssh.lamsade.dauphine.fr \
+            "mkdir -p $HOME/workspace/data"
+      delegate_to: localhost
+      when: local_data_dir.stat.exists
+      tags:
+        - deploy-data
+        - data
+      
+    - name: Deploy data directory to remote workspace (using SCP)
+      shell: |
+        scp -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
+            -P 5022 \
+            -o StrictHostKeyChecking=no \
+            -o LogLevel=ERROR \
+            -r {{ local_project_dir }}/work/data/* \
+            {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/data/
+      delegate_to: localhost
+      when: local_data_dir.stat.exists
+      register: scp_result
+      tags:
+        - deploy-data
+        - data
+        
+    - name: Display data deployment result
+      debug:
+        msg: "Data deployed to {{ workspace }}/data/"
+      when: local_data_dir.stat.exists and scp_result.rc == 0
+      tags:
+        - deploy-data
+        - data
+        
+    # 6. Upload data to HDFS
+    - name: Check if HDFS directory exists
+      shell: /opt/shared/hadoop-current/bin/hdfs dfs -test -d {{ hdfs_base }}/data
+      register: hdfs_check
+      failed_when: false
+      changed_when: false
+      tags:
+        - hdfs
+        - data
+      
+    - name: Create HDFS directory if not exists
+      shell: /opt/shared/hadoop-current/bin/hdfs dfs -mkdir -p {{ hdfs_base }}/data
+      when: hdfs_check.rc != 0
+      tags:
+        - hdfs
+        - data
+      
+    - name: Count files in HDFS directory
+      shell: /opt/shared/hadoop-current/bin/hdfs dfs -count {{ hdfs_base }}/data | awk '{print $2}'
+      register: hdfs_file_count
+      changed_when: false
+      when: hdfs_check.rc == 0
+      tags:
+        - hdfs
+        - data
+      
+    - name: Upload data to HDFS
+      shell: |
+        cd $HOME/workspace
+        /opt/shared/hadoop-current/bin/hdfs dfs -put data/* {{ hdfs_base }}/data
+      when: hdfs_check.rc != 0 or (hdfs_file_count.stdout is defined and hdfs_file_count.stdout == "0")
+      tags:
+        - hdfs
+        - data
+      
+    # 7. Déployer le script d'exécution
+    - name: Check if runflight_v1.sh exists locally
+      delegate_to: localhost
+      stat:
+        path: "{{ local_project_dir }}/runflight_v1.sh"
+      register: runflight_script
+      tags:
+        - run
+        - execute
+        - deploy-script
+        
+    - name: Deploy runflight_v1.sh to cluster
+      shell: |
+        scp -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
+            -P 5022 \
+            -o StrictHostKeyChecking=no \
+            -o LogLevel=ERROR \
+            {{ local_project_dir }}/runflight_v1.sh \
+            {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/
+      delegate_to: localhost
+      when: runflight_script.stat.exists
+      tags:
+        - run
+        - execute
+        - deploy-script
+    
+    # 8. Exécuter l'application
+    - name: Run application on cluster (async)
+      shell: |
+        ssh -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
+            -p 5022 \
+            -o StrictHostKeyChecking=no \
+            -o LogLevel=ERROR \
+            {{ cluster_user }}@ssh.lamsade.dauphine.fr \
+            "cd $HOME/workspace && \
+             chmod +x ./runflight_v1.sh && \
+             nohup ./runflight_v1.sh > $HOME/workspace/logs/run_\$(date +%Y%m%d_%H%M%S).log 2>&1 &"
+      delegate_to: localhost
+      register: run_job
+      tags:
+        - run
+        - execute
+      
+    - name: Display run info
+      debug:
+        msg: |
+          Application lancée sur le cluster.
+          Utilisez 'ansible-playbook -i inventory.ini download-logs.yml' pour télécharger les logs
+      tags:
+        - run
+        - execute
