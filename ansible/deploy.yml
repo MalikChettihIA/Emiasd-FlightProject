@@ -193,54 +193,82 @@
         - hdfs
         - data
       
-    # 7. Déployer le script d'exécution
-    - name: Check if runflight_v1.sh exists locally
-      delegate_to: localhost
-      stat:
-        path: "{{ local_project_dir }}/runflight_v1.sh"
-      register: runflight_script
-      tags:
-        - run
-        - execute
-        - deploy-script
-        
-    - name: Deploy runflight_v1.sh to cluster
-      shell: |
-        scp -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
-            -P 5022 \
-            -o StrictHostKeyChecking=no \
-            -o LogLevel=ERROR \
-            {{ local_project_dir }}/runflight_v1.sh \
-            {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/
-      delegate_to: localhost
-      when: runflight_script.stat.exists
-      tags:
-        - run
-        - execute
-        - deploy-script
-    
-    # 8. Exécuter l'application
-    - name: Run application on cluster (async)
+
+    # 7. Nettoyer le dossier HDFS output et exécuter Spark directement
+    - name: Clean HDFS output directory on cluster
       shell: |
         ssh -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
             -p 5022 \
             -o StrictHostKeyChecking=no \
             -o LogLevel=ERROR \
             {{ cluster_user }}@ssh.lamsade.dauphine.fr \
-            "cd $HOME/workspace && \
-             chmod +x ./runflight_v1.sh && \
-             nohup ./runflight_v1.sh > $HOME/workspace/logs/run_\$(date +%Y%m%d_%H%M%S).log 2>&1 &"
+            "/opt/shared/hadoop-current/bin/hdfs dfs -test -d /students/p6emiasd2025/{{ cluster_user }}/output && \
+             /opt/shared/hadoop-current/bin/hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/{{ cluster_user }}/output || \
+             echo 'Output directory does not exist, skipping cleanup'"
+      delegate_to: localhost
+      tags:
+        - run
+        - execute
+
+    - name: Run Spark job on cluster in screen session
+      shell: |
+        ssh -i {{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key \
+            -p 5022 \
+            -o StrictHostKeyChecking=no \
+            -o LogLevel=ERROR \
+            {{ cluster_user }}@ssh.lamsade.dauphine.fr \
+            "screen -dmS spark_job bash -c '
+        LOG_DIR=\$HOME/workspace/logs
+        mkdir -p \$LOG_DIR
+        TIMESTAMP=\$(date +%Y%m%d_%H%M%S)
+        LOG_FILE=\$LOG_DIR/flight-app-\${TIMESTAMP}.log
+        LATEST_LOG=\$LOG_DIR/latest.log
+        /opt/shared/spark-current/bin/spark-submit \
+          --master yarn \
+          --deploy-mode client \
+          --class com.flightdelay.app.FlightDelayPredictionApp \
+          --files \$HOME/workspace/config/prodlamsade-config.yml \
+          --driver-memory 32G \
+          --driver-cores 8 \
+          --executor-memory 8G \
+          --num-executors 6 \
+          --conf spark.driver.maxResultSize=8g \
+          --conf spark.sql.shuffle.partitions=400 \
+          --conf spark.default.parallelism=400 \
+          --conf spark.kryoserializer.buffer.max=1024m \
+          --conf spark.memory.fraction=0.8 \
+          --conf spark.rpc.message.maxSize=2047 \
+          --conf spark.sql.debug.maxToStringFields=1000 \
+          --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+          --conf spark.network.timeout=800s \
+          --conf spark.executor.heartbeatInterval=60s \
+          --conf spark.memory.offHeap.enabled=true \
+          --conf spark.memory.offHeap.size=2g \
+          --conf spark.memory.storageFraction=0.3 \
+          --jars \$HOME/workspace/apps/mlflow-client-3.4.0.jar,\$HOME/workspace/apps/mlflow-spark_2.13-3.4.0.jar \
+          \$HOME/workspace/apps/Emiasd-Flight-Data-Analysis.jar \
+          prodlamsade {{ tasks_to_run }} 2>&1 | tee \$LOG_FILE
+        ln -sf \$LOG_FILE \$LATEST_LOG
+        ' && echo 'Screen session spark_job started'"
       delegate_to: localhost
       register: run_job
       tags:
         - run
         - execute
-      
-    - name: Display run info
+    
+    - name: Display execution summary
       debug:
         msg: |
-          Application lancée sur le cluster.
-          Utilisez 'ansible-playbook -i inventory.ini download-logs.yml' pour télécharger les logs
+          Spark job started in screen session 'spark_job'.
+          
+          To attach to the screen session:
+            ssh -i ~/.ssh/id_ed25519_hbalamou.key -p 5022 hbalamou@ssh.lamsade.dauphine.fr -t "screen -r spark_job"
+          
+          To list screen sessions:
+            ssh -i ~/.ssh/id_ed25519_hbalamou.key -p 5022 hbalamou@ssh.lamsade.dauphine.fr "screen -ls"
+          
+          To check logs:
+            ssh -i ~/.ssh/id_ed25519_hbalamou.key -p 5022 hbalamou@ssh.lamsade.dauphine.fr "tail -f ~/workspace/logs/latest.log"
       tags:
         - run
         - execute
