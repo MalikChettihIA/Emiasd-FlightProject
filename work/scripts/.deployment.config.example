@@ -1,0 +1,58 @@
+# ================================================================================================
+# Flight Deployment Configuration Example
+# Copy this file to .deployment.config and customize it for your environment
+# ================================================================================================
+
+# Cluster Configuration
+# CLUSTER_HOST="ssh.lamsade.dauphine.fr"
+# CLUSTER_USER="hbalamou"
+# SSH_KEY_PATH="$HOME/.ssh/id_ed25519_hbalamou.key"
+# SSH_PORT="5022"
+
+# Workspace Configuration
+# WORKSPACE="~/workspace"
+# CLUSTER_WORKSPACE="/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace"
+
+# Local Paths (automatically detected if not set)
+# LOCAL_PROJECT_DIR="/path/to/your/project"
+# LOCAL_LOG_DIR="/path/to/your/logs"
+
+# HDFS Configuration
+# HDFS_BASE="/students/p6emiasd2025/hbalamou"
+
+# Application Configuration
+# APP_NAME="Emiasd-Flight-Data-Analysis"
+# APP_MAIN_CLASS="com.flightdelay.app.FlightDelayPredictionApp"
+# CONFIG_FILE="prodlamsade-config.yml"
+
+# Spark Configuration - Adjust based on cluster resources
+# SPARK_MASTER="yarn"
+# SPARK_DEPLOY_MODE="client"
+# SPARK_DRIVER_MEMORY="32G"
+# SPARK_DRIVER_CORES="8"
+# SPARK_EXECUTOR_MEMORY="8G"
+# SPARK_NUM_EXECUTORS="6"
+# SPARK_DRIVER_MAX_RESULT_SIZE="8g"
+# SPARK_SQL_SHUFFLE_PARTITIONS="400"
+# SPARK_DEFAULT_PARALLELISM="400"
+
+# Default Pipeline Tasks
+# DEFAULT_TASKS="data-pipeline,feature-extraction,train"
+
+# ================================================================================================
+# Usage Examples:
+# ================================================================================================
+# 
+# Override specific values without modifying the script:
+#   export SPARK_DRIVER_MEMORY="16G"
+#   ./lamsade_fulldeployement.sh
+#
+# Use a different user:
+#   export CLUSTER_USER="other_user"
+#   export SSH_KEY_PATH="$HOME/.ssh/id_ed25519_other_user.key"
+#   ./lamsade_fulldeployement.sh
+#
+# Run with different tasks:
+#   export DEFAULT_TASKS="data-pipeline,train"
+#   ./lamsade_fulldeployement.sh
+# ================================================================================================
