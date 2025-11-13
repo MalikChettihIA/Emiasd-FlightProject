@@ -9,16 +9,16 @@ common:
   seed: 42
 
   data:
-    basePath: "/students/p6emiasd2025/mchettih/data"
+    basePath: "hdfs:///students/p6emiasd2025/mchettih/data"
     flight :
-      path: "/students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Flights/*.csv"
+      path: "hdfs:///students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Flights/*.csv"
     weather :
-      path : "/students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Weather/*.txt"
+      path : "hdfs:///students/p6emiasd2025/mchettih/data/FLIGHT-3Y/Weather/*.txt"
     airportMapping :
-      path : "/students/p6emiasd2025/mchettih/data/FLIGHT-3Y/wban_airport_timezone.csv"
+      path : "hdfs:///students/p6emiasd2025/mchettih/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
   output:
-    basePath: "/output"
+    basePath: "hdfs:///students/p6emiasd2025/mchettih/output"
 
   mlflow:
     enabled: false
@@ -30,31 +30,192 @@ common:
 experiments:
 
   # =========================================================================
-  # Experiment 4:
-  # Model : RandomForest
+  # Experiment 1:
+  # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "exp4_rf_pca_crossvalidation_gridsearch_label_is_delayed_15min"
-    description: "Baseline Random Forest with hyperparameters tunning"
+  - name: "Experience-lamsade-D2_60"
+    description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
-    target: "label_is_delayed_15min"
+    target: "is_delayed"
 
     featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
+      type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
+      storeJoinData: true
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: -1
+      weatherDestinationDepthHours: -1
+      maxCategoricalCardinality: 50
+
+      flightSelectedFeatures:
+        CRS_DEP_TIME:
+          transformation: "None"
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "StringIndexer"
+        ORIGIN_AIRPORT_ID:
+          transformation: "StringIndexer"
+        DEST_AIRPORT_ID:
+          transformation: "StringIndexer"
+        CRS_ELAPSED_TIME:
+          transformation: "None"
+        #PREV_AIRCRAFT_ARR_DELAY:
+        #  transformation: "None"
+        #feature_avg_delay:
+        #  transformation: "None"
+        feature_departure_hour_rounded:
+          transformation: "StringIndexer"
+        feature_flight_week_of_year:
+          transformation: "StringIndexer"
+        feature_departure_time_period:
+          transformation: "StringIndexer"
+        feature_arrival_time_period:
+          transformation: "StringIndexer"
+        #feature_turnaround_buffer:
+        #  transformation: "None"
+
+      weatherSelectedFeatures:
+        feature_most_critical_sky:
+          transformation: "StringIndexer"
+        feature_num_cloud_layers:
+          transformation: "None"
+        feature_cloud_risk_score:
+          transformation: "None"
+        feature_has_overcast:
+          transformation: "None"
+        feature_has_broken:
+          transformation: "None"
+        feature_has_obscured:
+          transformation: "None"
+        feature_is_clear:
+          transformation: "None"
+        feature_lowest_cloud_height:
+          transformation: "None"
+        feature_ceiling:
+          transformation: "None"
+        feature_has_low_ceiling:
+          transformation: "None"
+        feature_visibility_miles:
+          transformation: "None"
+        feature_visibility_km:
+          transformation: "None"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_visibility_risk_score:
+          transformation: "None"
+        feature_is_low_visibility:
+          transformation: "None"
+        feature_is_very_low_visibility:
+          transformation: "None"
+        feature_visibility_normalized:
+          transformation: "None"
+        feature_visibility_inverse:
+          transformation: "None"
+        feature_weather_severity_index:
+          transformation: "None"
+        feature_is_vfr_conditions:
+          transformation: "None"
+        feature_is_ifr_conditions:
+          transformation: "None"
+        feature_requires_cat_ii:
+          transformation: "None"
+        feature_operations_risk_level:
+          transformation: "None"
+        feature_flight_category:
+          transformation: "StringIndexer"
+        feature_flight_category_ordinal:
+          transformation: "None"
+        intensity_heavy:
+          transformation: "None"
+        intensity_light:
+          transformation: "None"
+        weather_intensity:
+          transformation: "StringIndexer"
+        feature_precipitation_intensity:
+          transformation: "None"
+        has_thunderstorm:
+          transformation: "None"
+        has_freezing_precip:
+          transformation: "None"
+        has_freezing:
+          transformation: "None"
+        has_precipitation:
+          transformation: "None"
+        has_obscuration:
+          transformation: "None"
+        has_visible_moisture:
+          transformation: "None"
+        has_hazardous:
+          transformation: "None"
+        has_rain:
+          transformation: "None"
+        has_snow:
+          transformation: "None"
+        has_hail:
+          transformation: "None"
+        extracted_codes:
+          transformation: "StringIndexer"
+        weather_hazard_level:
+          transformation: "None"
+        Icing_Risk_Flag:
+          transformation: "None"
+        Icing_Risk_Level:
+          transformation: "None"
+
+        # Feature Non retravailler
+        DryBulbFarenheit:
+          transformation: "None"
+        DryBulbCelsius:
+          transformation: "None"
+        WetBulbFarenheit:
+          transformation: "None"
+        WetBulbCelsius:
+          transformation: "None"
+        DewPointFarenheit:
+          transformation: "None"
+        DewPointCelsius:
+          transformation: "None"
+        RelativeHumidity:
+          transformation: "None"
+        WindSpeed:
+          transformation: "None"
+        WindDirection:
+          transformation: "None"
+        ValueForWindCharacter:
+          transformation: "None"
+        StationPressure:
+          transformation: "None"
+        PressureTendency:
+          transformation: "None"
+        PressureChange:
+          transformation: "None"
+        SeaLevelPressure:
+          transformation: "None"
+        HourlyPrecip:
+          transformation: "None"
+        Altimeter:
+          transformation: "None"
+
+        feature_pressure_visibility_combo:
+          transformation: "StringIndexer"
+        feature_pressure_bucket:
+          transformation: "StringIndexer"
+        press_change_abs:
+          transformation: "None"
 
     model:
       modelType: "randomforest"
       hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
+        numTrees: [15]
+        maxDepth: [7]
+        maxBins: [280]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
         impurity: "gini"
 
     train:
-      trainRatio: 0.8
+      trainRatio: 0.75
 
       crossValidation:
         numFolds: 5
@@ -63,109 +224,3 @@ experiments:
         enabled: true
         evaluationMetric: "f1"
 
-
-
-  # =========================================================================
-  # Experiment 5:
-  # Model : RandomForest
-  # =========================================================================
-  - name: "exp5_rf_pca_crossvalidation_gridsearch_label_is_delayed_30min"
-    description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
-    target: "label_is_delayed_30min"
-
-    featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
-
-    model:
-      modelType: "randomforest"
-
-    train:
-      trainRatio: 0.8
-
-      crossValidation:
-        numFolds: 5
-
-      gridSearch:
-        enabled: true
-        evaluationMetric: "f1"
-
-      hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
-        impurity: "gini"
-
-  # =========================================================================
-  # Experiment 6:
-  # Model : RandomForest
-  # =========================================================================
-  - name: "exp6_rf_pca_crossvalidation_gridsearch_label_is_delayed_45min"
-    description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
-    target: "label_is_delayed_45min"
-
-    featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
-
-    model:
-      modelType: "randomforest"
-
-    train:
-      trainRatio: 0.8
-
-      crossValidation:
-        numFolds: 5
-
-      gridSearch:
-        enabled: true
-        evaluationMetric: "f1"
-
-      hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
-        impurity: "gini"
-
-  # =========================================================================
-  # Experiment 7:
-  # Model : RandomForest
-  # =========================================================================
-  - name: "exp7_rf_pca_crossvalidation_gridsearch_label_is_delayed_60min"
-    description: "Baseline Random Forest with hyperparameters tunning"
-    enabled: true
-    target: "label_is_delayed_60min"
-
-    featureExtraction:
-      type: pca
-      pcaVarianceThreshold: 0.7
-
-    model:
-      modelType: "randomforest"
-
-    train:
-      trainRatio: 0.8
-
-      crossValidation:
-        numFolds: 5
-
-      gridSearch:
-        enabled: true
-        evaluationMetric: "f1"
-
-      hyperparameters:
-        numTrees: [50]
-        maxDepth: [5]
-        maxBins: 32
-        minInstancesPerNode: 1
-        subsamplingRate: 1.0
-        featureSubsetStrategy: "auto"
-        impurity: "gini"

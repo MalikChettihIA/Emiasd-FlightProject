@@ -9,20 +9,20 @@ common:
   seed: 42
 
   data:
-    basePath: "/home/jovyan/work/data"
+    basePath: "/data"
     flight:
-      path: "/home/jovyan/work/data/FLIGHT-3Y/Flights/201201*.csv"
+      path: "/data/FLIGHT-3Y/Flights/201201*.csv"
     weather:
-      path: "/home/jovyan/work/data/FLIGHT-3Y/Weather/20101*.txt"
+      path: "/data/FLIGHT-3Y/Weather/201201*.txt"
     airportMapping:
-      path: "/home/jovyan/work/data/FLIGHT-3Y/wban_airport_timezone.csv"
+      path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
   output:
-    basePath: "/home/jovyan/work/output"
+    basePath: "/output"
 
-    mlflow:
-      enabled: true
-      trackingUri: "http://mlflow-server:5000"  # Utilise le nom du container et le port interne
+  mlflow:
+    enabled: true
+    trackingUri: "http://mlflow-server:5000"  # Utilise le nom du container et le port interne
 
 # ============================================================================
 # EXPERIMENTS - Each experiment has its own feature extraction and model config
@@ -30,10 +30,10 @@ common:
 experiments:
 
   # =========================================================================
-  # Experiment 1:
+  # Experiment 20:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-jupyter"
+  - name: "Experience-20-D2_60-weatherDepthHours_3_0"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -44,7 +44,7 @@ experiments:
       delayThresholdMin: 60
       storeJoinData: true
       storeExplodeJoinData: true
-      weatherOriginDepthHours: 0
+      weatherOriginDepthHours: 3
       weatherDestinationDepthHours: -1
       maxCategoricalCardinality: 50
 
