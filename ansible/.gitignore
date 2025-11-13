@@ -1,0 +1,8 @@
+# Ignorer le venv
+venv/
+__pycache__/
+*.pyc
+*.retry
+
+# Ignorer les logs téléchargés
+logs-from-cluster/
