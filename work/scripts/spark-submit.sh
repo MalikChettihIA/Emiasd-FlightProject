@@ -29,6 +29,9 @@ spark-submit \
   --conf spark.memory.offHeap.size=10g \
   --conf spark.memory.fraction=0.8 \
   --conf spark.memory.storageFraction=0.3 \
+  --conf spark.eventLog.enabled=true \
+  --conf spark.eventLog.dir=/spark-events \
+  --conf spark.eventLog.compress=true \
   --jars /apps/mlflow-client-3.4.0.jar,/apps/mlflow-spark_2.13-3.4.0.jar \
   /apps/Emiasd-Flight-Data-Analysis.jar \
   local "$TASKS"

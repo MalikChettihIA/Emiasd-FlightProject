@@ -21185,3 +21185,6 @@ work/output/spark-checkpoints/448f4e70-f916-4762-9562-6b94598463fe/rdd-427/part-
 /target
 work/apps/Emiasd-Flight-Data-Analysis.jar
 /work/notebooks/Flights/DataExploration/OT/.ipynb_checkpoints
+work/notebooks/Flights/DataExploration/OT/WindChar_dist.csv
+work/notebooks/Flights/DataExploration/OT/201201hourly.txt
+work/apps/Emiasd-Flight-Data-Analysis.jar
