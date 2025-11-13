@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: 'Spark Dashboards'
+    orgId: 1
+    folder: 'Spark Monitoring'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

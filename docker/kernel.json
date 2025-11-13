@@ -16,7 +16,7 @@
     "SPARK_MASTER": "spark://spark-master:7077",
     "PYTHONPATH": "/usr/local/spark/python/lib/pyspark.zip:/usr/local/spark/python/lib/py4j-*.zip",
     "SPARK_CLASSPATH": "/home/jovyan/work/apps/*",
-    "TOREE_SPARK_ARGS": "--master=spark://spark-master:7077 --driver-memory=1g --executor-memory=2g --executor-cores=2 --conf spark.sql.warehouse.dir=/tmp/hive --conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true --conf spark.serializer=org.apache.spark.serializer.KryoSerializer --jars /home/jovyan/work/apps/* --driver-class-path /home/jovyan/work/apps/* --conf spark.jars=/home/jovyan/work/apps/*",
+    "TOREE_SPARK_ARGS": "--master spark://spark-master:7077 --conf spark.executor.heartbeatInterval=60s --conf spark.sql.shuffle.partitions=128 --conf spark.default.parallelism=128 --conf spark.sql.files.maxPartitionBytes=64m --conf spark.sql.debug.maxToStringFields=1000 --conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true --conf spark.eventLog.enabled=true --conf spark.eventLog.dir=/home/jovyan/work/spark-events --conf spark.eventLog.compress=true --jars /home/jovyan/work/apps/* --driver-class-path /home/jovyan/work/apps/* --conf spark.jars=/home/jovyan/work/apps/*",
     "CAPTURE_STANDARD_OUT": "true",
     "CAPTURE_STANDARD_ERR": "true"
   }

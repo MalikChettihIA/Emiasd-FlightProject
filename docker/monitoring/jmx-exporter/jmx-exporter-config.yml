@@ -1,0 +1,94 @@
+---
+# JMX Exporter configuration for Spark
+# Exports Spark metrics in Prometheus format
+
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+
+# Whitelist for JMX metrics to export
+whitelistObjectNames:
+  - "metrics:*"
+  - "java.lang:type=Memory"
+  - "java.lang:type=GarbageCollector,*"
+  - "java.lang:type=Threading"
+  - "java.lang:type=Runtime"
+  - "java.lang:type=OperatingSystem"
+  - "java.nio:type=BufferPool,*"
+
+# Rules for metric name transformation
+rules:
+  # Spark Metrics
+  - pattern: "metrics<name=(.+)><>Value"
+    name: spark_$1
+    type: GAUGE
+
+  # Executor metrics
+  - pattern: 'metrics<name=(.+)\.executor\.(.+)><>Value'
+    name: spark_executor_$2
+    labels:
+      executor: "$1"
+    type: GAUGE
+
+  # Driver metrics
+  - pattern: 'metrics<name=(.+)\.driver\.(.+)><>Value'
+    name: spark_driver_$2
+    labels:
+      driver: "$1"
+    type: GAUGE
+
+  # JVM Memory
+  - pattern: 'java.lang<type=Memory><HeapMemoryUsage>(\w+)'
+    name: jvm_heap_memory_$1_bytes
+    type: GAUGE
+
+  - pattern: 'java.lang<type=Memory><NonHeapMemoryUsage>(\w+)'
+    name: jvm_nonheap_memory_$1_bytes
+    type: GAUGE
+
+  # Garbage Collector
+  - pattern: 'java.lang<type=GarbageCollector, name=(.+)><>CollectionCount'
+    name: jvm_gc_collection_count
+    labels:
+      gc: "$1"
+    type: COUNTER
+
+  - pattern: 'java.lang<type=GarbageCollector, name=(.+)><>CollectionTime'
+    name: jvm_gc_collection_time_ms
+    labels:
+      gc: "$1"
+    type: COUNTER
+
+  # Threading
+  - pattern: 'java.lang<type=Threading><>ThreadCount'
+    name: jvm_thread_count
+    type: GAUGE
+
+  - pattern: 'java.lang<type=Threading><>DaemonThreadCount'
+    name: jvm_daemon_thread_count
+    type: GAUGE
+
+  # Operating System
+  - pattern: 'java.lang<type=OperatingSystem><>SystemCpuLoad'
+    name: jvm_system_cpu_load
+    type: GAUGE
+
+  - pattern: 'java.lang<type=OperatingSystem><>ProcessCpuLoad'
+    name: jvm_process_cpu_load
+    type: GAUGE
+
+  - pattern: 'java.lang<type=OperatingSystem><>FreePhysicalMemorySize'
+    name: jvm_free_physical_memory_bytes
+    type: GAUGE
+
+  # Buffer Pools
+  - pattern: 'java.nio<type=BufferPool, name=(.+)><>Count'
+    name: jvm_buffer_pool_count
+    labels:
+      pool: "$1"
+    type: GAUGE
+
+  - pattern: 'java.nio<type=BufferPool, name=(.+)><>MemoryUsed'
+    name: jvm_buffer_pool_memory_used_bytes
+    labels:
+      pool: "$1"
+    type: GAUGE

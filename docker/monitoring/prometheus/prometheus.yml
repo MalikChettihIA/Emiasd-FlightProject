@@ -1,0 +1,91 @@
+global:
+  scrape_interval: 15s      # Scrape metrics every 15 seconds
+  evaluation_interval: 15s  # Evaluate rules every 15 seconds
+  external_labels:
+    cluster: 'spark-local'
+    environment: 'development'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# Load rules once and periodically evaluate them
+# rule_files:
+#   - "alerts/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Docker containers metrics via cAdvisor
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'docker-host'
+
+  # Spark Master
+  - job_name: 'spark-master'
+    static_configs:
+      - targets: ['spark-master:9999']
+        labels:
+          component: 'master'
+          cluster: 'spark-local'
+    metrics_path: '/metrics'
+
+  # Spark Worker 1
+  - job_name: 'spark-worker-1'
+    static_configs:
+      - targets: ['spark-worker-1:9999']
+        labels:
+          component: 'worker'
+          worker_id: '1'
+          cluster: 'spark-local'
+    metrics_path: '/metrics'
+
+  # Spark Worker 2
+  - job_name: 'spark-worker-2'
+    static_configs:
+      - targets: ['spark-worker-2:9999']
+        labels:
+          component: 'worker'
+          worker_id: '2'
+          cluster: 'spark-local'
+    metrics_path: '/metrics'
+
+  # Spark Worker 3
+  - job_name: 'spark-worker-3'
+    static_configs:
+      - targets: ['spark-worker-3:9999']
+        labels:
+          component: 'worker'
+          worker_id: '3'
+          cluster: 'spark-local'
+    metrics_path: '/metrics'
+
+  # Spark Worker 4
+  - job_name: 'spark-worker-4'
+    static_configs:
+      - targets: ['spark-worker-4:9999']
+        labels:
+          component: 'worker'
+          worker_id: '4'
+          cluster: 'spark-local'
+    metrics_path: '/metrics'
+
+  # MLFlow Server (optional - if MLFlow exposes metrics)
+  - job_name: 'mlflow'
+    static_configs:
+      - targets: ['mlflow:5000']
+        labels:
+          component: 'mlflow'
+    metrics_path: '/metrics'
+    # MLFlow may not expose Prometheus metrics by default
+    # This is here for future expansion
