@@ -143,7 +143,7 @@ object MLPipeline {
     println("Note: Splitting BEFORE feature extraction to avoid data leakage")
 
     val testRatio = 1.0 - experiment.train.trainRatio
-    val Array(devDataRaw, testDataRaw) = DelayBalancedDatasetBuilder.buildBalancedTrainTest(
+    val (devDataRaw, testDataRaw) = DelayBalancedDatasetBuilder.buildBalancedTrainTest(
       labeledDf = rawData,
       trainRatio = experiment.train.trainRatio
     )

@@ -32,7 +32,7 @@ object FlightWBANEnricher {
     println(s"\nLoading WBAN-Airport-Timezone mapping:")
     println(s"  - Parquet path: $wbanParquetPath")
 
-    val wbanMappingDf = if (parquetFileExists(wbanParquetPath)) {
+    val wbanMappingRawDf = if (parquetFileExists(wbanParquetPath)) {
       println(s"  ✓ Loading from existing Parquet")
       spark.read.parquet(wbanParquetPath)
     } else {
@@ -40,6 +40,10 @@ object FlightWBANEnricher {
       // WBANAirportTimezoneLoader will automatically load CSV and save to Parquet
       WBANAirportTimezoneLoader.loadFromConfiguration()
     }
+
+    println(s"  - WBAN padding to 5 characters")
+    val wbanMappingDf = wbanMappingRawDf
+      .withColumn("WBAN", lpad(col("WBAN"), 5, "0"))
 
     println(s"  - Loaded ${wbanMappingDf.count()} airport-WBAN mappings")
 

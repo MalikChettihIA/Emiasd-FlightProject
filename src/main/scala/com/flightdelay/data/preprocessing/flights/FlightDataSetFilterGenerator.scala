@@ -1,5 +1,6 @@
 package com.flightdelay.data.preprocessing.flights
 
+import com.flightdelay.config.AppConfiguration
 import com.flightdelay.data.preprocessing.DataPreprocessor
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
@@ -65,7 +66,7 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
   /**
    * Méthode exécutable pour test (facultative)
    */
-  def preprocess(rawData: DataFrame)(implicit spark: SparkSession): DataFrame  = {
+  def preprocess(rawData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame  = {
     val enriched = withDelayFilters(rawData)
 
     val total = enriched.count()

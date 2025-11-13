@@ -26,17 +26,31 @@ object WeatherPreprocessingPipeline {
     println(s"\nLoading raw data from parquet:")
     println(s"  - Path: $rawParquetPath")
     val originalDf = spark.read.parquet(rawParquetPath)
-    println(s"  - Loaded ${originalDf.count()} raw records")
+    println(s"  - Loaded raw records")
 
     // Execute preprocessing pipeline (each step creates a new DataFrame)
     val processedWithSkyConditionFeatureDf = originalDf.transform(SkyConditionFeatures.createSkyConditionFeatures)
     val porcessedWithVisibilityFeaturesDf = processedWithSkyConditionFeatureDf.transform(VisibilityFeatures.createVisibilityFeatures)
     val porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf = porcessedWithVisibilityFeaturesDf.transform(WeatherInteractionFeatures.createInteractionFeatures)
     val porcessWithWeatherConditionFeaturesDf = porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf.transform(WeatherTypeFeatureGenerator.createFeatures)
-    val processedWeatherDf = WeatherDataCleaner.preprocess(porcessWithWeatherConditionFeaturesDf)
+    val processedWithPressureTendencyFeaturesDf = porcessWithWeatherConditionFeaturesDf.transform(WeatherPressionFeatures.createPressureFeatures)
+    val processedWeatherDf = WeatherDataCleaner.preprocess(processedWithPressureTendencyFeaturesDf)
 
-    // ⭐ OPTIMIZED WRITE STRATEGY TO AVOID OOM
-    writeWeatherDataSafely(processedWeatherDf, processedParquetPath)
+    // ⭐ PERSIST to disk before write to break DAG and prevent OOM
+    println("\n[Pipeline Step 8/8] Persisting to disk before write to break DAG...")
+    import org.apache.spark.storage.StorageLevel
+    val persistedData = processedWeatherDf.persist(StorageLevel.DISK_ONLY)
+
+    // Force persist materialization (but data stays on disk, not in memory)
+    val recordCount = persistedData.count()
+    println(s"  ✓ Persisted ${recordCount} records to disk")
+    logMemoryUsage("After persist")
+
+    // ⭐ OPTIMIZED WRITE STRATEGY
+    writeWeatherDataSafely(persistedData, processedParquetPath)
+
+    // Cleanup persisted data
+    persistedData.unpersist()
 
     println("\n" + "=" * 80)
     println("[Preprocessing] Weather Data Preprocessing Pipeline - End")
@@ -47,13 +61,7 @@ object WeatherPreprocessingPipeline {
   }
 
   /**
-   * Stratégie d'écriture sécurisée pour éviter les OOM
-   *
-   * Optimisations:
-   * 1. Checkpoint avant write pour libérer le DAG
-   * 2. Partitionnement par Date pour écriture incrémentale
-   * 3. Compression Snappy (plus légère que zstd)
-   * 4. Monitoring mémoire
+   * Stratégie d'écriture sécurisée pour éviter les OOM sur les données météo
    */
   private def writeWeatherDataSafely(
                                       weatherDf: DataFrame,
@@ -62,37 +70,17 @@ object WeatherPreprocessingPipeline {
 
     import spark.implicits._
 
-    println(s"\nSaving preprocessed data to parquet:")
+    println(s"\nSaving preprocessed weather data to parquet:")
     println(s"  - Path: $outputPath")
-    println("  - Using optimized write strategy to avoid OOM")
+    println("  - Using optimized write strategy")
 
-    // Étape 1 : Monitoring mémoire initial
-    logMemoryUsage("Before write")
-
-    val rowCount = weatherDf.count()
-    println(s"  - Rows to write: ${rowCount}")
-
-    // Étape 2 : Checkpoint pour matérialiser et libérer le DAG
-    println("\n  [Step 1/3] Checkpointing data to break DAG lineage...")
-    val checkpointed = weatherDf
-      .repartition(100, col("Date"))  // Partitionner par date avec 100 partitions
-      .checkpoint()
-
-    // Force l'exécution du checkpoint
-    val checkpointedCount = checkpointed.count()
-    println(s"  ✓ Checkpoint completed: ${checkpointedCount} rows")
-
-    logMemoryUsage("After checkpoint")
-
-    // Étape 3 : Write avec partitionnement par Date
-    println("\n  [Step 2/3] Writing to parquet with date partitioning...")
+    // ⭐ WRITE directement sans partitionBy pour minimiser la mémoire
+    println("\n  [Step 1/2] Writing to parquet (using existing partitions)...")
     try {
-      checkpointed
+      weatherDf
         .write
         .mode("overwrite")
-        .partitionBy("Date")                    // ⭐ Partitionnement par date
-        .option("compression", "snappy")        // ⭐ Snappy au lieu de zstd (moins gourmand)
-        .option("maxRecordsPerFile", 500000)    // Limite records par fichier
+        .option("compression", "snappy")
         .parquet(outputPath)
 
       println("  ✓ Write completed successfully")
@@ -102,29 +90,20 @@ object WeatherPreprocessingPipeline {
         println(s"  ✗ Write failed: ${e.getMessage}")
         println("\n  Attempting fallback: batch write strategy...")
 
-        // Fallback : Write par batch si le write normal échoue
-        writeInBatches(checkpointed, outputPath)
+        writeWeatherInBatches(weatherDf, outputPath)
     }
-
-    // Étape 4 : Cleanup
-    println("\n  [Step 3/3] Cleaning up...")
-    checkpointed.unpersist()
-    System.gc()
-
-    logMemoryUsage("After write")
 
     println(s"\n  ✓ Weather data saved successfully")
   }
 
   /**
-   * Stratégie de fallback : écriture par batch
-   * Utilisée si l'écriture normale échoue
+   * Fallback: écriture par batch pour les données météo
    */
-  private def writeInBatches(
-                              weatherDf: DataFrame,
-                              outputPath: String,
-                              batchSize: Int = 2000000
-                            )(implicit spark: SparkSession): Unit = {
+  private def writeWeatherInBatches(
+                                     weatherDf: DataFrame,
+                                     outputPath: String,
+                                     batchSize: Int = 2000000  // 2M rows per batch
+                                   )(implicit spark: SparkSession): Unit = {
 
     import spark.implicits._
 

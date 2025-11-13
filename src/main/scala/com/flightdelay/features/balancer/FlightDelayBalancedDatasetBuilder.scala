@@ -1,7 +1,9 @@
 package com.flightdelay.features.balancer
 
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
+
+import com.flightdelay.utils.MetricsUtils
 
 /**
  * Utility to build balanced train/test datasets (50/50 delayed vs on-time).
@@ -68,46 +70,65 @@ object DelayBalancedDatasetBuilder {
                               labeledDf: DataFrame,
                               trainRatio: Double = 0.75,
                               seed: Long = 42L
-                            ): Array[DataFrame] = {
+                            )(implicit spark: SparkSession): (DataFrame, DataFrame) = {
 
-    validate(labeledDf, Seq("is_delayed"))
+    // 0) Sanity
+    require(trainRatio > 0 && trainRatio < 1.0, s"trainRatio must be in (0,1), got $trainRatio")
+    require(labeledDf.columns.contains("is_delayed"), "labeledDf must contain 'is_delayed'")
 
-    val delayed = labeledDf.filter(col("is_delayed") === 1)
-    val onTime  = labeledDf.filter(col("is_delayed") === 0)
+    MetricsUtils.withUiLabels(
+      groupId = "BuildBalancedTrainTest",
+      desc    = "Create balanced Train/Test datasets (50/50 delayed vs on-time)",
+      tags    = "sampling,split,balance"
+    ) {
 
-    // Split delayed data into train/test
-    val Array(trainDelayed, testDelayed) =
-      delayed.randomSplit(Array(trainRatio, 1.0 - trainRatio), seed)
+      val delayed = labeledDf.filter(col("is_delayed") === 1)
+      val onTime  = labeledDf.filter(col("is_delayed") === 0)
 
-    val nTrainDelayed = trainDelayed.count()
-    val nTestDelayed  = testDelayed.count()
+      // 1) Split des 'delayed' (narrow, pas de shuffle)
+      val Array(trainDelayed, testDelayed) =
+        delayed.randomSplit(Array(trainRatio, 1.0 - trainRatio), seed)
 
-    // Undersample on-time data to match delayed counts
-    val trainOnTime = sampleN(onTime, nTrainDelayed, seed + 1)
-    val testOnTime  = sampleN(onTime.except(trainOnTime), nTestDelayed, seed + 2)
+      val nTrainDelayed = trainDelayed.count()
+      val nTestDelayed  = testDelayed.count()
 
-    // Combine and shuffle
-    val devDataRaw = trainDelayed.unionByName(trainOnTime)
-      .withColumn("__rnd", rand(seed + 3))
-      .orderBy(col("__rnd"))
-      .drop("__rnd")
+      // 2) Tirage "on-time" disjoint sans except/orderBy :
+      val nOnTime  = onTime.count()
+      val needTrainOn = nTrainDelayed
+      val needTestOn  = nTestDelayed
 
-    val testDataRaw = testDelayed.unionByName(testOnTime)
-      .withColumn("__rnd", rand(seed + 4))
-      .orderBy(col("__rnd"))
-      .drop("__rnd")
+      val pTrain = math.min(1.0, needTrainOn.toDouble / math.max(1, nOnTime))
+      val pTest  = math.min(1.0 - pTrain, needTestOn.toDouble / math.max(1, nOnTime))
 
-    // Quick logging
-    def logSplit(name: String, d: DataFrame): Unit = {
-      val total = d.count()
-      val nDel  = d.filter(col("is_delayed") === 1).count()
-      val nOn   = d.filter(col("is_delayed") === 0).count()
-      println(f"[$name] total=$total%8d | delayed=$nDel%8d | on-time=$nOn%8d")
+      val onTimeWithR = onTime.withColumn("__r", rand(seed + 100)) // stable, reproductible
+      val trainOnTimeApprox = onTimeWithR.filter(col("__r") < pTrain)
+      val testOnTimeApprox  = onTimeWithR.filter(col("__r") >= pTrain && col("__r") < (pTrain + pTest))
+
+      // 3) Ajustement EXACT (limit)
+      val trainOnTime = trainOnTimeApprox.limit(needTrainOn.toInt).drop("__r")
+      val testOnTime  = testOnTimeApprox .limit(needTestOn .toInt).drop("__r")
+
+      // 4) Union et légère randomisation locale sans tri global
+      def lightlyShuffle(df: DataFrame, seed: Long): DataFrame =
+        df.withColumn("__k", (rand(seed)*10).cast("int"))
+          .repartition(col("__k"))
+          .sortWithinPartitions(col("__k"))
+          .drop("__k")
+
+      val devDataRaw  = lightlyShuffle(trainDelayed.unionByName(trainOnTime), seed + 200)
+      val testDataRaw = lightlyShuffle(testDelayed .unionByName(testOnTime ), seed + 201)
+
+      // 5) Logs de contrôle
+      def logSplit(name: String, d: DataFrame): Unit = {
+        val total = d.count()
+        val nDel  = d.filter(col("is_delayed") === 1).count()
+        val nOn   = d.filter(col("is_delayed") === 0).count()
+        println(f"[$name] total=$total%8d | delayed=$nDel%8d | on-time=$nOn%8d | balanced=${nDel==nOn}")
+      }
+      logSplit("TRAIN (balanced)", devDataRaw)
+      logSplit("TEST  (balanced)", testDataRaw)
+
+      (devDataRaw, testDataRaw)
     }
-
-    logSplit("DEV  (trainBalanced)", devDataRaw)
-    logSplit("TEST (testBalanced)", testDataRaw)
-
-    Array(devDataRaw, testDataRaw)
   }
 }

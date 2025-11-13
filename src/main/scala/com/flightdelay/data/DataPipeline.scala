@@ -32,23 +32,23 @@ object DataPipeline {
     var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     println(s"[Step 1/7] Completed in ${stepDuration}s")
 
-    // Preprocessing des données de vols
-    println("\n[Step 2/7] Preprocessing flight data...")
-    stepStartTime = System.currentTimeMillis()
-    val processedFlightData = FlightPreprocessingPipeline.execute()
-    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 2/7] Completed in ${stepDuration}s")
-
     // Preprocessing des données de météo
-    println("\n[Step 3/7] Loading raw weather data...")
+    println("\n[Step 2/7] Loading raw weather data...")
     stepStartTime = System.currentTimeMillis()
     WeatherDataLoader.loadFromConfiguration()
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 3/7] Completed in ${stepDuration}s")
+    println(s"[Step 2/7] Completed in ${stepDuration}s")
 
-    println("\n[Step 4/7] Loading WBAN-Airport-Timezone mapping...")
+    println("\n[Step 3/7] Loading WBAN-Airport-Timezone mapping...")
     stepStartTime = System.currentTimeMillis()
     WBANAirportTimezoneLoader.loadFromConfiguration()
+    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    println(s"[Step 3/7] Completed in ${stepDuration}s")
+
+    // Preprocessing des données de vols
+    println("\n[Step 4/7] Preprocessing flight data...")
+    stepStartTime = System.currentTimeMillis()
+    val processedFlightData = FlightPreprocessingPipeline.execute()
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     println(s"[Step 4/7] Completed in ${stepDuration}s")
 
@@ -62,17 +62,17 @@ object DataPipeline {
     println("\n[Step 6/7] Validating and normalizing schemas...")
     stepStartTime = System.currentTimeMillis()
     println("\n--- Flight Data Schema Validation ---")
-    val normalizedFlightData = SchemaValidator.validateAndNormalize(processedFlightData, strictMode = false)
+    val validatedFlightData = SchemaValidator.validateAndNormalize(processedFlightData, strictMode = false)
     println("\n--- Weather Data Schema Validation ---")
-    val normalizedWeatherData = SchemaValidator.validateAndNormalize(weather, strictMode = false)
+    val validatedWeatherData = SchemaValidator.validateAndNormalize(weather, strictMode = false)
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     println(s"[Step 6/7] Completed in ${stepDuration}s")
 
     // OPTIMIZATION: Cache normalized data since it will be used by all experiments
     println("\n[Step 7/7] Caching normalized data for reuse across experiments...")
     stepStartTime = System.currentTimeMillis()
-    val cachedFlightData = normalizedFlightData.cache()
-    val cachedWeatherData = normalizedWeatherData.cache()
+    val cachedFlightData = validatedFlightData.cache()
+    val cachedWeatherData = validatedWeatherData.cache()
     // Force materialization
     val flightCount = cachedFlightData.count()
     println(s"  - Cached flight data: ${flightCount} records")

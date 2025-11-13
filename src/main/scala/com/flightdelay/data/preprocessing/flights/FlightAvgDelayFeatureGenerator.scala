@@ -20,7 +20,6 @@ object FlightAvgDelayFeatureGenerator {
    */
   def enrichFlightsWithAvgDelay(
                                  flightData: DataFrame,
-                                 sampleFraction: Option[Double] = None,
                                  enableCheckpoint: Boolean = true
                                )(implicit spark: SparkSession): DataFrame = {
 
@@ -34,22 +33,11 @@ object FlightAvgDelayFeatureGenerator {
     // Monitoring mémoire initial
     logMemoryUsage("Before processing")
 
-    // OPTIMISATION 1 : Sample si dataset trop gros
-    val dataToProcess = sampleFraction match {
-      case Some(fraction) =>
-        println(s"\n⚠️  Sampling dataset with fraction: $fraction")
-        val sampled = flightData.sample(withReplacement = false, fraction, seed = 42)
-        val count = sampled.count()
-        println(s"  Sampled to $count rows")
-        sampled
-      case None =>
-        flightData
-    }
 
     // Étape 1 : Préparation des timestamps
     println("\n[Step 1] Preparing timestamps...")
 
-    val flightWithTimestamps = dataToProcess
+    val flightWithTimestamps = flightData
       .withColumn("feature_utc_departure_timestamp",
         to_timestamp(
           concat(

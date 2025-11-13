@@ -1,5 +1,6 @@
 package com.flightdelay.data.preprocessing
 
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.{DataFrame, SparkSession, Column}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -13,10 +14,11 @@ abstract class DataPreprocessor {
   /**
    * Méthode principale de preprocessing
    * @param spark Session Spark
+   * @param configuration Configuration de l'application (peut être null si non utilisée)
    * @param rawData DataFrame contenant les données brutes
    * @return DataFrame préprocessé
    */
-  def preprocess(rawData: DataFrame)(implicit spark: SparkSession): DataFrame
+  def preprocess(rawData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration = null): DataFrame
 
   /**
    * Supprime les lignes dupliquées basées sur des colonnes spécifiques

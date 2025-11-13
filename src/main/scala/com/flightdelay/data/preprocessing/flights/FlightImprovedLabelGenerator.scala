@@ -1,5 +1,6 @@
 package com.flightdelay.data.preprocessing.flights
 
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 
@@ -25,7 +26,7 @@ object FlightImprovedLabelGenerator {
    * @param flightData DataFrame avec colonnes de retard (ARR_DELAY_NEW, WEATHER_DELAY, NAS_DELAY, etc.)
    * @return DataFrame enrichi avec labels multiples et features explicatives
    */
-  def generateImprovedLabels(flightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def generateImprovedLabels(flightData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     import spark.implicits._
 

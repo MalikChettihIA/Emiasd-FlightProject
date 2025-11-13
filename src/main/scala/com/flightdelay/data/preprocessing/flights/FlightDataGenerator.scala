@@ -1,5 +1,6 @@
 package com.flightdelay.data.preprocessing.flights
 
+import com.flightdelay.config.AppConfiguration
 import com.flightdelay.data.preprocessing.DataPreprocessor
 import com.flightdelay.data.utils.TimeFeatureUtils
 import org.apache.spark.sql.functions._
@@ -19,7 +20,7 @@ object FlightDataGenerator extends DataPreprocessor {
    * @param spark Session Spark
    * @return DataFrame enrichi avec des nouvelles colonnes
    */
-  override def preprocess(cleanedFlightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  override def preprocess(cleanedFlightData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
     println("")
     println("=" * 80)
     println("[STEP 2][FlightDataGenerator] Flight Data Generator - Start ...")

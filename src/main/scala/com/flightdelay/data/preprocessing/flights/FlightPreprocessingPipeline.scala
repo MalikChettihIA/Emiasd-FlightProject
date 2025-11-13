@@ -31,65 +31,72 @@ object FlightPreprocessingPipeline {
     val originalDf = spark.read.parquet(rawParquetPath)
     println(s"  - Loaded ${originalDf.count()} raw records")
 
-    // Execute preprocessing pipeline (each step creates a new DataFrame)
-    println("\n[Pipeline Step 1/9] Cleaning flight data...")
-    val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
+    println("[Pipeline Step 1/9] Enriching with WBAN...")
+    val enrichedWithWBAN = FlightWBANEnricher.preprocess(originalDf)
+    enrichedWithWBAN.printSchema()
 
-    println("[Pipeline Step 2/9] Enriching with Datasets ...")
+    val enrichedWithWBANPath = s"${configuration.common.output.basePath}/common/data/wban_enriched_flights.parquet"
+    println("[Pipeline Step 1/9] Wrinting Enriched parquer file...", enrichedWithWBANPath)
+    enrichedWithWBAN
+      .write.mode("overwrite")
+      .parquet(enrichedWithWBANPath)
+
+    // Execute preprocessing pipeline (each step creates a new DataFrame)
+    println("\n[Pipeline Step 2/9] Cleaning flight data...")
+    val cleanedFlightData = FlightDataCleaner.preprocess(enrichedWithWBAN)
+
+    println("[Pipeline Step 3/9] Enriching with Datasets ...")
     val enrichedWithDataset = FlightDataSetFilterGenerator.preprocess(cleanedFlightData)
 
-    println("[Pipeline Step 2/9] Enriching with WBAN...")
-    val enrichedWithWBAN = FlightWBANEnricher.preprocess(enrichedWithDataset)
+    println("[Pipeline Step 4/9] Generating arrival data...")
+    val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithDataset)
 
-    println("[Pipeline Step 3/9] Generating arrival data...")
-    val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithWBAN)
-
-    println("[Pipeline Step 4/9] Generating flight features...")
+    println("[Pipeline Step 5/9] Generating flight features...")
     val generatedFlightData = FlightDataGenerator.preprocess(enrichedWithArrival)
 
-    println("[Pipeline Step 5/9] Creating previous late flight features...")
-    val generatedPreviousLateFlightData = FlightPreviousLateFlightFeatureGenerator.createLateAircraftFeature(generatedFlightData)
+    //println("[Pipeline Step 5/9] Creating previous late flight features...")
+    //val generatedPreviousLateFlightData = FlightPreviousLateFlightFeatureGenerator.createLateAircraftFeature(generatedFlightData)
 
     // ⭐ CHECKPOINT 1: After heavy feature generation
-    println("[Pipeline Step 5.5/9] Checkpointing after feature generation...")
-    val checkpointed1 = generatedPreviousLateFlightData.checkpoint()
-    checkpointed1.count()
-    logMemoryUsage("After feature generation")
+    //println("[Pipeline Step 5.5/9] Checkpointing after feature generation...")
+    //val checkpointed1 = generatedPreviousLateFlightData.checkpoint()
+    //checkpointed1.count()
+    //logMemoryUsage("After feature generation")
 
     println("[Pipeline Step 6/9] Generating labels...")
-    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(checkpointed1)
+    //val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(checkpointed1)
+    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFlightData)
 
     // ⭐ CHECKPOINT 2: After label generation
-    println("[Pipeline Step 6.5/9] Checkpointing after label generation...")
-    val checkpointed2 = generatedFightDataWithLabels.checkpoint()
-    checkpointed2.count()
-    logMemoryUsage("After label generation")
+    //println("[Pipeline Step 6.5/9] Checkpointing after label generation...")
+    //val checkpointed2 = generatedFightDataWithLabels.checkpoint()
+    //checkpointed2.count()
+    //logMemoryUsage("After label generation")
 
     // Calculate avg delay features for ALL delay thresholds (15min, 30min, 45min, 60min, 90min)
-    println("[Pipeline Step 7/9] Calculating avg delay features...")
-    val generatedFlightsWithAvgDelay = FlightAvgDelayFeatureGenerator.enrichFlightsWithAvgDelay(
-      flightData = checkpointed2,
-      sampleFraction = Some(0.3),  // Sample 30% pour éviter OOM
-      enableCheckpoint = true
-    )
+    //println("[Pipeline Step 7/9] Calculating avg delay features...")
+    //val generatedFlightsWithAvgDelay = FlightAvgDelayFeatureGenerator.enrichFlightsWithAvgDelay(
+    //  flightData = checkpointed2,
+    //  enableCheckpoint = true
+    //)
 
     // ⭐ CHECKPOINT 3: After avg delay (memory intensive)
-    println("[Pipeline Step 7.5/9] Checkpointing after avg delay...")
-    val checkpointed3 = generatedFlightsWithAvgDelay.checkpoint()
-    checkpointed3.count()
-    logMemoryUsage("After avg delay")
+    //println("[Pipeline Step 7.5/9] Checkpointing after avg delay...")
+    //val checkpointed3 = generatedFlightsWithAvgDelay.checkpoint()
+    //checkpointed3.count()
+    //logMemoryUsage("After avg delay")
 
     // Validate schema
     println("[Pipeline Step 9/9] Validating schema...")
-    validatePreprocessedSchema(checkpointed3)
+    validatePreprocessedSchema(generatedFightDataWithLabels)
 
     // ⭐ OPTIMIZED WRITE STRATEGY
-    writeFlightDataSafely(checkpointed3, processedParquetPath)
+    writeFlightDataSafely(generatedFightDataWithLabels, processedParquetPath)
 
     // Cleanup checkpoints
-    checkpointed1.unpersist()
-    checkpointed2.unpersist()
-    checkpointed3.unpersist()
+    //checkpointed1.unpersist()
+    //checkpointed2.unpersist()
+    //checkpointed3.unpersist()
 
     println("\n" + "=" * 80)
     println("[Preprocessing] Flight Data Preprocessing Pipeline - End")

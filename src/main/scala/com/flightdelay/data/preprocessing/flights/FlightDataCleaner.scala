@@ -1,6 +1,8 @@
 package com.flightdelay.data.preprocessing.flights
 
+import com.flightdelay.config.AppConfiguration
 import com.flightdelay.data.preprocessing.DataPreprocessor
+import com.flightdelay.utils.MetricsUtils.withUiLabels
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -16,9 +18,10 @@ object FlightDataCleaner extends DataPreprocessor {
    * Nettoyage complet des données de vols
    * @param rawFlightData DataFrame contenant les données de vols brutes
    * @param spark Session Spark
+   * @param configuration Configuration de l'application
    * @return DataFrame nettoyé et validé
    */
-  override def preprocess(rawFlightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  override def preprocess(rawFlightData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     println("\n" + "=" * 80)
     println("[STEP 2][DataCleaner] Flight Data Cleaning - Start")
@@ -33,15 +36,24 @@ object FlightDataCleaner extends DataPreprocessor {
     // Étape 2: Filtrage des vols annulés et détournés (selon TIST)
     val filteredData = filterInvalidFlights(cleanedData)
 
+    // Charger les données météo prétraitées depuis le parquet
+    val rawWeatherPath = s"${configuration.common.output.basePath}/common/data/raw_weather.parquet"
+    val weatherDF = spark.read.parquet(rawWeatherPath)
+
+    // Étape 2.5: Filtrage des vols basés sur les stations météo WBAN existantes
+    val filteredByWeatherStations = filterFlightsByExistingWeatherStations(filteredData, weatherDF)
+
+    // Étape 2.6: Filtrage des vols par les mois couverts par les données météo
+    val filteredByCoveredMonths = filterFlightsByCoveredMonths(filteredByWeatherStations, weatherDF)
+
     // Étape 3: Conversion et validation des types de données
-    val typedData = convertAndValidateDataTypes(filteredData)
+    val typedData = convertAndValidateDataTypes(filteredByCoveredMonths)
 
     // Étape 5: Validation finale
     val finalData = performFinalValidation(typedData)
 
     // Cleaning summary
     logCleaningSummary(rawFlightData, finalData)
-
 
     finalData
   }
@@ -111,6 +123,141 @@ object FlightDataCleaner extends DataPreprocessor {
   }
 
   /**
+   * Filtre les vols dont les stations météo WBAN (origine et destination) n'existent pas dans les données météo
+   * Utilise des left_semi joins pour garder uniquement les vols avec des stations météo valides
+   * @param df DataFrame des vols à filtrer
+   * @param spark Session Spark
+   * @param configuration Configuration de l'application
+   * @return DataFrame filtré contenant uniquement les vols avec des stations météo existantes
+   */
+  private def filterFlightsByExistingWeatherStations(df: DataFrame, weatherDF: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    println("\nPhase 2.5: Filter Flights by Existing Weather Stations")
+
+    withUiLabels(
+      groupId = "Filter-Flights-From-NonExistingWeatherWBAN",
+      desc = "Remove Flights If ORIGIN_WBAN, DEST_WBAN does not exist in Weather",
+      tags = "prep,semi-join,wban"
+    ) {
+
+      println("  - Extracting valid WBAN stations from weather data...")
+
+      // 1) WBAN valides côté météo (distinct, non nuls, nettoyés)
+      val weatherStations = weatherDF
+        .select(trim(col("WBAN")).as("WBAN"))
+        .where(col("WBAN").isNotNull && length(col("WBAN")) > 0)
+        .distinct()
+        .cache()
+
+      val stationCount = weatherStations.count()
+      println(s"  - Found ${stationCount} unique weather stations")
+
+      // 2) Prépare les colonnes WBAN côté vols (nettoyage basique)
+      val flightsWBAN = df
+        .withColumn("ORIGIN_WBAN", trim(col("ORIGIN_WBAN")))
+        .withColumn("DEST_WBAN", trim(col("DEST_WBAN")))
+
+      // 3) Comptage avant filtrage
+      val countBefore = flightsWBAN.count()
+      println(s"  - Flights before filtering: ${countBefore}")
+
+      // 4) Garde uniquement les vols dont ORIGIN_WBAN existe dans la météo
+      println("  - Filtering flights by ORIGIN_WBAN...")
+      val originStations = weatherStations
+        .select(col("WBAN").as("ORIGIN_WBAN"))
+
+      val flightsHasOrigin = flightsWBAN
+        .join(originStations, Seq("ORIGIN_WBAN"), "left_semi")
+
+      // 5) Puis garde uniquement ceux dont DEST_WBAN existe aussi
+      println("  - Filtering flights by DEST_WBAN...")
+      val destStations = weatherStations
+        .select(col("WBAN").as("DEST_WBAN"))
+
+      val flightDF_filtered = flightsHasOrigin
+        .join(destStations, Seq("DEST_WBAN"), "left_semi")
+        .cache()
+
+      // 6) Comptage après filtrage et petit bilan
+      val countAfter = flightDF_filtered.count()
+      val removedCount = countBefore - countAfter
+      val removalPercent = if (countBefore > 0) (removedCount.toDouble / countBefore * 100).round else 0
+
+      println(s"\n  [WBAN filter] Summary:")
+      println(f"    - Flights before:  $countBefore%,10d")
+      println(f"    - Flights after:   $countAfter%,10d")
+      println(f"    - Removed:         $removedCount%,10d ($removalPercent%%)")
+
+      // Nettoyage du cache des stations météo
+      weatherStations.unpersist()
+
+      flightDF_filtered
+    }
+  }
+
+  /**
+   * Filtre les vols pour ne garder que ceux des mois couverts par les données météo
+   * Utilise un left_semi join basé sur le mois UTC (format yyyy-MM)
+   * @param df DataFrame des vols à filtrer
+   * @param spark Session Spark
+   * @param configuration Configuration de l'application
+   * @return DataFrame filtré contenant uniquement les vols des mois avec données météo
+   */
+  private def filterFlightsByCoveredMonths(df: DataFrame, weatherDF: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    println("\nPhase 2.6: Filter Flights by Covered Months")
+
+    withUiLabels(
+      groupId = "Filter-Flights-By-Covered-Months",
+      desc = "Remove Flights from months not covered by Weather data",
+      tags = "prep,semi-join,month-coverage"
+    ) {
+
+      println("  - Extracting covered months from weather data...")
+
+      // Ajouter la colonne month_utc aux vols
+      val flightsCoveredMonths = df
+        .withColumn("month_utc", date_format(col("UTC_FL_DATE"), "yyyy-MM"))
+
+      // Extraire les mois distincts des données météo
+      val weatherDFWithConvertedDates = weatherDF.withColumn("Date", to_date(col("Date"), "yyyyMMdd"))
+      val weatherMonths = weatherDFWithConvertedDates
+        .withColumn("month_utc", date_format(col("Date"), "yyyy-MM"))
+        .select("month_utc")
+        .distinct()
+        .cache()
+
+      val monthCount = weatherMonths.count()
+      println(s"  - Found ${monthCount} distinct months in weather data")
+
+      // Comptage avant filtrage
+      val countBefore = flightsCoveredMonths.count()
+      println(s"  - Flights before filtering: ${countBefore}")
+
+      // Filtrer les vols pour ne garder que ceux des mois couverts
+      println("  - Filtering flights by covered months...")
+      val flightDF_mCovered = flightsCoveredMonths
+        .join(weatherMonths, Seq("month_utc"), "left_semi")
+        .drop("month_utc")  // Supprimer la colonne temporaire
+        .cache()
+
+      // Comptage après filtrage et statistiques
+      val countAfter = flightDF_mCovered.count()
+      val removedCount = countBefore - countAfter
+      val coveragePercent = if (countBefore > 0) (countAfter.toDouble * 100.0 / countBefore) else 0.0
+
+      println(s"\n  [Month Coverage filter] Summary:")
+      println(f"    - Flights before:     $countBefore%,10d")
+      println(f"    - Flights after:      $countAfter%,10d")
+      println(f"    - Removed:            $removedCount%,10d")
+      println(f"    - Coverage:           $coveragePercent%.2f%%")
+
+      // Nettoyage du cache
+      weatherMonths.unpersist()
+
+      flightDF_mCovered
+    }
+  }
+
+  /**
    * Conversion et validation des types de données
    */
   private def convertAndValidateDataTypes(df: DataFrame): DataFrame = {
@@ -160,27 +307,6 @@ object FlightDataCleaner extends DataPreprocessor {
     val finalCount = df.count()
     println(s"  - Validation passed: $finalCount records")
     df
-  }
-
-  /**
-   * Gestion des valeurs manquantes pour les colonnes de retard
-   */
-  def handleMissingDelayValues(df: DataFrame): DataFrame = {
-    println("Handling missing delay values")
-
-    val columnExpressions = Map(
-      // Remplacer les valeurs nulles par 0 pour les retards
-      "arr_delay_filled" -> when(col("ARR_DELAY_NEW").isNull, 0.0).otherwise(col("ARR_DELAY_NEW")),
-      "weather_delay_filled" -> when(col("WEATHER_DELAY").isNull, 0.0).otherwise(col("WEATHER_DELAY")),
-      "nas_delay_filled" -> when(col("NAS_DELAY").isNull, 0.0).otherwise(col("NAS_DELAY")),
-
-      // Indicateurs de valeurs manquantes (utiles pour l'analyse)
-      "arr_delay_was_null" -> when(col("ARR_DELAY_NEW").isNull, 1).otherwise(0),
-      "weather_delay_was_null" -> when(col("WEATHER_DELAY").isNull, 1).otherwise(0),
-      "nas_delay_was_null" -> when(col("NAS_DELAY").isNull, 1).otherwise(0)
-    )
-
-    addCalculatedColumns(df, columnExpressions)
   }
 
   /**

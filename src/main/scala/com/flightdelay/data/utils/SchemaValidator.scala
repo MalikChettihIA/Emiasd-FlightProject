@@ -220,14 +220,15 @@ object SchemaValidator {
     val (isValid, _) = validate(df, strictMode = false)
 
     // Then normalize
-    val normalized = normalize(df)
+    //val normalized = normalize(df)
 
     // Validate again after normalization
-    if (strictMode) {
-      validate(normalized, strictMode = true)
-    }
+    //if (strictMode) {
+    //  validate(normalized, strictMode = true)
+    //}
 
-    normalized
+    //normalized
+    df
   }
 
   /**

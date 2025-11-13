@@ -1,5 +1,6 @@
 package com.flightdelay.data.preprocessing.flights
 
+import com.flightdelay.config.AppConfiguration
 import com.flightdelay.data.preprocessing.DataPreprocessor
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
@@ -24,7 +25,7 @@ object FlightLabelGenerator extends DataPreprocessor {
    * @param spark Session Spark
    * @return DataFrame avec tous les labels de classification
    */
-  override def preprocess(enrichedFlightData: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  override def preprocess(enrichedFlightData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
     println("")
     println("")
     println("=" * 80)
