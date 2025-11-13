@@ -49,3 +49,4 @@ work/spark-events/local-1763021375162.zstd
 work/notebooks/Flights/DataExploration/OT/201201hourly.txt
 work/notebooks/Flights/DataExploration/OT/weather_2012Jan.parquet
 work/notebooks/Flights/DataExploration/OT/WindChar_dist.csv
+/work/spark-events

@@ -59,6 +59,11 @@ RUN jupyter toree install \
 
 RUN python -m spylon_kernel install --user
 
+# Copier le kernel.json personnalisé avec event log activé
+COPY --chown=$NB_UID:$NB_GID docker/kernel.json /tmp/kernel.json
+RUN cp /tmp/kernel.json /home/jovyan/.local/share/jupyter/kernels/apache_toree_scala_scala/kernel.json && \
+    rm /tmp/kernel.json
+
 WORKDIR /home/jovyan/work
 EXPOSE 8888
 

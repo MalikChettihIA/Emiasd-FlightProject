@@ -235,6 +235,7 @@ services:
       - SPARK_EXECUTOR_MEMORY=7g
       - SPARK_EXECUTOR_CORES=3
       - SPARK_DRIVER_MAXRESULTSIZE=2g
+      - SPARK_OPTS=--driver-java-options=-Xms1024M --driver-java-options=-Xmx4096M --driver-java-options=-Dlog4j.logLevel=info --conf spark.eventLog.enabled=true --conf spark.eventLog.dir=/home/jovyan/work/spark-events --conf spark.eventLog.compress=true
     volumes:
       - ../work:/home/jovyan/work
     depends_on:
