@@ -35,3 +35,17 @@ Thumbs.db
 # Node.js (if applicable)
 node_modules/
 dist/
+id_ed25519_mchettih.key
+/.scala-build
+docs/features/weather_2012Jan.parquet
+/work/notebooks/.ipynb_checkpoints
+/work/notebooks/Flights/DataExploration/FT/.ipynb_checkpoints
+/work/notebooks/Flights/DataExploration/OT/.ipynb_checkpoints
+/work/notebooks/Flights/DataExtractions/JT/.ipynb_checkpoints
+/work/notebooks/Trainings/pyspark-mllib-scalable-machine-learning/02/demos/demo/.ipynb_checkpoints
+work/scripts/work/mlflow/mlflow.db
+work/spark-events/local-1763021375162.zstd
+.claude/settings.local.json
+work/notebooks/Flights/DataExploration/OT/201201hourly.txt
+work/notebooks/Flights/DataExploration/OT/weather_2012Jan.parquet
+work/notebooks/Flights/DataExploration/OT/WindChar_dist.csv
