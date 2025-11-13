@@ -5,8 +5,8 @@ import com.flightdelay.data.loaders.{FlightDataLoader, WeatherDataLoader, WBANAi
 import com.flightdelay.data.preprocessing.flights.FlightPreprocessingPipeline
 import com.flightdelay.data.preprocessing.weather.WeatherPreprocessingPipeline
 import com.flightdelay.data.utils.SchemaValidator
-import com.flightdelay.features.joiners.FlightWeatherDataJoiner
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import com.flightdelay.utils.DebugUtils._
 
 object DataPipeline {
 
@@ -21,70 +21,72 @@ object DataPipeline {
 
     val pipelineStartTime = System.currentTimeMillis()
 
-    println("\n" + "=" * 80)
-    println("[DataPipeline] Complete Data Pipeline - Start")
-    println("=" * 80)
+    info("=" * 80)
+    info("[DataPipeline] Complete Data Pipeline - Start")
+    info("=" * 80)
 
     // Chargement des données brutes
-    println("\n[Step 1/7] Loading raw flight data...")
+    info("[DataPipeline][Step 1/7] Loading raw flight data...")
     var stepStartTime = System.currentTimeMillis()
     FlightDataLoader.loadFromConfiguration()
     var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 1/7] Completed in ${stepDuration}s")
+    info(s"[DataPipeline][Step 1/7] Completed in ${stepDuration}s")
 
     // Preprocessing des données de météo
-    println("\n[Step 2/7] Loading raw weather data...")
+    info("=" * 80)
+    info("[DataPipeline][Step 2/7] Loading raw weather data...")
     stepStartTime = System.currentTimeMillis()
     WeatherDataLoader.loadFromConfiguration()
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 2/7] Completed in ${stepDuration}s")
+    info(s"[DataPipeline][Step 2/7] Completed in ${stepDuration}s")
 
-    println("\n[Step 3/7] Loading WBAN-Airport-Timezone mapping...")
+    info("=" * 80)
+    info("[DataPipeline][Step 3/7] Loading WBAN-Airport-Timezone mapping...")
     stepStartTime = System.currentTimeMillis()
     WBANAirportTimezoneLoader.loadFromConfiguration()
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 3/7] Completed in ${stepDuration}s")
+    info(s"[DataPipeline][Step 3/7] Completed in ${stepDuration}s")
 
     // Preprocessing des données de vols
-    println("\n[Step 4/7] Preprocessing flight data...")
     stepStartTime = System.currentTimeMillis()
     val processedFlightData = FlightPreprocessingPipeline.execute()
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 4/7] Completed in ${stepDuration}s")
 
-    println("\n[Step 5/7] Preprocessing weather data...")
+    info(s"[DataPipeline][Step 4/7] Completed in ${stepDuration}s")
+
     stepStartTime = System.currentTimeMillis()
-    val weather = WeatherPreprocessingPipeline.execute()
+    val processedWeatherData = WeatherPreprocessingPipeline.execute()
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 5/7] Completed in ${stepDuration}s")
+    info(s"[DataPipeline][Step 5/7] Completed in ${stepDuration}s")
 
     // Validate and normalize schemas
-    println("\n[Step 6/7] Validating and normalizing schemas...")
-    stepStartTime = System.currentTimeMillis()
-    println("\n--- Flight Data Schema Validation ---")
-    val validatedFlightData = SchemaValidator.validateAndNormalize(processedFlightData, strictMode = false)
-    println("\n--- Weather Data Schema Validation ---")
-    val validatedWeatherData = SchemaValidator.validateAndNormalize(weather, strictMode = false)
-    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 6/7] Completed in ${stepDuration}s")
+    //info("[DataPipeline][Step 6/7] Validating and normalizing schemas...")
+    //stepStartTime = System.currentTimeMillis()
+    //debug("--- Flight Data Schema Validation ---")
+    //val validatedFlightData = SchemaValidator.validateAndNormalize(processedFlightData, strictMode = false)
+    //debug("--- Weather Data Schema Validation ---")
+    //val validatedWeatherData = SchemaValidator.validateAndNormalize(weather, strictMode = false)
+    //stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    //info(s"[DataPipeline][Step 6/7] Completed in ${stepDuration}s")
 
     // OPTIMIZATION: Cache normalized data since it will be used by all experiments
-    println("\n[Step 7/7] Caching normalized data for reuse across experiments...")
-    stepStartTime = System.currentTimeMillis()
-    val cachedFlightData = validatedFlightData.cache()
-    val cachedWeatherData = validatedWeatherData.cache()
+    //info("[DataPipeline][Step 7/7] Caching normalized data for reuse across experiments...")
+    //stepStartTime = System.currentTimeMillis()
+    val cachedFlightData = processedFlightData.cache()
+    val cachedWeatherData = processedWeatherData.cache()
+
     // Force materialization
     val flightCount = cachedFlightData.count()
-    println(s"  - Cached flight data: ${flightCount} records")
+    debug(s"  - Cached flight data: ${flightCount} records")
     val weatherCount = cachedWeatherData.count()
-    println(s"  - Cached weather data: ${weatherCount} records")
+    debug(s"  - Cached weather data: ${weatherCount} records")
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"[Step 7/7] Completed in ${stepDuration}s")
+    //info(s"[DataPipeline][Step 7/7] Completed in ${stepDuration}s")
 
     val totalDuration = (System.currentTimeMillis() - pipelineStartTime) / 1000.0
-    println("\n" + "=" * 80)
-    println(s"[DataPipeline] Complete Data Pipeline - End (Total: ${totalDuration}s)")
-    println("=" * 80 + "\n")
+    info("=" * 80)
+    info(s"[DataPipeline] Complete Data Pipeline - End (Total: ${totalDuration}s)")
+    info("=" * 80)
 
     (cachedFlightData, cachedWeatherData)
   }

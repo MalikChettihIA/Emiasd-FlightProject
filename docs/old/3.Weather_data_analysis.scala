@@ -378,7 +378,7 @@ weather_type_dataset.cache() // Pour optimiser les accès futurs
 weather_type_dataset.createOrReplaceTempView("weather_types")
 
 // Optionnel: Analyse des patterns dans les types météo
-println("\n=== ANALYSE DES PATTERNS ===")
+println("=== ANALYSE DES PATTERNS ===")
 
 // Types avec intensité (commençant par - ou +)
 val typesWithIntensity = weather_type_dataset

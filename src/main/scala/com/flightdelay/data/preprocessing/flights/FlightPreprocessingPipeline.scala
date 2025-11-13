@@ -1,11 +1,10 @@
 package com.flightdelay.data.preprocessing.flights
 
-import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
-import com.flightdelay.data.preprocessing.weather.WeatherInteractionFeatures
-import com.flightdelay.data.utils.TimeFeatureUtils
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+import com.flightdelay.utils.DebugUtils._
 
 object FlightPreprocessingPipeline {
 
@@ -18,76 +17,75 @@ object FlightPreprocessingPipeline {
    */
   def execute()(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
-    println("\n" + "=" * 80)
-    println("[Preprocessing] Flight Data Preprocessing Pipeline - Start")
-    println("=" * 80)
+    info("=" * 80)
+    info("[DataPipeline][Step 4/7] Flight Data Preprocessing Pipeline - Start")
+    info("=" * 80)
 
     val processedParquetPath = s"${configuration.common.output.basePath}/common/data/processed_flights.parquet"
 
     // Load raw data from parquet
     val rawParquetPath = s"${configuration.common.output.basePath}/common/data/raw_flights.parquet"
-    println(s"\nLoading raw data from parquet:")
-    println(s"  - Path: $rawParquetPath")
+    debug(s"Loading raw data from parquet:")
+    debug(s"  - Path: $rawParquetPath")
     val originalDf = spark.read.parquet(rawParquetPath)
-    println(s"  - Loaded ${originalDf.count()} raw records")
+    debug(s"  - Loaded ${originalDf.count()} raw records")
 
-    println("[Pipeline Step 1/9] Enriching with WBAN...")
+    debug("[Pipeline Step 1/9] Enriching with WBAN...")
     val enrichedWithWBAN = FlightWBANEnricher.preprocess(originalDf)
-    enrichedWithWBAN.printSchema()
 
     val enrichedWithWBANPath = s"${configuration.common.output.basePath}/common/data/wban_enriched_flights.parquet"
-    println("[Pipeline Step 1/9] Wrinting Enriched parquer file...", enrichedWithWBANPath)
+    debug(f"[Pipeline Step 1/9] Wrinting Enriched parquer file... {enrichedWithWBANPath}")
     enrichedWithWBAN
       .write.mode("overwrite")
       .parquet(enrichedWithWBANPath)
 
     // Execute preprocessing pipeline (each step creates a new DataFrame)
-    println("\n[Pipeline Step 2/9] Cleaning flight data...")
+    debug("[Pipeline Step 2/9] Cleaning flight data...")
     val cleanedFlightData = FlightDataCleaner.preprocess(enrichedWithWBAN)
 
-    println("[Pipeline Step 3/9] Enriching with Datasets ...")
+    debug("[Pipeline Step 3/9] Enriching with Datasets ...")
     val enrichedWithDataset = FlightDataSetFilterGenerator.preprocess(cleanedFlightData)
 
-    println("[Pipeline Step 4/9] Generating arrival data...")
+    debug("[Pipeline Step 4/9] Generating arrival data...")
     val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithDataset)
 
-    println("[Pipeline Step 5/9] Generating flight features...")
+    debug("[Pipeline Step 5/9] Generating flight features...")
     val generatedFlightData = FlightDataGenerator.preprocess(enrichedWithArrival)
 
-    //println("[Pipeline Step 5/9] Creating previous late flight features...")
+    //debug("[Pipeline Step 5/9] Creating previous late flight features...")
     //val generatedPreviousLateFlightData = FlightPreviousLateFlightFeatureGenerator.createLateAircraftFeature(generatedFlightData)
 
     // ⭐ CHECKPOINT 1: After heavy feature generation
-    //println("[Pipeline Step 5.5/9] Checkpointing after feature generation...")
+    //debug("[Pipeline Step 5.5/9] Checkpointing after feature generation...")
     //val checkpointed1 = generatedPreviousLateFlightData.checkpoint()
     //checkpointed1.count()
     //logMemoryUsage("After feature generation")
 
-    println("[Pipeline Step 6/9] Generating labels...")
+    debug("[Pipeline Step 6/9] Generating labels...")
     //val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(checkpointed1)
     val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFlightData)
 
     // ⭐ CHECKPOINT 2: After label generation
-    //println("[Pipeline Step 6.5/9] Checkpointing after label generation...")
+    //debug("[Pipeline Step 6.5/9] Checkpointing after label generation...")
     //val checkpointed2 = generatedFightDataWithLabels.checkpoint()
     //checkpointed2.count()
     //logMemoryUsage("After label generation")
 
     // Calculate avg delay features for ALL delay thresholds (15min, 30min, 45min, 60min, 90min)
-    //println("[Pipeline Step 7/9] Calculating avg delay features...")
+    //debug("[Pipeline Step 7/9] Calculating avg delay features...")
     //val generatedFlightsWithAvgDelay = FlightAvgDelayFeatureGenerator.enrichFlightsWithAvgDelay(
     //  flightData = checkpointed2,
     //  enableCheckpoint = true
     //)
 
     // ⭐ CHECKPOINT 3: After avg delay (memory intensive)
-    //println("[Pipeline Step 7.5/9] Checkpointing after avg delay...")
+    //debug("[Pipeline Step 7.5/9] Checkpointing after avg delay...")
     //val checkpointed3 = generatedFlightsWithAvgDelay.checkpoint()
     //checkpointed3.count()
     //logMemoryUsage("After avg delay")
 
     // Validate schema
-    println("[Pipeline Step 9/9] Validating schema...")
+    debug("[Pipeline Step 9/9] Validating schema...")
     validatePreprocessedSchema(generatedFightDataWithLabels)
 
     // ⭐ OPTIMIZED WRITE STRATEGY
@@ -97,10 +95,6 @@ object FlightPreprocessingPipeline {
     //checkpointed1.unpersist()
     //checkpointed2.unpersist()
     //checkpointed3.unpersist()
-
-    println("\n" + "=" * 80)
-    println("[Preprocessing] Flight Data Preprocessing Pipeline - End")
-    println("=" * 80 + "\n")
 
     // Relire depuis le disque pour retourner un DataFrame propre
     spark.read.parquet(processedParquetPath)
@@ -112,32 +106,30 @@ object FlightPreprocessingPipeline {
   private def writeFlightDataSafely(
                                      flightDf: DataFrame,
                                      outputPath: String
-                                   )(implicit spark: SparkSession): Unit = {
+                                   )(implicit sparkSession: SparkSession, configuration: AppConfiguration): Unit = {
 
-    import spark.implicits._
-
-    println(s"\nSaving preprocessed flight data to parquet:")
-    println(s"  - Path: $outputPath")
-    println("  - Using optimized write strategy")
+    debug(s"Saving preprocessed flight data to parquet:")
+    debug(s"  - Path: $outputPath")
+    debug("  - Using optimized write strategy")
 
     logMemoryUsage("Before write")
 
     val rowCount = flightDf.count()
-    println(s"  - Rows to write: ${rowCount}")
+    debug(s"  - Rows to write: ${rowCount}")
 
     // ⭐ CHECKPOINT FINAL avant write
-    println("\n  [Step 1/3] Final checkpoint before write...")
+    debug("[Step 1/3] Final checkpoint before write...")
     val checkpointed = flightDf
       .repartition(100, col("UTC_FL_DATE"))  // Partition par date
       .checkpoint()
 
     checkpointed.count()
-    println("  ✓ Checkpoint completed")
+    debug("  ✓ Checkpoint completed")
 
     logMemoryUsage("After checkpoint")
 
     // ⭐ WRITE avec partitionnement
-    println("\n  [Step 2/3] Writing to parquet with date partitioning...")
+    debug("[Step 2/3] Writing to parquet with date partitioning...")
     try {
       checkpointed
         .write
@@ -147,24 +139,24 @@ object FlightPreprocessingPipeline {
         .option("maxRecordsPerFile", 500000)
         .parquet(outputPath)
 
-      println("  ✓ Write completed successfully")
+      debug("  ✓ Write completed successfully")
 
     } catch {
       case e: Exception =>
-        println(s"  ✗ Write failed: ${e.getMessage}")
-        println("\n  Attempting fallback: batch write strategy...")
+        debug(s"  ✗ Write failed: ${e.getMessage}")
+        debug("  Attempting fallback: batch write strategy...")
 
         writeFlightInBatches(checkpointed, outputPath)
     }
 
     // Cleanup
-    println("\n  [Step 3/3] Cleaning up...")
+    debug("  [Step 3/3] Cleaning up...")
     checkpointed.unpersist()
     System.gc()
 
     logMemoryUsage("After write")
 
-    println(s"\n  ✓ Flight data saved successfully")
+    debug(s"   Flight data saved successfully")
   }
 
   /**
@@ -174,14 +166,12 @@ object FlightPreprocessingPipeline {
                                     flightDf: DataFrame,
                                     outputPath: String,
                                     batchSize: Int = 1000000  // 1M rows per batch
-                                  )(implicit spark: SparkSession): Unit = {
-
-    import spark.implicits._
+                                  )(implicit sparkSession: SparkSession, configuration: AppConfiguration): Unit = {
 
     val totalRows = flightDf.count()
     val numBatches = Math.ceil(totalRows.toDouble / batchSize).toInt
 
-    println(s"  Writing in ${numBatches} batches of ${batchSize} rows...")
+    debug(s"  Writing in ${numBatches} batches of ${batchSize} rows...")
 
     val withBatchNum = flightDf
       .withColumn("temp_row_id", monotonically_increasing_id())
@@ -191,7 +181,7 @@ object FlightPreprocessingPipeline {
     withBatchNum.count()
 
     (0 until numBatches).foreach { batchNum =>
-      print(s"  Batch ${batchNum + 1}/${numBatches}... ")
+      debug(s"  Batch ${batchNum + 1}/${numBatches}... ")
 
       val batchData = withBatchNum
         .filter(col("temp_batch_num") === batchNum)
@@ -204,7 +194,7 @@ object FlightPreprocessingPipeline {
         .option("compression", "snappy")
         .parquet(s"${outputPath}/batch_${batchNum}")
 
-      println("✓")
+      debug("✓")
 
       if (batchNum % 2 == 1) {
         System.gc()
@@ -214,17 +204,17 @@ object FlightPreprocessingPipeline {
 
     withBatchNum.unpersist()
 
-    println(s"  ✓ All ${numBatches} batches written")
+    debug(s"  ✓ All ${numBatches} batches written")
   }
 
   /**
    * Validate the schema of preprocessed data
    * Ensures all required columns exist with correct data types
    */
-  private def validatePreprocessedSchema(df: DataFrame): Unit = {
-    println("\n" + "=" * 80)
-    println("Schema Validation")
-    println("=" * 80)
+  private def validatePreprocessedSchema(df: DataFrame)(implicit sparkSession: SparkSession, configuration: AppConfiguration): Unit = {
+    debug("" + "=" * 80)
+    debug("Schema Validation")
+    debug("=" * 80)
 
     // Required base columns (from raw data)
     val requiredBaseColumns = Map(
@@ -269,59 +259,59 @@ object FlightPreprocessingPipeline {
     var validationPassed = true
 
     // Validate base columns with types
-    println("\nValidating base columns:")
+    debug("Validating base columns:")
     requiredBaseColumns.foreach { case (colName, expectedType) =>
       if (!availableColumns.contains(colName)) {
-        println(s"  ✗ Missing column: $colName")
+        debug(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
         val actualType = schema(colName).dataType
         if (actualType != expectedType) {
-          println(s"  ✗ Wrong type for $colName: expected $expectedType, got $actualType")
+          debug(s"  ✗ Wrong type for $colName: expected $expectedType, got $actualType")
           validationPassed = false
         } else {
-          println(s"  ✓ $colName ($expectedType)")
+          debug(s"  ✓ $colName ($expectedType)")
         }
       }
     }
 
     // Validate generated columns
-    println("\nValidating generated columns:")
+    debug("Validating generated columns:")
     requiredGeneratedColumns.foreach { colName =>
       if (!availableColumns.contains(colName)) {
-        println(s"  ✗ Missing column: $colName")
+        debug(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
-        println(s"  ✓ $colName")
+        debug(s"  ✓ $colName")
       }
     }
 
     // Validate label columns
-    println("\nValidating label columns:")
+    debug("Validating label columns:")
     requiredLabelColumns.foreach { colName =>
       if (!availableColumns.contains(colName)) {
-        println(s"  ✗ Missing column: $colName")
+        debug(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
-        println(s"  ✓ $colName")
+        debug(s"  ✓ $colName")
       }
     }
 
     // Summary
-    println("\n" + "=" * 80)
+    debug("=" * 80)
     if (validationPassed) {
-      println(s"✓ Schema Validation PASSED - ${df.columns.length} columns validated")
+      debug(s"✓ Schema Validation PASSED - ${df.columns.length} columns validated")
     } else {
-      println("✗ Schema Validation FAILED")
+      debug("✗ Schema Validation FAILED")
       throw new RuntimeException("Schema validation failed. Check logs for details.")
     }
-    println("=" * 80)
+    debug("=" * 80)
   }
 
   /**
    * Monitoring mémoire
    */
-  private def logMemoryUsage(label: String): Unit = {
+  private def logMemoryUsage(label: String)(implicit sparkSession: SparkSession, configuration: AppConfiguration): Unit = {
     val runtime = Runtime.getRuntime
     val maxMemory = runtime.maxMemory() / (1024 * 1024 * 1024)
     val totalMemory = runtime.totalMemory() / (1024 * 1024 * 1024)
@@ -330,10 +320,10 @@ object FlightPreprocessingPipeline {
 
     val usagePercent = ((usedMemory / maxMemory) * 100).toInt
 
-    println(f"\n  [$label] Memory: ${usedMemory}%.2f GB / ${maxMemory}%.2f GB (${usagePercent}%%)")
+    debug(f"  [$label] Memory: ${usedMemory}%.2f GB / ${maxMemory}%.2f GB (${usagePercent}%%)")
 
     if (usagePercent > 85) {
-      println(s"  ⚠️  WARNING: Memory at ${usagePercent}% - forcing GC...")
+      debug(s"  ⚠️  WARNING: Memory at ${usagePercent}% - forcing GC...")
       System.gc()
       Thread.sleep(1000)
     }

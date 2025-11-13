@@ -5,9 +5,7 @@ import com.flightdelay.data.DataPipeline
 import com.flightdelay.features.FeaturePipeline
 import com.flightdelay.ml.MLPipeline
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.slf4j.LoggerFactory
-
-import scala.util.{Failure, Success}
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Flight Delay Prediction Application - Main Entry Point
@@ -29,13 +27,13 @@ object FlightDelayPredictionApp {
   def main(args: Array[String]): Unit = {
 
     val appStartTime = System.currentTimeMillis()
-
-    println("\n" + "=" * 160)
-    println("Flight Delay Prediction App Starting...")
-    println("=" * 160)
-
     implicit val configuration: AppConfiguration = ConfigurationLoader.loadConfiguration(args)
-    println(s"Configuration '${configuration.environment}' loaded successfully")
+
+    info("=" * 160)
+    info("Flight Delay Prediction App Starting...")
+    info("=" * 160)
+
+    info(s"Configuration '${configuration.environment}' loaded successfully")
 
 
     implicit val spark: SparkSession = SparkSession.builder()
@@ -53,9 +51,10 @@ object FlightDelayPredictionApp {
 
     // Get enabled experiments
     val enabledExperiments = configuration.enabledExperiments
-    println(s"Found ${enabledExperiments.length} enabled experiments:")
+    info("=" * 80)
+    info(s"Found ${enabledExperiments.length} enabled experiments:")
     enabledExperiments.foreach { exp =>
-      println(s"  - ${exp.name}: ${exp.description}")
+      info(s"  - ${exp.name}: ${exp.description}")
     }
 
     // Parse tasks to execute
@@ -65,8 +64,7 @@ object FlightDelayPredictionApp {
       Set("data-pipeline", "feature-extraction", "train")
     }
 
-    println(s"Tasks to execute: ${tasks.mkString(", ")}")
-    println("=" * 80 + "\n")
+    info(s"Tasks to execute: ${tasks.mkString(", ")}")
 
     try {
 
@@ -75,18 +73,18 @@ object FlightDelayPredictionApp {
       // =====================================================================================
       val (flightData, weatherData) = if (tasks.contains("data-pipeline")) {
         val (flights, weather) = DataPipeline.execute()
-        println("\n[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... ")
-        println(f"\n- Final Flights dataset: ${flights.count()}%,d records with ${flights.columns.length}%3d columns")
-        println(f"\n- Final Weather dataset: ${weather.count()}%,d records with ${weather.columns.length}%3d columns")
+        info("[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... ")
+        debug(f"- Final Flights dataset: ${flights.count()}%,d records with ${flights.columns.length}%3d columns")
+        debug(f"- Final Weather dataset: ${weather.count()}%,d records with ${weather.columns.length}%3d columns")
 
         (flights, weather)
       } else {
-        println("\n[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... SKIPPED")
-        println("\n- Loading preprocessed data from parquet...")
+        warn("[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... SKIPPED")
+        warn("- Loading preprocessed data from parquet...")
         val flights = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_flights.parquet")
         val weather = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_weather.parquet")
-        println(f"- Loaded Flights: ${flights.count()}%,d records")
-        println(f"- Loaded Weathers: ${weather.count()}%,d records")
+        debug(f"- Loaded Flights: ${flights.count()}%,d records")
+        debug(f"- Loaded Weathers: ${weather.count()}%,d records")
         (flights, weather)
       }
 
@@ -94,51 +92,51 @@ object FlightDelayPredictionApp {
       // STEP 2: Process each enabled experiment sequentially
       // =====================================================================================
       enabledExperiments.zipWithIndex.foreach { case (experiment, index) =>
-        println("\n" + "=" * 80)
-        println(s"EXPERIMENT ${index + 1}/${enabledExperiments.length}: ${experiment.name}")
-        println("=" * 80)
-        println(s"Description: ${experiment.description}")
-        println(s"Model Type: ${experiment.model.modelType}")
-        println(s"Feature Extraction: ${experiment.featureExtraction.featureType}")
-        println("=" * 80 + "\n")
+        info("=" * 80)
+        info(s"EXPERIMENT ${index + 1}/${enabledExperiments.length}: ${experiment.name}")
+        info("=" * 80)
+        info(s"Description: ${experiment.description}")
+        info(s"Model Type: ${experiment.model.modelType}")
+        info(s"Feature Extraction: ${experiment.featureExtraction.featureType}")
+        info("=" * 80 )
 
         try {
           runExperiment(experiment, tasks, flightData, weatherData)
         } catch {
           case ex: Exception =>
-            println("\n" + "=" * 80)
-            println(s"✗ ERROR in Experiment: ${experiment.name}")
-            println("=" * 80)
-            println(s"Error message: ${ex.getMessage}")
+            error("=" * 80)
+            error(s"✗ ERROR in Experiment: ${experiment.name}")
+            error("=" * 80)
+            error(s"Error message: ${ex.getMessage}")
             ex.printStackTrace()
-            println("=" * 80 + "\n")
-            println("Continuing with next experiment...\n")
+            error("=" * 80 )
+            error("Continuing with next experiment...")
         }
       }
 
-      println("\n" + "=" * 80)
-      println("- Flight Delay Prediction App Completed Successfully!")
-      println("=" * 80 + "\n")
+      info("=" * 80)
+      info("- Flight Delay Prediction App Completed Successfully!")
+      info("=" * 80)
 
     } catch {
       case ex: Exception =>
-        println("\n" + "=" * 80)
-        println("✗ ERROR in Application")
-        println("=" * 80)
-        println(s"Error message: ${ex.getMessage}")
+        error("=" * 80)
+        error("✗ ERROR in Application")
+        error("=" * 80)
+        error(s"Error message: ${ex.getMessage}")
         ex.printStackTrace()
-        println("=" * 80 + "\n")
+        error("=" * 80 )
     } finally {
       val totalAppDuration = (System.currentTimeMillis() - appStartTime) / 1000.0
 
-      println("\n" + "=" * 80)
-      println("Flight Delay Prediction App - Execution Summary")
-      println("=" * 80)
-      println(f"Total execution time: ${totalAppDuration}%.2f seconds (${totalAppDuration / 60}%.2f minutes)")
-      println("=" * 80 + "\n")
+      info("=" * 80)
+      info("Flight Delay Prediction App - Execution Summary")
+      info("=" * 80)
+      info(f"Total execution time: ${totalAppDuration}%.2f seconds (${totalAppDuration / 60}%.2f minutes)")
+      info("=" * 80)
 
       spark.stop()
-      println("Spark session stopped.\n")
+      info("Spark session stopped.\n")
     }
   }
 
@@ -156,43 +154,43 @@ object FlightDelayPredictionApp {
     // STEP 2: Feature Pipeline (Join + Explode + Extract Features)
     // =====================================================================================
     if (tasks.contains("feature-extraction")) {
-      println("\n" + "-" * 80)
-      println(s"[STEP 2] Feature Pipeline for ${experiment.name}")
-      println("-" * 80)
-      println(s"Feature Type: ${experiment.featureExtraction.featureType}")
+      info("-" * 80)
+      info(s"[STEP 2] Feature Pipeline for ${experiment.name}")
+      info("-" * 80)
+      info(s"Feature Type: ${experiment.featureExtraction.featureType}")
 
       FeaturePipeline.execute(flightData, weatherData, experiment)
 
-      println("-" * 80 + "\n")
+      info("-" * 80)
     } else {
-      println(s"\n[STEP 2] Feature pipeline for ${experiment.name}... SKIPPED")
+      warn(s"[STEP 2] Feature pipeline for ${experiment.name}... SKIPPED")
     }
 
     // =====================================================================================
     // STEP 3: Train Model with K-Fold CV + Hold-out Test
     // =====================================================================================
     if (tasks.contains("train")) {
-      println("\n" + "-" * 80)
-      println(s"[FlightDelayPredictionApp][STEP 3] Model Training for ${experiment.name}")
-      println("-" * 80)
+      info("-" * 80)
+      info(s"[FlightDelayPredictionApp][STEP 3] Model Training for ${experiment.name}")
+      info("-" * 80)
 
       // Train model using new MLPipeline (Option B: K-fold + Hold-out)
       val mlResult = MLPipeline.train(experiment)
 
       // Display summary
-      println("\n" + "-" * 80)
-      println("Training Summary")
-      println("-" * 80)
-      println(f"Accuracy:          ${mlResult.holdOutMetrics.accuracy * 100}%6.2f%%")
-      println(f"CV F1-Score:       ${mlResult.cvMetrics.avgF1 * 100}%6.2f%% ± ${mlResult.cvMetrics.stdF1 * 100}%.2f%%")
-      println(f"Hold-out F1-Score: ${mlResult.holdOutMetrics.f1Score * 100}%6.2f%%")
-      println(f"RECd (Delayed):    ${mlResult.holdOutMetrics.recallDelayed * 100}%6.2f%%")
-      println(f"RECo (On-time):    ${mlResult.holdOutMetrics.recallOnTime * 100}%6.2f%%")
-      println(f"Training time:     ${mlResult.trainingTimeSeconds}%.2f seconds")
-      println("-" * 80 + "\n")
+      info("-" * 80)
+      info("Training Summary")
+      info("-" * 80)
+      info(f"Accuracy:          ${mlResult.holdOutMetrics.accuracy * 100}%6.2f%%")
+      info(f"CV F1-Score:       ${mlResult.cvMetrics.avgF1 * 100}%6.2f%% ± ${mlResult.cvMetrics.stdF1 * 100}%.2f%%")
+      info(f"Hold-out F1-Score: ${mlResult.holdOutMetrics.f1Score * 100}%6.2f%%")
+      info(f"RECd (Delayed):    ${mlResult.holdOutMetrics.recallDelayed * 100}%6.2f%%")
+      info(f"RECo (On-time):    ${mlResult.holdOutMetrics.recallOnTime * 100}%6.2f%%")
+      info(f"Training time:     ${mlResult.trainingTimeSeconds}%.2f seconds")
+      info("-" * 80)
 
     } else {
-      println(s"\n[FlightDelayPredictionApp][STEP 3] Training model for ${experiment.name}... SKIPPED")
+      warn(s"[FlightDelayPredictionApp][STEP 3] Training model for ${experiment.name}... SKIPPED")
     }
 
   }

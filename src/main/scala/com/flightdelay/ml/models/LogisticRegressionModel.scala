@@ -35,7 +35,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
     val regParam = hp.regParam.getOrElse(Seq(0.0)).head
     val elasticNetParam = hp.elasticNetParam.getOrElse(Seq(0.0)).head
 
-    println(s"\n[LogisticRegression] Training with hyperparameters:")
+    println(s"[LogisticRegression] Training with hyperparameters:")
     println(s"  - Max iterations: $maxIter")
     println(s"  - Regularization parameter: $regParam")
     println(s"  - ElasticNet parameter: $elasticNetParam")
@@ -57,7 +57,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(lr))
 
-    println("\nStarting training...")
+    println("Starting training...")
     val startTime = System.currentTimeMillis()
 
     val model = pipeline.fit(data)
@@ -65,7 +65,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"\n- Training completed in $trainingTime%.2f seconds")
+    println(f"- Training completed in $trainingTime%.2f seconds")
 
     // Extract and display feature coefficients
     val lrModel = model.stages(0).asInstanceOf[SparkLRModel]
@@ -76,7 +76,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
       saveFeatureCoefficients(lrModel, path)
     }
 
-    println("=" * 80 + "\n")
+    println("=" * 80)
 
     model
   }
@@ -99,8 +99,8 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
     // Try to load feature names from file
     val featureNames = loadFeatureNames()
 
-    println(f"\nModel Intercept: $intercept%.6f")
-    println(f"\nTop $topN Feature Coefficients (Absolute Value):")
+    println(f"Model Intercept: $intercept%.6f")
+    println(f"Top $topN Feature Coefficients (Absolute Value):")
     println("-" * 70)
 
     coefficients.zipWithIndex
@@ -139,13 +139,13 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
         val source = scala.io.Source.fromFile(foundPath)
         try {
           val names = source.getLines().toArray
-          println(s"\n✓ Loaded ${names.length} feature names from: $foundPath")
+          println(s" Loaded ${names.length} feature names from: $foundPath")
           names
         } finally {
           source.close()
         }
       }.getOrElse {
-        println(s"\n⚠ Could not load feature names (tried ${possiblePaths.length} locations)")
+        println(s" Could not load feature names (tried ${possiblePaths.length} locations)")
         Array.empty[String]
       }
     } catch {
@@ -180,13 +180,13 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
       val writer = new java.io.PrintWriter(new java.io.File(outputPath))
       try {
         writer.write(csvContent)
-        println(s"\n✓ Feature coefficients saved to: $outputPath")
+        println(s" Feature coefficients saved to: $outputPath")
       } finally {
         writer.close()
       }
     } catch {
       case ex: Exception =>
-        println(s"\n⚠ Failed to save feature coefficients: ${ex.getMessage}")
+        println(s" Failed to save feature coefficients: ${ex.getMessage}")
     }
   }
 }

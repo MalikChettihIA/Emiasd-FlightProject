@@ -1,8 +1,8 @@
 package com.flightdelay.features.balancer
 
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
-
 import com.flightdelay.utils.MetricsUtils
 
 /**
@@ -70,7 +70,7 @@ object DelayBalancedDatasetBuilder {
                               labeledDf: DataFrame,
                               trainRatio: Double = 0.75,
                               seed: Long = 42L
-                            )(implicit spark: SparkSession): (DataFrame, DataFrame) = {
+                            )(implicit spark: SparkSession, configuration: AppConfiguration): (DataFrame, DataFrame) = {
 
     // 0) Sanity
     require(trainRatio > 0 && trainRatio < 1.0, s"trainRatio must be in (0,1), got $trainRatio")

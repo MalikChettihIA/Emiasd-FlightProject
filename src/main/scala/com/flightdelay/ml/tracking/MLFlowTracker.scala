@@ -147,7 +147,7 @@ object MLFlowTracker {
       val newDesc = if (currentDesc.isEmpty) {
         additionalText
       } else {
-        currentDesc + "\n\n" + additionalText
+        currentDesc + "\n" + additionalText
       }
 
       setDescription(runId, newDesc)
@@ -651,7 +651,7 @@ object MLFlowTracker {
    */
   def logDatasetsFromConfig(runId: String, config: AppConfiguration): Unit = {
 
-    println("\n[MLFlow] Logging datasets from configuration...")
+    println("[MLFlow] Logging datasets from configuration...")
 
     // Flight dataset
     MLFlowTracker.logDataset(

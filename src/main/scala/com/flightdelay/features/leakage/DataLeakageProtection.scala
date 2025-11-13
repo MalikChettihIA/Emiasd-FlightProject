@@ -25,7 +25,7 @@ object DataLeakageProtection {
    * @return DataFrame nettoyé
    */
   def clean(df: DataFrame, target: String): DataFrame = {
-    println(s"\n[DataLeakageProtection] Cleaning")
+    println(s"[DataLeakageProtection] Cleaning")
 
     val step1 = removeSourceLeakage(df, verbose = true)
     val step2 = removeUnusedLabels(step1, target, verbose = true)
@@ -45,7 +45,7 @@ object DataLeakageProtection {
    */
   def removeSourceLeakage(df: DataFrame, verbose: Boolean = false): DataFrame = {
     if (verbose) {
-      println("\n" + "=" * 80)
+      println("=" * 80)
       println("[LeakageProtection] Removing Source Leakage Columns")
       println("=" * 80)
     }
@@ -58,7 +58,7 @@ object DataLeakageProtection {
       df
     } else {
       if (verbose) {
-        println(s"\n  Found ${columnsToRemove.length} source leakage columns:")
+        println(s"  Found ${columnsToRemove.length} source leakage columns:")
         columnsToRemove.foreach(col => println(s"    ✗ $col (will be removed)"))
       }
 
@@ -66,9 +66,9 @@ object DataLeakageProtection {
 
       if (verbose) {
         val finalColumns = cleanedDf.columns.length
-        println(s"\n  - Removed: ${columnsToRemove.length} columns")
+        println(s"  - Removed: ${columnsToRemove.length} columns")
         println(s"  - Remaining: $finalColumns columns")
-        println("  ✓ Source leakage columns removed")
+        println("   Source leakage columns removed")
       }
 
       cleanedDf
@@ -87,7 +87,7 @@ object DataLeakageProtection {
    */
   def removeUnusedLabels(df: DataFrame, targetLabel: String, verbose: Boolean = false): DataFrame = {
     if (verbose) {
-      println("\n" + "=" * 80)
+      println("=" * 80)
       println("[LeakageProtection] Removing Unused Labels")
       println("=" * 80)
       println(s"  Target label: $targetLabel")
@@ -101,15 +101,15 @@ object DataLeakageProtection {
       df
     } else {
       if (verbose) {
-        println(s"\n  Found ${allLabels.length} label columns:")
-        println(s"    ✓ $targetLabel (kept)")
+        println(s"  Found ${allLabels.length} label columns:")
+        println(s"     $targetLabel (kept)")
         unusedLabels.foreach(label => println(s"    ✗ $label (removed)"))
       }
 
       val cleanedDf = df.drop(unusedLabels: _*)
 
       if (verbose) {
-        println(s"\n  - Removed: ${unusedLabels.length} unused label columns")
+        println(s"  - Removed: ${unusedLabels.length} unused label columns")
         println(s"  ✓ Only target label kept: $targetLabel")
       }
 
@@ -127,7 +127,7 @@ object DataLeakageProtection {
    */
   def removeForbiddenFeatures(df: DataFrame, verbose: Boolean = false): DataFrame = {
     if (verbose) {
-      println("\n" + "=" * 80)
+      println("=" * 80)
       println("[LeakageProtection] Removing Forbidden Feature Columns")
       println("=" * 80)
     }
@@ -139,15 +139,15 @@ object DataLeakageProtection {
       df
     } else {
       if (verbose) {
-        println(s"\n  Found ${columnsToRemove.length} forbidden feature columns:")
+        println(s"  Found ${columnsToRemove.length} forbidden feature columns:")
         columnsToRemove.foreach(col => println(s"    ✗ $col (removed)"))
       }
 
       val cleanedDf = df.drop(columnsToRemove: _*)
 
       if (verbose) {
-        println(s"\n  - Removed: ${columnsToRemove.length} forbidden columns")
-        println("  ✓ Forbidden features removed")
+        println(s"  - Removed: ${columnsToRemove.length} forbidden columns")
+        println("   Forbidden features removed")
       }
 
       cleanedDf
@@ -193,7 +193,7 @@ object DataLeakageProtection {
    * @param targetLabel Label cible
    */
   def printValidationReport(df: DataFrame, targetLabel: String): Unit = {
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[DataLeakageProtection] Validation Report")
     println("=" * 80)
 
@@ -205,7 +205,7 @@ object DataLeakageProtection {
       println(s"  ✓ Total columns: ${df.columns.length}")
     } else {
       println("  ✗ VALIDATION FAILED - Data leakage detected!")
-      println(s"\n  Found ${violations.length} violations:")
+      println(s"  Found ${violations.length} violations:")
       violations.foreach(v => println(s"    ✗ $v"))
     }
 

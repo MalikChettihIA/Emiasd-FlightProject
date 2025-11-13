@@ -1,8 +1,10 @@
 package com.flightdelay.data.preprocessing.weather
 
-import org.apache.spark.sql.DataFrame
+import com.flightdelay.config.AppConfiguration
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import com.flightdelay.utils.DebugUtils._
 
 object WeatherInteractionFeatures {
 
@@ -10,7 +12,9 @@ object WeatherInteractionFeatures {
    * Applique toutes les features d'interaction
    * OPTIMISÉ : Utilise uniquement des expressions Spark natives (pas d'UDF)
    */
-  def createInteractionFeatures(df: DataFrame): DataFrame = {
+  def createInteractionFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherInteractionFeatures.createInteractionFeatures()")
 
     df
       // 1. Calculer l'indice de sévérité météorologique combiné

@@ -3,6 +3,7 @@ package com.flightdelay.data.preprocessing.flights
 import com.flightdelay.config.AppConfiguration
 import com.flightdelay.data.preprocessing.DataPreprocessor
 import com.flightdelay.data.utils.TimeFeatureUtils
+import com.flightdelay.utils.DebugUtils._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
@@ -21,13 +22,15 @@ object FlightDataGenerator extends DataPreprocessor {
    * @return DataFrame enrichi avec des nouvelles colonnes
    */
   override def preprocess(cleanedFlightData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
-    println("")
-    println("=" * 80)
-    println("[STEP 2][FlightDataGenerator] Flight Data Generator - Start ...")
-    println("=" * 80)
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataGenerator.preprocess")
+
+    debug("")
+    debug("=" * 80)
+    debug("[STEP 2][FlightDataGenerator] Flight Data Generator - Start ...")
+    debug("=" * 80)
 
     val originalColumns = cleanedFlightData.columns.length
-    println(s"Original Column Counts: $originalColumns")
+    debug(s"Original Column Counts: $originalColumns")
 
     // Étape 1: Ajout des caractéristiques temporelles
     val withTemporalFeatures = addTemporalFeatures(cleanedFlightData)
@@ -54,9 +57,11 @@ object FlightDataGenerator extends DataPreprocessor {
   /**
    * Ajoute les caractéristiques temporelles dérivées de la date et heure
    */
-  def addTemporalFeatures(df: DataFrame): DataFrame = {
-    println("")
-    println("Phase 1: Add Temporal Features")
+  def addTemporalFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataGenerator.addTemporalFeatures")
+
+    debug("")
+    debug("Phase 1: Add Temporal Features")
 
     val columnExpressions = Map[String, Column](
       // Conversion de la date en timestamp
@@ -186,16 +191,19 @@ object FlightDataGenerator extends DataPreprocessor {
 
     val result = addCalculatedColumns(resultWithBasicFeatures, columnExpressions2)
 
-    println(s"Temporal features added: ${columnExpressions.size + columnExpressions2.size}")
+    debug(s"Temporal features added: ${columnExpressions.size + columnExpressions2.size}")
     result
   }
 
   /**
    * Ajoute les caractéristiques spécifiques au vol
    */
-  def addFlightCharacteristics(df: DataFrame): DataFrame = {
-    println("")
-    println("Phase 2: Add Flight Characteristics")
+  def addFlightCharacteristics(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataGenerator.addFlightCharacteristics")
+
+    debug("")
+    debug("Phase 2: Add Flight Characteristics")
 
     /**println("- Add feature_flight_unique_id ")
     println("- Add feature_distance_category (short, medium, long, very_long) ")
@@ -242,17 +250,19 @@ object FlightDataGenerator extends DataPreprocessor {
     )
 
     val result = addCalculatedColumns(df, columnExpressions)
-    println(s"Added Flight features: ${columnExpressions.size}")
+    debug(s"Added Flight features: ${columnExpressions.size}")
     result
   }
 
   /**
    * Ajoute les indicateurs de période (rush hours, week-end, saisons, etc.)
    */
-  def addPeriodIndicators(df: DataFrame): DataFrame = {
+  def addPeriodIndicators(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
-    println("")
-    println("Phase 3: Add Period <indicator")
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataGenerator.addPeriodIndicators")
+
+    debug("")
+    debug("Phase 3: Add Period <indicator")
 
    /**println("- Add feature_is_weekend, feature_is_friday, feature_is_monday")
     println("- Add feature_is_summer, feature_is_winter, feature_is_spring, feature_is_fall ")
@@ -307,16 +317,18 @@ object FlightDataGenerator extends DataPreprocessor {
     )
 
     val result = addCalculatedColumns(df, columnExpressions)
-    println(s"Added Flight features: ${columnExpressions.size}")
+    debug(s"Added Flight features: ${columnExpressions.size}")
     result
   }
 
   /**
    * Ajoute les caractéristiques géographiques et de réseau
    */
-  def addGeographicFeatures(df: DataFrame): DataFrame = {
-    println("")
-    println("Phase 4: Add Geographical Features")
+  def addGeographicFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataGenerator.addGeographicFeatures")
+    debug("")
+    debug("Phase 4: Add Geographical Features")
 
     /**println("- Add feature_origin_is_major_hub (10397, 11298, 12266, 13930, 14107, 14771, 15016  // Principaux hubs US)")
     println("- Add feature_dest_is_major_hub  (10397, 11298, 12266, 13930, 14107, 14771, 15016  // Principaux hubs US)")
@@ -367,16 +379,18 @@ object FlightDataGenerator extends DataPreprocessor {
 
     val result1 = addCalculatedColumns(df, columnExpressions1)
     val result2 = addCalculatedColumns(result1, columnExpressions2)
-    println(s"Added Flight features: ${columnExpressions1.size + columnExpressions2.size}")
+    debug(s"Added Flight features: ${columnExpressions1.size + columnExpressions2.size}")
     result2
   }
 
   /**
    * Ajoute des features agrégées calculées par session Spark
    */
-  def addAggregatedFeatures(df: DataFrame): DataFrame = {
-    println("")
-    println("Phase 5 : Add Aggregated Features")
+  def addAggregatedFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataGenerator.addAggregatedFeatures")
+    debug("")
+    debug("Phase 5 : Add Aggregated Features")
 
     /**println("- Add feature_flights_on_route")
     println("- Add feature_carrier_flight_count")
@@ -408,26 +422,26 @@ object FlightDataGenerator extends DataPreprocessor {
           .otherwise("small")
       )
 
-    println("Added Flight features: 5")
+    debug("Added Flight features: 5")
     result
   }
 
   /**
    * Résumé détaillé du processus d'enrichissement
    */
-  private def logEnrichmentSummary(originalDf: DataFrame, enrichedDf: DataFrame): Unit = {
+  private def logEnrichmentSummary(originalDf: DataFrame, enrichedDf: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val originalColumns = originalDf.columns.length
     val enrichedColumns = enrichedDf.columns.length
     val addedColumns = enrichedColumns - originalColumns
 
-    println("")
-    println("=== Enrichment Summary ===")
-    println("")
-    println(s"Original Columns: $originalColumns")
-    println(s"Columns after enrichment: $enrichedColumns")
-    println(s"Enriched Columns: $addedColumns")
-    println(s"Dataset size: ${enrichedDf.count()}")
-    println("")
+    debug("")
+    debug("=== Enrichment Summary ===")
+    debug("")
+    debug(s"Original Columns: $originalColumns")
+    debug(s"Columns after enrichment: $enrichedColumns")
+    debug(s"Enriched Columns: $addedColumns")
+    debug(s"Dataset size: ${enrichedDf.count()}")
+    debug("")
 
   }
 }

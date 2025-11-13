@@ -32,7 +32,7 @@ object Trainer {
     bestHyperparameters: Map[String, Any]
   )(implicit spark: SparkSession, config: AppConfiguration): Transformer = {
 
-    println(s"\n[Trainer] Training final model on full development set")
+    println(s"[Trainer] Training final model on full development set")
     println(s"  - Samples: ${devData.count()}")
 
     if (bestHyperparameters.nonEmpty) {

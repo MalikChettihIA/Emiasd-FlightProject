@@ -69,7 +69,7 @@ class DateAwareVectorIndexer(
       newModel.setOutputCol(baseModel.getOutputCol)
 
       // Log excluded features
-      println(s"\n[DateAwareVectorIndexer] Excluded ${dateIndices.size} date-derived features from categorical treatment:")
+      println(s"[DateAwareVectorIndexer] Excluded ${dateIndices.size} date-derived features from categorical treatment:")
       dateIndices.toSeq.sorted.foreach { idx =>
         if (idx < featureNames.length) {
           println(s"  [$idx] ${featureNames(idx)}")

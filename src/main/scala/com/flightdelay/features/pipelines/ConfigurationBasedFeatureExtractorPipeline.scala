@@ -143,7 +143,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
   private def buildPipelineStages(data: DataFrame): Array[PipelineStage] = {
     val (stringIndexerCols, oneHotEncoderCols, numericCols) = groupFeaturesByTransformation(data)
 
-    println(s"\n[ConfigurationBasedPipeline] Feature Distribution:")
+    println(s"[ConfigurationBasedPipeline] Feature Distribution:")
     println(s"  - StringIndexer features: ${stringIndexerCols.length}")
     if (stringIndexerCols.length > 0 && stringIndexerCols.length <= 5) {
       println(s"    ${stringIndexerCols.mkString(", ")}")
@@ -152,7 +152,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
     }
 
     // DIAGNOSTIC: Print distinct value counts for categorical features
-    println(s"\n[ConfigurationBasedPipeline] Categorical Features Cardinality:")
+    println(s"[ConfigurationBasedPipeline] Categorical Features Cardinality:")
     stringIndexerCols.zipWithIndex.foreach { case (colName, idx) =>
       val distinctCount = data.select(colName).distinct().count()
       println(f"  [$idx%2d] $colName%-50s : $distinctCount%,6d distinct values")
@@ -253,7 +253,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
     val stages = buildPipelineStages(preprocessed)
     val pipeline = new Pipeline().setStages(stages)
 
-    println("\n[ConfigurationBasedPipeline] Fitting transformation pipeline...")
+    println("[ConfigurationBasedPipeline] Fitting transformation pipeline...")
     pipeline.fit(preprocessed)
   }
 
@@ -265,7 +265,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
     val stages = buildPipelineStages(preprocessed)
     val pipeline = new Pipeline().setStages(stages)
 
-    println("\n[ConfigurationBasedPipeline] Fitting transformation pipeline...")
+    println("[ConfigurationBasedPipeline] Fitting transformation pipeline...")
     val model = pipeline.fit(preprocessed)
 
     val transformed = postProcess(model.transform(preprocessed))
@@ -328,7 +328,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
     // Group by transformation type
     val byTransformation = featureTransformations.groupBy(_._2.transformation)
     byTransformation.foreach { case (transformation, features) =>
-      println(s"\n${transformation}: ${features.size} features")
+      println(s"${transformation}: ${features.size} features")
       if (features.size <= 10) {
         features.keys.foreach(name => println(s"  - $name"))
       } else {

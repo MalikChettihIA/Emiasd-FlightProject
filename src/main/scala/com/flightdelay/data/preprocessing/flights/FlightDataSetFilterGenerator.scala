@@ -2,6 +2,7 @@ package com.flightdelay.data.preprocessing.flights
 
 import com.flightdelay.config.AppConfiguration
 import com.flightdelay.data.preprocessing.DataPreprocessor
+import com.flightdelay.utils.DebugUtils._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
@@ -67,16 +68,19 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
    * Méthode exécutable pour test (facultative)
    */
   def preprocess(rawData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame  = {
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataSetFilterGenerator.preprocess")
+
     val enriched = withDelayFilters(rawData)
 
     val total = enriched.count()
-    println(s"[FlightDataSetFilterGenerator] Total vols: $total")
+    debug(s"[FlightDataSetFilterGenerator] Total vols: $total")
 
     val colsToLog = Seq("D1", "D3", "D4") ++ D2_THRESHOLDS_MINUTES.map(t => s"D2_$t")
     colsToLog.foreach { c =>
       val n = enriched.filter(col(c) === 1).count()
       val pct = if (total > 0) (n.toDouble / total * 100) else 0.0
-      println(f" - $c%-6s : $n%8d vols (${pct}%.2f%%)")
+      debug(f" - $c%-6s : $n%8d vols (${pct}%.2f%%)")
     }
 
     enriched

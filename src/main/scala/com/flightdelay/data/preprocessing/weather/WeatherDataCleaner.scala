@@ -6,6 +6,7 @@ import com.flightdelay.utils.MetricsUtils.withUiLabels
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Classe spécialisée pour le nettoyage des données météo
@@ -13,10 +14,12 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
  */
 object WeatherDataCleaner extends DataPreprocessor {
 
-  override def preprocess(rawWeatherData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration = null): DataFrame = {
-    println("\n" + "=" * 80)
-    println("[STEP 2][DataCleaner] Weather Data Cleaning - Start")
-    println("=" * 80)
+  override def preprocess(rawWeatherData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.preprocess()")
+    debug("=" * 80)
+    debug("[STEP 2][DataCleaner] Weather Data Cleaning - Start")
+    debug("=" * 80)
 
     val cleanedData    = performBasicCleaning(rawWeatherData)
     val filteredByWBAN = filterWeatherByFlightWBANs(cleanedData)
@@ -28,13 +31,15 @@ object WeatherDataCleaner extends DataPreprocessor {
   }
 
   /** Phase 1: suppression des doublons et valeurs nulles critiques */
-  private def performBasicCleaning(df: DataFrame): DataFrame = {
-    println("\nPhase 1: Basic Cleaning")
+  private def performBasicCleaning(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.performBasicCleaning()")
+    debug("Phase 1: Basic Cleaning")
     val keyColumns      = Seq("WBAN", "Date", "Time")
     val deduplicated    = removeDuplicates(df, keyColumns)
     val criticalColumns = Seq("WBAN", "Date", "Time")
     val result          = removeNullValues(deduplicated, criticalColumns)
-    println(s"  - Current count: ${result.count()} records")
+    debug(s"  - Current count: ${result.count()} records")
     result
   }
 
@@ -47,7 +52,8 @@ object WeatherDataCleaner extends DataPreprocessor {
    * @return DataFrame filtré contenant uniquement les stations WBAN référencées par les vols
    */
   private def filterWeatherByFlightWBANs(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
-    println("\nPhase 1.5: Filter Weather by Flight WBANs")
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.filterWeatherByFlightWBANs()")
+    debug("Phase 1.5: Filter Weather by Flight WBANs")
 
     withUiLabels(
       groupId = "Filter-Weather-By-Flight-WBANs",
@@ -55,13 +61,13 @@ object WeatherDataCleaner extends DataPreprocessor {
       tags = "prep,semi-join,wban"
     ) {
 
-      println("  - Loading flight data from parquet...")
+      debug("  - Loading flight data from parquet...")
 
       // Charger les données de vols brutes depuis le parquet
       val rawFlightPath = s"${configuration.common.output.basePath}/common/data/processed_flights.parquet"
       val flightDF = spark.read.parquet(rawFlightPath)
 
-      println("  - Extracting WBAN stations used by flights...")
+      debug("  - Extracting WBAN stations used by flights...")
 
       // 1) Extraire les WBAN d'origine
       val originWBANs = flightDF
@@ -79,45 +85,49 @@ object WeatherDataCleaner extends DataPreprocessor {
         .distinct()
         .cache()
 
-      val flightWBANCount = flightWBANs.count()
-      println(s"  - Found ${flightWBANCount} unique WBAN stations referenced by flights")
-
-      // 4) Comptage avant filtrage
-      val countBefore = df.count()
-      println(s"  - Weather records before filtering: ${countBefore}")
-
       // 5) Filtrer les données météo pour ne garder que les WBAN utilisés
-      println("  - Filtering weather data by flight WBANs...")
+      debug("  - Filtering weather data by flight WBANs...")
       val weatherDF_pruned = df
         .withColumn("WBAN", trim(col("WBAN")))
         .where(col("WBAN").isNotNull && length(col("WBAN")) > 0)
         .join(flightWBANs, Seq("WBAN"), "left_semi")
         .cache()
 
-      // 6) Comptage après filtrage et statistiques
-      val countAfter = weatherDF_pruned.count()
-      val removedCount = countBefore - countAfter
-      val retentionPercent = if (countBefore > 0) (countAfter.toDouble * 100.0 / countBefore) else 0.0
+      whenDebug{
 
-      println(s"\n  [Weather WBAN filter] Summary:")
-      println(f"    - Weather records before:  $countBefore%,10d")
-      println(f"    - Weather records after:   $countAfter%,10d")
-      println(f"    - Removed:                 $removedCount%,10d")
-      println(f"    - Retention:               $retentionPercent%.2f%%")
+        val flightWBANCount = flightWBANs.count()
+        debug(s"  - Found ${flightWBANCount} unique WBAN stations referenced by flights")
 
-      // Nettoyage du cache
-      flightWBANs.unpersist()
+        // 4) Comptage avant filtrage
+        val countBefore = df.count()
+        debug(s"  - Weather records before filtering: ${countBefore}")
 
+        // 6) Comptage après filtrage et statistiques
+        val countAfter = weatherDF_pruned.count()
+        val removedCount = countBefore - countAfter
+        val retentionPercent = if (countBefore > 0) (countAfter.toDouble * 100.0 / countBefore) else 0.0
+
+        debug(s"  [Weather WBAN filter] Summary:")
+        debug(f"    - Weather records before:  $countBefore%,10d")
+        debug(f"    - Weather records after:   $countAfter%,10d")
+        debug(f"    - Removed:                 $removedCount%,10d")
+        debug(f"    - Retention:               $retentionPercent%.2f%%")
+
+      }
+
+      weatherDF_pruned.unpersist()
       weatherDF_pruned
     }
   }
 
   /** Phase 2: normalisation temporelle HH:mm -> enregistrement le plus proche de HH:00 */
   import org.apache.spark.sql.expressions.Window
-  private def normalizeWeatherTime(df: DataFrame): DataFrame = {
-    println("\nPhase 2: Weather Time Normalization")
-    println("  - Keeping only the closest record to HH:00 for each hour")
-    println("  - Normalizing selected times to HH:00")
+  private def normalizeWeatherTime(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.normalizeWeatherTime()")
+
+    debug("Phase 2: Weather Time Normalization")
+    debug("  - Keeping only the closest record to HH:00 for each hour")
+    debug("  - Normalizing selected times to HH:00")
 
     val dfWithHour = df.withColumn("hour", (col("Time").cast("int") / 100).cast("int"))
     val dfWithDistance = dfWithHour.withColumn("distance_to_hour", abs(col("Time").cast("int") % 100))
@@ -133,8 +143,10 @@ object WeatherDataCleaner extends DataPreprocessor {
   }
 
   /** Phase 3: conversions de types + nettoyage des codes "NULL" → null et cast en Int */
-  private def convertAndValidateDataTypes(df: DataFrame): DataFrame = {
-    println("\nPhase 3: Data Type Conversion")
+  private def convertAndValidateDataTypes(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.convertAndValidateDataTypes()")
+    debug("Phase 3: Data Type Conversion")
 
     val typeMapping = Map(
       "WBAN" -> StringType,
@@ -158,7 +170,7 @@ object WeatherDataCleaner extends DataPreprocessor {
     val convertedData = convertDataTypes(df, typeMapping)
 
     // 3.2 — Nettoyage précipitations horaires: 'T' (trace) -> 0.0
-    println("  - Cleaning HourlyPrecip: Converting 'T' (trace) to 0.0")
+    debug("  - Cleaning HourlyPrecip: Converting 'T' (trace) to 0.0")
     val withCleanedPrecip = convertedData.withColumn(
       "HourlyPrecip",
       when(trim(col("HourlyPrecip")) === "T", lit("0.0"))
@@ -167,7 +179,7 @@ object WeatherDataCleaner extends DataPreprocessor {
     )
 
     // 3.3 — Pression au niveau de la mer: 'M' (missing) -> null puis cast double
-    println("  - Cleaning SeaLevelPressure: Converting 'M' (missing) to null")
+    debug("  - Cleaning SeaLevelPressure: Converting 'M' (missing) to null")
     val withCleanedPressure = withCleanedPrecip.withColumn(
       "SeaLevelPressure",
       when(trim(col("SeaLevelPressure")) === "M", lit(null).cast(StringType))
@@ -183,7 +195,7 @@ object WeatherDataCleaner extends DataPreprocessor {
     ).filter(withCleanedPressure.columns.contains)
 
     val withCodesAsInt = codeIntCols.foldLeft(withCleanedPressure){ (acc, c) =>
-      println(s"  - Normalizing code column '$c': 'NULL'/empty -> null, cast to Int")
+      debug(s"  - Normalizing code column '$c': 'NULL'/empty -> null, cast to Int")
       acc.withColumn(
         c,
         when(trim(col(c)).isin("", "NULL"), lit(null).cast(StringType))
@@ -193,15 +205,17 @@ object WeatherDataCleaner extends DataPreprocessor {
     }
 
     // 3.5 — Date: yyyyMMdd -> Date
-    println("  - Converting Date from YYYYMMDD to Date type")
+    debug("  - Converting Date from YYYYMMDD to Date type")
     val withDateConverted = withCodesAsInt.withColumn("Date", to_date(col("Date"), "yyyyMMdd"))
 
     withDateConverted
   }
 
   /** Phase 4: validation finale */
-  private def performFinalValidation(df: DataFrame): DataFrame = {
-    println("\nPhase 4: Final Validation")
+  private def performFinalValidation(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.performFinalValidation()")
+
+    debug("Phase 4: Final Validation")
     val requiredColumns = Seq("WBAN", "Date", "Time")
     val missingColumns  = requiredColumns.filterNot(df.columns.contains)
     if (missingColumns.nonEmpty)

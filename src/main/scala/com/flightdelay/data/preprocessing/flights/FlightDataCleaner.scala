@@ -2,6 +2,7 @@ package com.flightdelay.data.preprocessing.flights
 
 import com.flightdelay.config.AppConfiguration
 import com.flightdelay.data.preprocessing.DataPreprocessor
+import com.flightdelay.utils.DebugUtils._
 import com.flightdelay.utils.MetricsUtils.withUiLabels
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -23,12 +24,14 @@ object FlightDataCleaner extends DataPreprocessor {
    */
   override def preprocess(rawFlightData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
-    println("\n" + "=" * 80)
-    println("[STEP 2][DataCleaner] Flight Data Cleaning - Start")
-    println("=" * 80)
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataCleaner.preprocess")
+
+    debug("=" * 80)
+    debug("[STEP 2][DataCleaner] Flight Data Cleaning - Start")
+    debug("=" * 80)
 
     val originalCount = rawFlightData.count()
-    println(s"\nOriginal dataset: $originalCount records")
+    debug(s"Original dataset: $originalCount records")
 
     // Étape 1: Nettoyage de base (doublons et valeurs nulles)
     val cleanedData = performBasicCleaning(rawFlightData)
@@ -53,7 +56,9 @@ object FlightDataCleaner extends DataPreprocessor {
     val finalData = performFinalValidation(typedData)
 
     // Cleaning summary
-    logCleaningSummary(rawFlightData, finalData)
+    whenDebug {
+      logCleaningSummary(rawFlightData, finalData)
+    }
 
     finalData
   }
@@ -61,8 +66,10 @@ object FlightDataCleaner extends DataPreprocessor {
   /**
    * Nettoyage de base : suppression des doublons et valeurs nulles critiques
    */
-  private def performBasicCleaning(df: DataFrame): DataFrame = {
-    println("\nPhase 1: Basic Cleaning")
+  private def performBasicCleaning(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataCleaner.performBasicCleaning")
+    debug("Phase 1: Basic Cleaning")
 
     // Colonnes clés pour identifier les doublons
     val keyColumns = Seq(
@@ -81,16 +88,19 @@ object FlightDataCleaner extends DataPreprocessor {
     // Remove rows with critical null values
     val result = removeNullValues(deduplicated, criticalColumns)
 
-    println(s"  - Current count: ${result.count()} records")
+    debug(s"  - Current count: ${result.count()} records")
     result
   }
 
   /**
    * Filtrage des vols invalides selon l'article TIST
    */
-  private def filterInvalidFlights(df: DataFrame): DataFrame = {
-    println("\nPhase 2: Filter Invalid Flights")
-    println("  - Filtering cancelled and diverted flights")
+  private def filterInvalidFlights(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataCleaner.filterInvalidFlights")
+
+    debug("Phase 2: Filter Invalid Flights")
+    debug("  - Filtering cancelled and diverted flights")
 
     // Replace NULL with 0 for CANCELLED and DIVERTED
     val dfWithDefaults = df
@@ -103,7 +113,7 @@ object FlightDataCleaner extends DataPreprocessor {
       .drop("CANCELLED", "DIVERTED")
 
     // Filter invalid departure times
-    println("  - Filtering invalid departure times")
+    debug("  - Filtering invalid departure times")
     val validDepartureTimes = filteredCancelledDiverted.filter(
       col("CRS_DEP_TIME").isNotNull &&
         col("CRS_DEP_TIME") >= 0 &&
@@ -111,14 +121,14 @@ object FlightDataCleaner extends DataPreprocessor {
     )
 
     // Filter invalid airport IDs
-    println("  - Filtering invalid airports")
+    debug("  - Filtering invalid airports")
     val validAirports = validDepartureTimes.filter(
       col("ORIGIN_AIRPORT_ID") > 0 &&
         col("DEST_AIRPORT_ID") > 0 &&
         col("ORIGIN_AIRPORT_ID") =!= col("DEST_AIRPORT_ID")
     )
 
-    println(s"  - Current count: ${validAirports.count()} records")
+    debug(s"  - Current count: ${validAirports.count()} records")
     validAirports
   }
 
@@ -131,15 +141,17 @@ object FlightDataCleaner extends DataPreprocessor {
    * @return DataFrame filtré contenant uniquement les vols avec des stations météo existantes
    */
   private def filterFlightsByExistingWeatherStations(df: DataFrame, weatherDF: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
-    println("\nPhase 2.5: Filter Flights by Existing Weather Stations")
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataCleaner.filterFlightsByExistingWeatherStations")
+    debug("Phase 2.5: Filter Flights by Existing Weather Stations")
 
     withUiLabels(
-      groupId = "Filter-Flights-From-NonExistingWeatherWBAN",
+      groupId = "FlightDataCleaner.filterFlightsByExistingWeatherStations",
       desc = "Remove Flights If ORIGIN_WBAN, DEST_WBAN does not exist in Weather",
       tags = "prep,semi-join,wban"
     ) {
 
-      println("  - Extracting valid WBAN stations from weather data...")
+      debug("  - Extracting valid WBAN stations from weather data...")
 
       // 1) WBAN valides côté météo (distinct, non nuls, nettoyés)
       val weatherStations = weatherDF
@@ -148,8 +160,10 @@ object FlightDataCleaner extends DataPreprocessor {
         .distinct()
         .cache()
 
-      val stationCount = weatherStations.count()
-      println(s"  - Found ${stationCount} unique weather stations")
+      whenDebug {
+        val stationCount = weatherStations.count()
+        debug(s"  - Found ${stationCount} unique weather stations")
+      }
 
       // 2) Prépare les colonnes WBAN côté vols (nettoyage basique)
       val flightsWBAN = df
@@ -158,10 +172,10 @@ object FlightDataCleaner extends DataPreprocessor {
 
       // 3) Comptage avant filtrage
       val countBefore = flightsWBAN.count()
-      println(s"  - Flights before filtering: ${countBefore}")
+      debug(s"  - Flights before filtering: ${countBefore}")
 
       // 4) Garde uniquement les vols dont ORIGIN_WBAN existe dans la météo
-      println("  - Filtering flights by ORIGIN_WBAN...")
+      debug("  - Filtering flights by ORIGIN_WBAN...")
       val originStations = weatherStations
         .select(col("WBAN").as("ORIGIN_WBAN"))
 
@@ -169,7 +183,7 @@ object FlightDataCleaner extends DataPreprocessor {
         .join(originStations, Seq("ORIGIN_WBAN"), "left_semi")
 
       // 5) Puis garde uniquement ceux dont DEST_WBAN existe aussi
-      println("  - Filtering flights by DEST_WBAN...")
+      debug("  - Filtering flights by DEST_WBAN...")
       val destStations = weatherStations
         .select(col("WBAN").as("DEST_WBAN"))
 
@@ -178,14 +192,16 @@ object FlightDataCleaner extends DataPreprocessor {
         .cache()
 
       // 6) Comptage après filtrage et petit bilan
-      val countAfter = flightDF_filtered.count()
-      val removedCount = countBefore - countAfter
-      val removalPercent = if (countBefore > 0) (removedCount.toDouble / countBefore * 100).round else 0
+      whenDebug {
+        val countAfter = flightDF_filtered.count()
+        val removedCount = countBefore - countAfter
+        val removalPercent = if (countBefore > 0) (removedCount.toDouble / countBefore * 100).round else 0
 
-      println(s"\n  [WBAN filter] Summary:")
-      println(f"    - Flights before:  $countBefore%,10d")
-      println(f"    - Flights after:   $countAfter%,10d")
-      println(f"    - Removed:         $removedCount%,10d ($removalPercent%%)")
+        debug(s"  [WBAN filter] Summary:")
+        debug(f"    - Flights before:  $countBefore%,10d")
+        debug(f"    - Flights after:   $countAfter%,10d")
+        debug(f"    - Removed:         $removedCount%,10d ($removalPercent%%)")
+      }
 
       // Nettoyage du cache des stations météo
       weatherStations.unpersist()
@@ -203,15 +219,16 @@ object FlightDataCleaner extends DataPreprocessor {
    * @return DataFrame filtré contenant uniquement les vols des mois avec données météo
    */
   private def filterFlightsByCoveredMonths(df: DataFrame, weatherDF: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
-    println("\nPhase 2.6: Filter Flights by Covered Months")
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataCleaner.filterFlightsByCoveredMonths")
+    debug("Phase 2.6: Filter Flights by Covered Months")
 
     withUiLabels(
-      groupId = "Filter-Flights-By-Covered-Months",
+      groupId = "FlightDataCleaner.filterFlightsByCoveredMonths",
       desc = "Remove Flights from months not covered by Weather data",
       tags = "prep,semi-join,month-coverage"
     ) {
 
-      println("  - Extracting covered months from weather data...")
+      debug("  - Extracting covered months from weather data...")
 
       // Ajouter la colonne month_utc aux vols
       val flightsCoveredMonths = df
@@ -225,34 +242,36 @@ object FlightDataCleaner extends DataPreprocessor {
         .distinct()
         .cache()
 
-      val monthCount = weatherMonths.count()
-      println(s"  - Found ${monthCount} distinct months in weather data")
+      whenDebug {
+        val monthCount = weatherMonths.count()
+        debug(s"  - Found ${monthCount} distinct months in weather data")
+      }
 
       // Comptage avant filtrage
       val countBefore = flightsCoveredMonths.count()
-      println(s"  - Flights before filtering: ${countBefore}")
+      debug(s"  - Flights before filtering: ${countBefore}")
 
       // Filtrer les vols pour ne garder que ceux des mois couverts
-      println("  - Filtering flights by covered months...")
+      debug("  - Filtering flights by covered months...")
       val flightDF_mCovered = flightsCoveredMonths
         .join(weatherMonths, Seq("month_utc"), "left_semi")
         .drop("month_utc")  // Supprimer la colonne temporaire
         .cache()
 
       // Comptage après filtrage et statistiques
-      val countAfter = flightDF_mCovered.count()
-      val removedCount = countBefore - countAfter
-      val coveragePercent = if (countBefore > 0) (countAfter.toDouble * 100.0 / countBefore) else 0.0
+      whenDebug{
+        val countAfter = flightDF_mCovered.count()
+        val removedCount = countBefore - countAfter
+        val coveragePercent = if (countBefore > 0) (countAfter.toDouble * 100.0 / countBefore) else 0.0
 
-      println(s"\n  [Month Coverage filter] Summary:")
-      println(f"    - Flights before:     $countBefore%,10d")
-      println(f"    - Flights after:      $countAfter%,10d")
-      println(f"    - Removed:            $removedCount%,10d")
-      println(f"    - Coverage:           $coveragePercent%.2f%%")
-
+        debug(s"  [Month Coverage filter] Summary:")
+        debug(f"    - Flights before:     $countBefore%,10d")
+        debug(f"    - Flights after:      $countAfter%,10d")
+        debug(f"    - Removed:            $removedCount%,10d")
+        debug(f"    - Coverage:           $coveragePercent%.2f%%")
+      }
       // Nettoyage du cache
       weatherMonths.unpersist()
-
       flightDF_mCovered
     }
   }
@@ -260,8 +279,9 @@ object FlightDataCleaner extends DataPreprocessor {
   /**
    * Conversion et validation des types de données
    */
-  private def convertAndValidateDataTypes(df: DataFrame): DataFrame = {
-    println("\nPhase 3: Data Type Conversion")
+  private def convertAndValidateDataTypes(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataCleaner.convertAndValidateDataTypes")
+    debug("Phase 3: Data Type Conversion")
 
     val typeMapping = Map(
       "FL_DATE" -> DateType,
@@ -279,18 +299,19 @@ object FlightDataCleaner extends DataPreprocessor {
     val convertedData = convertDataTypes(df, typeMapping)
 
     // Validate date format
-    println("  - Filtering invalid flight dates")
+    debug("  - Filtering invalid flight dates")
     val validDates = convertedData.filter(col("FL_DATE").isNotNull)
 
-    println(s"  - Current count: ${validDates.count()} records")
+    debug(s"  - Current count: ${validDates.count()} records")
     validDates
   }
 
   /**
    * Validation finale des données nettoyées
    */
-  private def performFinalValidation(df: DataFrame): DataFrame = {
-    println("\nPhase 5: Final Validation")
+  private def performFinalValidation(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataCleaner.performFinalValidation")
+    debug("Phase 5: Final Validation")
 
     // Vérifier les colonnes essentielles
     val requiredColumns = Seq(
@@ -300,34 +321,37 @@ object FlightDataCleaner extends DataPreprocessor {
 
     val missingColumns = requiredColumns.filterNot(df.columns.contains)
     if (missingColumns.nonEmpty) {
-      println(s"  ✗ Missing columns: ${missingColumns.mkString(", ")}")
+      debug(s"  ✗ Missing columns: ${missingColumns.mkString(", ")}")
       throw new RuntimeException(s"Mandatory columns missing: ${missingColumns.mkString(", ")}")
     }
 
-    val finalCount = df.count()
-    println(s"  - Validation passed: $finalCount records")
+    whenDebug{
+      val finalCount = df.count()
+      println(s"  - Validation passed: $finalCount records")
+    }
+
     df
   }
 
   /**
    * Résumé détaillé du processus de nettoyage
    */
-  private def logCleaningSummary(originalDf: DataFrame, cleanedDf: DataFrame): Unit = {
+  private def logCleaningSummary(originalDf: DataFrame, cleanedDf: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val originalCount = originalDf.count()
     val cleanedCount = cleanedDf.count()
     val reductionPercent = ((originalCount - cleanedCount).toDouble / originalCount * 100).round
 
-    println("\n" + "=" * 50)
-    println("Cleaning Summary")
-    println("=" * 50)
-    println(f"Original records:    $originalCount%,10d")
-    println(f"Final records:       $cleanedCount%,10d")
-    println(f"Removed records:     ${originalCount - cleanedCount}%,10d")
-    println(f"Reduction:           $reductionPercent%3d%%")
+    debug("=" * 50)
+    debug("Cleaning Summary")
+    debug("=" * 50)
+    debug(f"Original records:    $originalCount%,10d")
+    debug(f"Final records:       $cleanedCount%,10d")
+    debug(f"Removed records:     ${originalCount - cleanedCount}%,10d")
+    debug(f"Reduction:           $reductionPercent%3d%%")
 
     if (reductionPercent > 50) {
-      println(f"\n⚠ WARNING: High reduction rate ($reductionPercent%%)")
+      debug(f"WARNING: High reduction rate ($reductionPercent%%)")
     }
-    println("=" * 50)
+    debug("=" * 50)
   }
 }

@@ -1,8 +1,11 @@
 package com.flightdelay.data.preprocessing.weather
 
-import org.apache.spark.sql.DataFrame
+import com.flightdelay.config.AppConfiguration
+import com.flightdelay.utils.DebugUtils.info
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Feature engineering pression atmosphérique (point d'entrée unique).
@@ -30,9 +33,12 @@ object WeatherPressionFeatures {
    *  - feature_pressure_visibility_combo: Double (|ΔP| * feature_visibility_risk_score)
    *  - feature_pressure_vis_combo_bin: String ("faible" / "modere" / "eleve" / "tres_eleve")
    */
-  def createPressureFeatures(df: DataFrame): DataFrame = {
-    println("\n[Feature Engineering] WeatherPressionFeatures.createPressureFeatures")
-    println(s"  - Using columns: $TendencyCol, $ChangeCol, $VisibilityRiskCol (threshold=$StrongChangeThresh)")
+  def createPressureFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherInteractionFeatures.createInteractionFeatures()")
+
+    debug("[Feature Engineering] WeatherPressionFeatures.createPressureFeatures")
+    debug(s"  - Using columns: $TendencyCol, $ChangeCol, $VisibilityRiskCol (threshold=$StrongChangeThresh)")
 
     var cur = df
 
@@ -48,9 +54,9 @@ object WeatherPressionFeatures {
           .otherwise(lit(null).cast(IntegerType))
       )
 
-      println("  - press_trend_sign distribution:")
+      debug("  - press_trend_sign distribution:")
     } else {
-      println(s"  ! Column '$TendencyCol' not found. Skipping trend features.")
+      debug(s"  ! Column '$TendencyCol' not found. Skipping trend features.")
     }
 
     // B) Variation |ΔP| -> risque & bucket
@@ -70,9 +76,9 @@ object WeatherPressionFeatures {
             .otherwise("perturbe")
         )
 
-      println("  - feature_pressure_bucket distribution:")
+      debug("  - feature_pressure_bucket distribution:")
     } else {
-      println(s"  ! Column '$ChangeCol' not found. Skipping pressure-change features.")
+      debug(s"  ! Column '$ChangeCol' not found. Skipping pressure-change features.")
     }
 
     // C) Interaction pression × visibilité
@@ -90,7 +96,7 @@ object WeatherPressionFeatures {
         else nonNull.stat.approxQuantile("feature_pressure_visibility_combo", Array(0.25, 0.5, 0.75), 1e-3)
 
       val (q1, q2, q3) = (qs(0), qs(1), qs(2))
-      println(f"  - combo quantiles: q1=$q1%.3f, q2=$q2%.3f, q3=$q3%.3f")
+      debug(f"  - combo quantiles: q1=$q1%.3f, q2=$q2%.3f, q3=$q3%.3f")
 
       cur = cur.withColumn(
         "feature_pressure_vis_combo_bin",
@@ -101,7 +107,7 @@ object WeatherPressionFeatures {
           .otherwise(lit("tres_eleve"))
       )
 
-      println("  - feature_pressure_vis_combo_bin distribution:")
+      debug("  - feature_pressure_vis_combo_bin distribution:")
     }
 
     cur

@@ -85,7 +85,7 @@ object ColumnTypeDetector {
                                        sampleFraction: Double = 0.01
                                      ): (Array[String], Array[String], Array[String], Array[String]) = {
 
-    println(s"\n  - Using fast schema-based type detection (O(1), no data scan)")
+    println(s"  - Using fast schema-based type detection (O(1), no data scan)")
 
     val (schemaNumerics, schemaCategoricals, schemaBooleans, schemaDates) =
       detectColumnTypes(data, excludeColumns)
@@ -172,7 +172,7 @@ object ColumnTypeDetector {
                     boolean: Array[String],
                     date: Array[String]
                   ): Unit = {
-    println(s"\n  Column Type Detection Summary:")
+    println(s"  Column Type Detection Summary:")
 
     println(s"  - Numeric columns: ${numeric.length}")
     if (numeric.length <= 10) {
@@ -208,7 +208,7 @@ object ColumnTypeDetector {
    * @deprecated Use printSummary(numeric, categorical, boolean, date) instead
    */
   def printSummary(numeric: Array[String], categorical: Array[String], boolean: Array[String]): Unit = {
-    println(s"\n  Column Type Detection Summary:")
+    println(s"  Column Type Detection Summary:")
     println(s"  - Numeric columns: ${numeric.length}")
     if (numeric.length <= 10) {
       println(s"    ${numeric.mkString(", ")}")
@@ -249,7 +249,7 @@ object ColumnTypeDetector {
 
     val (dates, timestamps) = separateDateTypes(data, dateColumns)
 
-    println(s"\n  Date/Timestamp Column Details:")
+    println(s"  Date/Timestamp Column Details:")
     if (dates.nonEmpty) {
       println(s"    Date columns (${dates.length}): ${dates.mkString(", ")}")
       println(s"      → Will extract: year, month, day, dayofweek, unix_timestamp")

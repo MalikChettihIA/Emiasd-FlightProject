@@ -27,7 +27,7 @@ object SchemaValidator {
     val messages = scala.collection.mutable.ArrayBuffer[String]()
     var isValid = true
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[SchemaValidator] Validating DataFrame schema")
     println("=" * 80)
 
@@ -95,7 +95,7 @@ object SchemaValidator {
       }
     }
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println(s"Schema Validation ${if (isValid) "PASSED" else "FAILED"}")
     println("=" * 80)
     println(s"Total columns validated: ${schema.fields.length}")
@@ -105,17 +105,17 @@ object SchemaValidator {
     println(s"Date columns: ${dateCols.length}")
 
     if (!isValid && strictMode) {
-      println("\n✗ Validation failed in strict mode!")
+      println(" Validation failed in strict mode!")
       messages.foreach(println)
       throw new IllegalStateException(s"Schema validation failed. See messages above.")
     }
 
     if (!isValid) {
-      println("\n⚠ Validation warnings:")
+      println(" Validation warnings:")
       messages.filter(_.contains("✗")).foreach(println)
     }
 
-    println("=" * 80 + "\n")
+    println("=" * 80)
 
     (isValid, messages.toSeq)
   }
@@ -131,7 +131,7 @@ object SchemaValidator {
    * @return Normalized DataFrame with consistent schema
    */
   def normalize(df: DataFrame): DataFrame = {
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[SchemaValidator] Normalizing DataFrame schema")
     println("=" * 80)
 
@@ -201,9 +201,9 @@ object SchemaValidator {
       }
     }
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println(s"Schema Normalization Complete - ${transformCount} transformations applied")
-    println("=" * 80 + "\n")
+    println("=" * 80)
 
     result
   }
@@ -235,7 +235,7 @@ object SchemaValidator {
    * Prints detailed schema report
    */
   def printSchemaReport(df: DataFrame): Unit = {
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[SchemaValidator] Detailed Schema Report")
     println("=" * 80)
 
@@ -243,7 +243,7 @@ object SchemaValidator {
     val columnsByType = schema.fields.groupBy(_.dataType.typeName)
 
     columnsByType.foreach { case (typeName, fields) =>
-      println(s"\n${typeName.toUpperCase} columns (${fields.length}):")
+      println(s"${typeName.toUpperCase} columns (${fields.length}):")
       fields.take(10).foreach { field =>
         println(s"  - ${field.name}")
       }
@@ -252,6 +252,6 @@ object SchemaValidator {
       }
     }
 
-    println("\n" + "=" * 80 + "\n")
+    println("=" * 80)
   }
 }

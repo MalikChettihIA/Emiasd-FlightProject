@@ -7,7 +7,7 @@
 #TASKS="${1:-data-pipeline,feature-extraction}"
 #TASKS="${1:-data-pipeline,feature-extraction,train}"
 
-TASKS="${1:-feature-extraction,train}"
+TASKS="${1:-data-pipeline}"
 
 spark-submit \
   --master "$SPARK_MASTER_URL" \

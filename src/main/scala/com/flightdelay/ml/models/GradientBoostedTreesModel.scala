@@ -43,7 +43,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
     val subsamplingRate = hp.subsamplingRate.getOrElse(Seq(1.0)).head
     val stepSize = hp.stepSize.getOrElse(Seq(0.1)).head
 
-    println(s"\n[GradientBoostedTrees] Training with hyperparameters:")
+    println(s"[GradientBoostedTrees] Training with hyperparameters:")
     println(s"  - Max iterations (trees): $maxIter")
     println(s"  - Max depth: $maxDepth")
     println(s"  - Max bins: $maxBins")
@@ -69,7 +69,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(gbt))
 
-    println("\nStarting training...")
+    println("Starting training...")
     val startTime = System.currentTimeMillis()
 
     val model = pipeline.fit(data)
@@ -77,7 +77,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"\n- Training completed in $trainingTime%.2f seconds")
+    println(f"- Training completed in $trainingTime%.2f seconds")
 
     // Extract and display feature importance
     val gbtModel = model.stages(0).asInstanceOf[GBTClassificationModel]
@@ -88,7 +88,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
       saveFeatureImportance(gbtModel, path)
     }
 
-    println("=" * 80 + "\n")
+    println("=" * 80)
 
     model
   }
@@ -110,7 +110,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
     // Try to load feature names from file
     val featureNames = loadFeatureNames()
 
-    println(f"\nTop $topN Feature Importances:")
+    println(f"Top $topN Feature Importances:")
     println("-" * 50)
 
     importances.zipWithIndex
@@ -147,18 +147,18 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
         val source = scala.io.Source.fromFile(foundPath)
         try {
           val names = source.getLines().toArray
-          println(s"\n✓ Loaded ${names.length} feature names from: $foundPath")
+          println(s"✓ Loaded ${names.length} feature names from: $foundPath")
           names
         } finally {
           source.close()
         }
       }.getOrElse {
-        println(s"\n⚠ Could not load feature names (tried ${possiblePaths.length} locations)")
+        println(s" Could not load feature names (tried ${possiblePaths.length} locations)")
         Array.empty[String]
       }
     } catch {
       case ex: Exception =>
-        println(s"\n⚠ Error loading feature names: ${ex.getMessage}")
+        println(s" Error loading feature names: ${ex.getMessage}")
         Array.empty[String]
     }
   }
@@ -186,13 +186,13 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
       val writer = new java.io.PrintWriter(new java.io.File(outputPath))
       try {
         writer.write(csvContent)
-        println(s"\n✓ Feature importances saved to: $outputPath")
+        println(s" Feature importances saved to: $outputPath")
       } finally {
         writer.close()
       }
     } catch {
       case ex: Exception =>
-        println(s"\n⚠ Failed to save feature importances: ${ex.getMessage}")
+        println(s" Failed to save feature importances: ${ex.getMessage}")
     }
   }
 }

@@ -1,8 +1,10 @@
 package com.flightdelay.data.preprocessing.weather
 
-import org.apache.spark.sql.DataFrame
+import com.flightdelay.config.AppConfiguration
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import com.flightdelay.utils.DebugUtils._
 
 object SkyConditionFeatures {
 
@@ -10,8 +12,9 @@ object SkyConditionFeatures {
    * Applique toutes les transformations pour SkyCondition
    * OPTIMISÉ : Utilise uniquement des expressions Spark natives (pas d'UDF)
    */
-  def createSkyConditionFeatures(df: DataFrame): DataFrame = {
+  def createSkyConditionFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
+    info("- Calling com.flightdelay.data.preprocessing.weather.SkyConditionFeatures.createSkyConditionFeatures()")
     df
       // 1. Extraire le trigramme le plus critique
       // Ordre de priorité : VV > OVC > BKN > SCT > FEW > CLR

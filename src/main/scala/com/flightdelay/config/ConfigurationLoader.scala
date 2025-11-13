@@ -75,6 +75,19 @@ object ConfigurationLoader {
   private def parseCommonConfig(commonData: Map[String, Any]): CommonConfig = {
     val seed = commonData("seed").toString.toLong
 
+    // Parse logging configuration (optional)
+    val log = commonData.get("log")
+      .map(_.toString.toBoolean)
+      .getOrElse(true)
+
+    val logLevel = commonData.get("logLevel")
+      .map(_.toString)
+      .getOrElse("info")
+
+    val loadDataFromCSV = commonData.get("loadDataFromCSV")
+      .map(_.toString.toBoolean)
+      .getOrElse(true)
+
     // Parse data config
     val dataData = commonData("data").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
     val dataConfig = parseDataConfig(dataData)
@@ -100,6 +113,9 @@ object ConfigurationLoader {
 
     CommonConfig(
       seed = seed,
+      log = log,
+      logLevel = logLevel,
+      loadDataFromCSV = loadDataFromCSV,
       data = dataConfig,
       output = outputConfig,
       mlflow = mlflowConfig

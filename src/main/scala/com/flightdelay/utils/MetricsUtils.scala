@@ -1,6 +1,8 @@
 package com.flightdelay.utils
 
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.SparkSession
+import com.flightdelay.utils.DebugUtils._
 
 object MetricsUtils {
 
@@ -8,7 +10,7 @@ object MetricsUtils {
                        groupId: String,
                        desc: String,
                        tags: String = ""
-                     )(body: => T)(implicit spark: SparkSession): T = {
+                     )(body: => T)(implicit spark: SparkSession, configuration: AppConfiguration): T = {
 
     val sc = spark.sparkContext
     sc.setJobGroup(groupId, desc, interruptOnCancel = true)
@@ -19,10 +21,10 @@ object MetricsUtils {
     val startTime = System.currentTimeMillis()
 
     try {
-      println(s"${desc} → Starting job: $desc")
+      debug(s"${desc} → Starting job: $desc")
       val result = body
       val duration = (System.currentTimeMillis() - startTime) / 1000.0
-      println(f"${desc} ✓ Completed in ${duration}%.2f s")
+      debug(f"${desc} ✓ Completed in ${duration}%.2f s")
       result
     } finally {
       sc.clearJobGroup()

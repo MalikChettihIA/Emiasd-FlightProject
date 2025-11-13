@@ -52,7 +52,7 @@ object ModelEvaluator {
    * @return EvaluationMetrics object with all computed metrics
    */
   def evaluate(predictions: DataFrame, metricsOutputPath: Option[String] = None): EvaluationMetrics = {
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[STEP 4] Model Evaluation")
     println("=" * 80)
 
@@ -131,7 +131,7 @@ object ModelEvaluator {
    * Display evaluation metrics in a formatted table
    */
   private def displayMetrics(metrics: EvaluationMetrics): Unit = {
-    println("\n--- Classification Metrics ---")
+    println("--- Classification Metrics ---")
     println(f"Accuracy:            ${metrics.accuracy * 100}%6.2f%%")
     println(f"Precision:           ${metrics.precision * 100}%6.2f%%")
     println(f"Recall (Weighted):   ${metrics.recall * 100}%6.2f%%")
@@ -139,11 +139,11 @@ object ModelEvaluator {
     println(f"AUC-ROC:             ${metrics.areaUnderROC}%6.4f")
     println(f"AUC-PR:              ${metrics.areaUnderPR}%6.4f")
 
-    println("\n--- Per-Class Recall ---")
+    println("--- Per-Class Recall ---")
     println(f"RECd (Delayed):      ${metrics.recallDelayed * 100}%6.2f%%  [TP/(TP+FN)]")
     println(f"RECo (On-time):      ${metrics.recallOnTime * 100}%6.2f%%  [TN/(TN+FP)]")
 
-    println("\n--- Confusion Matrix ---")
+    println("--- Confusion Matrix ---")
     println(f"True Positives:      ${metrics.truePositives}%,10d")
     println(f"True Negatives:      ${metrics.trueNegatives}%,10d")
     println(f"False Positives:     ${metrics.falsePositives}%,10d")
@@ -153,7 +153,7 @@ object ModelEvaluator {
                 metrics.falsePositives + metrics.falseNegatives
     println(f"Total Predictions:   ${total}%,10d")
 
-    println("=" * 80 + "\n")
+    println("=" * 80)
   }
 
   /**
@@ -169,21 +169,21 @@ object ModelEvaluator {
     metricsOutputPath: Option[String] = None
   ): (EvaluationMetrics, EvaluationMetrics) = {
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[STEP 4] Train/Test Evaluation")
     println("=" * 80)
 
-    println("\n[Training Set Evaluation]")
+    println("[Training Set Evaluation]")
     val trainMetrics = evaluate(trainPredictions)
 
-    println("\n[Test Set Evaluation]")
+    println("[Test Set Evaluation]")
     val testMetrics = evaluate(testPredictions)
 
     // Compute overfitting indicator
     val accuracyGap = trainMetrics.accuracy - testMetrics.accuracy
     val f1Gap = trainMetrics.f1Score - testMetrics.f1Score
 
-    println("\n--- Overfitting Analysis ---")
+    println("--- Overfitting Analysis ---")
     println(f"Accuracy Gap (Train - Test): ${accuracyGap * 100}%6.2f%%")
     println(f"F1-Score Gap (Train - Test): ${f1Gap * 100}%6.2f%%")
 
@@ -195,7 +195,7 @@ object ModelEvaluator {
       println("- Model generalizes well")
     }
 
-    println("=" * 80 + "\n")
+    println("=" * 80)
 
     // Save train/test comparison if path provided
     metricsOutputPath.foreach { basePath =>
@@ -350,7 +350,7 @@ object ModelEvaluator {
     testPredictions: DataFrame,
     basePath: String
   ): Unit = {
-    println("\nSaving ROC curve data...")
+    println("Saving ROC curve data...")
     savePredictionsForROC(trainPredictions, basePath, "train")
     savePredictionsForROC(testPredictions, basePath, "test")
   }

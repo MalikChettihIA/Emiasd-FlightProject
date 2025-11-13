@@ -82,7 +82,7 @@ object FeatureExtractor {
                                      experiment.featureExtraction.weatherSelectedFeatures.isDefined
 
       if (useConfigBasedPipeline) {
-        println(s"\n  - Using ConfigurationBasedFeatureExtractorPipeline (transformations from config)")
+        println(s"  - Using ConfigurationBasedFeatureExtractorPipeline (transformations from config)")
 
         val configPipeline = ConfigurationBasedFeatureExtractorPipeline(
           featureConfig = experiment.featureExtraction,
@@ -112,10 +112,10 @@ object FeatureExtractor {
 
       } else {
         // Fallback to automatic type detection with EnhancedDataFeatureExtractorPipeline
-        println(s"\n  - Using EnhancedDataFeatureExtractorPipeline (automatic type detection)")
+        println(s"  - Using EnhancedDataFeatureExtractorPipeline (automatic type detection)")
 
         // ⚠️ Column type detection is ONLY needed for EnhancedDataFeatureExtractorPipeline
-        println(s"\n  - Detecting column types...")
+        println(s"  - Detecting column types...")
         val detectionStart = System.currentTimeMillis()
 
         val (allNumericCols, allTextCols, allBooleanCols, allDateCols) =
@@ -172,7 +172,7 @@ object FeatureExtractor {
         // Build feature names: indexed text columns + numeric columns + boolean + date-derived features
         val dateFeatureNames = buildDateFeatureNames(allDateCols, cleaData)
 
-        println(s"\n  - Date columns (${allDateCols.length}): ${allDateCols.mkString(", ")}")
+        println(s"  - Date columns (${allDateCols.length}): ${allDateCols.mkString(", ")}")
         println(s"  - Date-derived features (${dateFeatureNames.length}): ${dateFeatureNames.mkString(", ")}")
 
         val names = allTextCols.map("indexed_" + _) ++ allNumericCols ++ allBooleanCols ++ dateFeatureNames
@@ -217,7 +217,7 @@ object FeatureExtractor {
     }
 
     // Display summary based on extraction type
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[STEP 3] Feature Extraction Summary")
     println("=" * 80)
     println(f"Total Features Extracted : ${featureNames.length}")
@@ -237,10 +237,10 @@ object FeatureExtractor {
       experiment,
       featureNames)
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"\n  - Results saved in ${stepDuration}s")
+    println(s"  - Results saved in ${stepDuration}s")
 
     val totalDuration = (System.currentTimeMillis() - extractionStartTime) / 1000.0
-    println(s"\n[STEP 3][FeatureExtractor] Feature Extraction - Completed in ${totalDuration}s")
+    println(s"[STEP 3][FeatureExtractor] Feature Extraction - Completed in ${totalDuration}s")
 
     // Create models package for reuse on test set (avoid data leakage)
     val models = FeatureExtractionModels(
@@ -269,7 +269,7 @@ object FeatureExtractor {
     val transformStartTime = System.currentTimeMillis()
     val target = experiment.target
 
-    println("\n[FeatureExtractor.transform] Transforming new data with pre-fitted models")
+    println("[FeatureExtractor.transform] Transforming new data with pre-fitted models")
     println("  ✓ No refitting - using models from training set to avoid data leakage")
 
     // Step 1: Clean data (remove leakage columns)
@@ -340,7 +340,7 @@ object FeatureExtractor {
 
     val varianceThreshold = experiment.featureExtraction.pcaVarianceThreshold
 
-    println(s"\n- PCA enabled with ${varianceThreshold * 100}% variance threshold")
+    println(s"- PCA enabled with ${varianceThreshold * 100}% variance threshold")
 
     val (df, Some(pcaModel), Some(analysis)) = {
       val pca = PCAFeatureExtractor.varianceBased(
@@ -351,7 +351,7 @@ object FeatureExtractor {
       val (pcaModel, pcaData, analysis) = pca.fitTransform(data)
 
       // Print PCA summary
-      println(s"\n" + "=" * 50)
+      println("=" * 50)
       println("[STEP 3] PCA Summary")
       println("=" * 50)
       println(f"Original features:    ${analysis.originalDimension}%4d")
@@ -362,7 +362,7 @@ object FeatureExtractor {
 
       // Save PCA metrics for visualization
       val pcaMetricsPath = s"${configuration.common.output.basePath}/${experiment.name}/metrics/pca_analysis"
-      println(s"\n[Saving PCA Metrics]")
+      println(s"[Saving PCA Metrics]")
       println(s"  - Metrics path: $pcaMetricsPath")
       println(s"  - Feature names count: ${featureNames.length}")
 
@@ -379,7 +379,7 @@ object FeatureExtractor {
       val finalData = pcaData
         .select(col(_pcaFeatures).alias("features"), col("label"))
 
-      println("\n" + "=" * 80)
+      println("=" * 80)
       println("[STEP 3][Visualization Command]")
       println("=" * 80)
 
@@ -390,7 +390,7 @@ object FeatureExtractor {
       (finalData, Some(pcaModel), Some(analysis))
     }
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[STEP 3] Feature Extraction Summary (with PCA)")
     println("=" * 80)
     println(f"Original Features    : ${analysis.originalDimension}")
@@ -419,7 +419,7 @@ object FeatureExtractor {
     // Save PCA model if present
     pcaModel.foreach { model =>
       val pcaModelPath = s"${experimentOutputPath}/models/pca_model"
-      println(s"\nSaving PCA model to: $pcaModelPath")
+      println(s"Saving PCA model to: $pcaModelPath")
       model.write.overwrite().save(pcaModelPath)
       println("- PCA model saved")
     }
@@ -436,7 +436,7 @@ object FeatureExtractor {
 
       // Save transformed feature names (these correspond to vector indices)
       val transformedNamesPath = s"${experimentOutputPath}/features/selected_features.txt"
-      println(s"\nSaving transformed feature names to: $transformedNamesPath")
+      println(s"Saving transformed feature names to: $transformedNamesPath")
       val transformedWriter = new PrintWriter(new File(transformedNamesPath))
       try {
         featureNames.foreach(transformedWriter.println)
@@ -460,7 +460,7 @@ object FeatureExtractor {
 
     // Save extracted features
     val featuresPath = s"${experimentOutputPath}/features/extracted_features.parquet"
-    println(s"\nSaving extracted features:")
+    println(s"Saving extracted features:")
     println(s"  - Path: $featuresPath")
 
     // OPTIMIZATION: Count before save to avoid double materialization

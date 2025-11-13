@@ -15,7 +15,7 @@ object FeaturePipeline {
 
     val pipelineStartTime = System.currentTimeMillis()
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[FeaturePipeline] Data Preparation Pipeline - Start")
     println("=" * 80)
     println("Note: Feature extraction will be done after train/test split to avoid data leakage")
@@ -39,19 +39,19 @@ object FeaturePipeline {
 
     val dataForML = if (weatherJoinEnabled) {
 
-        println("\n[Mode] Weather features enabled - performing join and explode")
+        println("[Mode] Weather features enabled - performing join and explode")
         println(s"  - Origin depth: $weatherOriginDepthHours hours ${if (weatherOriginDepthHours < 0) "(DISABLED)" else ""}")
         println(s"  - Destination depth: $weatherDestinationDepthHours hours ${if (weatherDestinationDepthHours < 0) "(DISABLED)" else ""}")
 
         // Jointure des données
-        println("\n[Step 1/2] Join flight & Weather data...")
+        println("[Step 1/2] Join flight & Weather data...")
         var stepStartTime = System.currentTimeMillis()
         val joinedData = join(labeledFlightData, weatherData, experiment)
         var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
         println(s"[Step 1/2] Join Completed in ${stepDuration}s")
 
         // Explosion de la jointure en données exploitable par ML
-        println("\n[Step 2/2] Exploding Joined flight & Weather data...")
+        println("[Step 2/2] Exploding Joined flight & Weather data...")
         stepStartTime = System.currentTimeMillis()
         val explodedData = explose(joinedData, experiment)
         stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
@@ -60,7 +60,7 @@ object FeaturePipeline {
         explodedData
 
     } else {
-        println("\n⚠️  Weather features disabled - using flight data only (no join, no explode)")
+        println("  Weather features disabled - using flight data only (no join, no explode)")
 
         // Just select flight features + target
         val flightFeaturesWithTarget = experiment.featureExtraction.flightSelectedFeatures.map { features =>
@@ -89,7 +89,7 @@ object FeaturePipeline {
 
     // Save prepared data (feature extraction will be done in MLPipeline after split)
     val explodedDataPath = s"${configuration.common.output.basePath}/${experiment.name}/data/joined_exploded_data.parquet"
-    println(s"\n[Saving] Prepared data for ML Pipeline:")
+    println(s"[Saving] Prepared data for ML Pipeline:")
     println(s"  - Path: $explodedDataPath")
     println(s"  - Records: ${dataForML.count()}")
 
@@ -101,9 +101,9 @@ object FeaturePipeline {
     println(s"  - Saved successfully")
 
     val totalDuration = (System.currentTimeMillis() - pipelineStartTime) / 1000.0
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println(s"[FeaturePipeline] Data Preparation Pipeline - End (Total: ${totalDuration}s)")
-    println("=" * 80 + "\n")
+    println("=" * 80)
 
     explodedDataPath
   }
@@ -115,7 +115,7 @@ object FeaturePipeline {
   )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     // Jointure des données
-    println("\nJoining flight and weather data...")
+    println("Joining flight and weather data...")
 
     val weatherOriginDepthHours = experimentConfig.featureExtraction.weatherOriginDepthHours
     val weatherDestinationDepthHours = experimentConfig.featureExtraction.weatherDestinationDepthHours
@@ -159,7 +159,7 @@ object FeaturePipeline {
 
     if (experimentConfig.featureExtraction.storeJoinData) {
       val joinedParquetPath = s"${configuration.common.output.basePath}/${experimentConfig.name}/data/joined_flights_weather.parquet"
-      println(s"\nSaving joined flight weather data to parquet:")
+      println(s"Saving joined flight weather data to parquet:")
       println(s"  - Path: $joinedParquetPath")
 
       // Coalesce to reduce number of output files (improves write performance)
@@ -200,7 +200,7 @@ object FeaturePipeline {
           arraySchema match {
             case ArrayType(elementType: StructType, _) =>
               val fields = elementType.fieldNames.toSeq
-              println(s"\n[Auto-detect] No weatherSelectedFeatures defined, using all ${fields.length} fields from schema:")
+              println(s"[Auto-detect] No weatherSelectedFeatures defined, using all ${fields.length} fields from schema:")
               println(s"  ${fields.mkString(", ")}")
               fields
             case _ =>
@@ -215,7 +215,7 @@ object FeaturePipeline {
         }
     }
 
-    println(s"\nExploding weather observation arrays:")
+    println(s"Exploding weather observation arrays:")
     println(s"  - Weather features: ${weatherFeatures.mkString(", ")}")
     println(s"  - Depth Origin hours: $weatherOriginDepthHours observations ${if (weatherOriginDepthHours < 0) "(DISABLED)" else ""}")
     println(s"  - Depth Destination hours: $weatherDestinationDepthHours observations ${if (weatherDestinationDepthHours < 0) "(DISABLED)" else ""}")
@@ -289,7 +289,7 @@ object FeaturePipeline {
     // Optionally save exploded data
     if (experimentConfig.featureExtraction.storeExplodeJoinData) {
       val explodedParquetPath = s"${configuration.common.output.basePath}/${experimentConfig.name}/data/joined_exploded_data.parquet"
-      println(s"\nSaving exploded data to parquet:")
+      println(s"Saving exploded data to parquet:")
       println(s"  - Path: $explodedParquetPath")
 
       // Force materialization with count before save

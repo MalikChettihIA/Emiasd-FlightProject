@@ -83,7 +83,7 @@ object MLPipeline {
     experiment: ExperimentConfig
   )(implicit spark: SparkSession, configuration: AppConfiguration): MLResult = {
 
-    println("\n" + "=" * 100)
+    println("=" * 100)
     println(s"[ML PIPELINE] Starting for experiment: ${experiment.name}")
     println("=" * 100)
     println(s"Strategy: Hold-out test (${experiment.train.trainRatio * 100}%) + K-fold CV (${experiment.train.crossValidation.numFolds} folds)")
@@ -97,7 +97,7 @@ object MLPipeline {
     // Load joined and exploded data (before feature extraction)
     val joinedDataPath = s"${configuration.common.output.basePath}/${experiment.name}/data/joined_exploded_data.parquet"
 
-    println(s"\nLoading prepared data:")
+    println(s"Loading prepared data:")
     println(s"  - Path: $joinedDataPath")
     val rawData = spark.read.parquet(joinedDataPath)
     println(f"  - Loaded ${rawData.count()}%,d records")
@@ -138,7 +138,7 @@ object MLPipeline {
     // ========================================================================
     // STEP 1: Initial split (dev/test) BEFORE feature extraction
     // ========================================================================
-    println("\n[ML PIPELINE][STEP 1] Initial Hold-out Split (before feature extraction)")
+    println("[ML PIPELINE][STEP 1] Initial Hold-out Split (before feature extraction)")
     println("-" * 80)
     println("Note: Splitting BEFORE feature extraction to avoid data leakage")
 
@@ -154,7 +154,7 @@ object MLPipeline {
     // ========================================================================
     // STEP 2,3: Feature extraction (fit on TRAIN only, transform both)
     // ========================================================================
-    println("\n[ML PIPELINE][STEP 2] Feature Extraction (fit on dev set only)")
+    println("[ML PIPELINE][STEP 2] Feature Extraction (fit on dev set only)")
     println("-" * 80)
     println("✓ CRITICAL: Feature transformers are fit ONLY on training data")
     println("            to prevent data leakage from test set")
@@ -162,10 +162,10 @@ object MLPipeline {
     // Extract features from dev set (fit + transform)
     // Returns both transformed data AND fitted models for reuse on test set
     val (devData, featureModels) = FeatureExtractor.extract(devDataRaw, experiment)
-    println(f"\n  ✓ Dev features extracted: ${devData.count()}%,d records")
+    println(f"  ✓ Dev features extracted: ${devData.count()}%,d records")
 
     // Transform test set using pre-fitted models from dev set (NO REFITTING)
-    println("\n" + "-" * 80)
+    println("-" * 80)
     println("[ML PIPELINE][STEP 3] Feature Extraction (test set)")
     println("-" * 80)
     println(" Using pre-fitted models from dev set - NO DATA LEAKAGE")
@@ -173,17 +173,17 @@ object MLPipeline {
     println("  - Scaler: uses statistics (mean/std) from dev set only")
     println("  - PCA: uses components fitted on dev set only\n")
     val testData = FeatureExtractor.transform(testDataRaw, featureModels, experiment)
-    println(f"\n  ✓ Test features extracted: ${testData.count()}%,d records")
+    println(f"  ✓ Test features extracted: ${testData.count()}%,d records")
 
     // ========================================================================
     // STEP 4: K-fold CV + Grid Search on dev set
     // ========================================================================
-    println("\n[ML PIPELINE][STEP 4] Cross-Validation on Development Set")
+    println("[ML PIPELINE][STEP 4] Cross-Validation on Development Set")
     println("-" * 80)
 
     val cvResult = CrossValidator.validate(devData, experiment)
 
-    println(f"\n  CV Results (${cvResult.numFolds} folds):")
+    println(f"  CV Results (${cvResult.numFolds} folds):")
     println(f"    Accuracy:  ${cvResult.avgMetrics.accuracy * 100}%6.2f%% ± ${cvResult.stdMetrics.accuracy * 100}%.2f%%")
     println(f"    Precision: ${cvResult.avgMetrics.precision * 100}%6.2f%% ± ${cvResult.stdMetrics.precision * 100}%.2f%%")
     println(f"    Recall:    ${cvResult.avgMetrics.recall * 100}%6.2f%% ± ${cvResult.stdMetrics.recall * 100}%.2f%%")
@@ -222,7 +222,7 @@ object MLPipeline {
     // ========================================================================
     // STEP 5: Train final model on full dev set
     // ========================================================================
-    println("\n[ML PIPELINE][STEP 5] Training Final Model on Full Development Set")
+    println("[ML PIPELINE][STEP 5] Training Final Model on Full Development Set")
     println("-" * 80)
 
     val finalModel = Trainer.trainFinal(
@@ -234,7 +234,7 @@ object MLPipeline {
     // ========================================================================
     // STEP 6: Final evaluation on hold-out test set
     // ========================================================================
-    println("\n[STEP 6] Final Evaluation on Hold-out Test Set")
+    println("[STEP 6] Final Evaluation on Hold-out Test Set")
     println("-" * 80)
 
     // ✅ OPTIMIZATION: Save final model then reload to avoid broadcast OOM
@@ -252,7 +252,7 @@ object MLPipeline {
     val testPredictions = reloadedModel.transform(testData)
     val holdOutMetrics = ModelEvaluator.evaluate(testPredictions)
 
-    println(f"\n  Hold-out Test Metrics:")
+    println(f"  Hold-out Test Metrics:")
     println(f"    Accuracy:  ${holdOutMetrics.accuracy * 100}%6.2f%%")
     println(f"    Precision: ${holdOutMetrics.precision * 100}%6.2f%%")
     println(f"    Recall:    ${holdOutMetrics.recall * 100}%6.2f%%")
@@ -275,7 +275,7 @@ object MLPipeline {
     // ========================================================================
     // STEP 7: Save metrics
     // ========================================================================
-    println("\n[STEP 7] Saving Metrics")
+    println("[STEP 7] Saving Metrics")
     println("-" * 80)
     println("  ✓ Model already saved in Step 5 (to avoid broadcast OOM)")
 
@@ -292,7 +292,7 @@ object MLPipeline {
     val metricsPath = s"$experimentOutputPath/metrics"
     generatePlots(metricsPath)
 
-    println(f"\n  ✓ Total pipeline time: $totalTime%.2f seconds")
+    println(f"  ✓ Total pipeline time: $totalTime%.2f seconds")
 
     // Log training time and artifacts to MLFlow
     runId.foreach { rid =>
@@ -354,7 +354,7 @@ object MLPipeline {
 
     println("=" * 100)
     println(s"[ML PIPELINE] Completed for experiment: ${experiment.name}")
-    println("=" * 100 + "\n")
+    println("=" * 100)
 
     // End MLFlow run
     runId.foreach { rid =>

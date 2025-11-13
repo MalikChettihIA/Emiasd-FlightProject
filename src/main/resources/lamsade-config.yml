@@ -8,6 +8,11 @@ common:
   # Random seed for reproducibility across all experiments
   seed: 42
 
+  # Logging configuration
+  log: true                   # Enable/disable all logging
+  logLevel: "info"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: false      # If true: load from CSV/TXT; if false: load from raw parquet
+
   data:
     basePath: "hdfs:///students/p6emiasd2025/mchettih/data"
     flight :
