@@ -38,7 +38,7 @@ object FlightDelayPredictionApp {
 
     implicit val spark: SparkSession = SparkSession.builder()
       .appName("Flight Delay Prediction App")
-      .master("local[*]")
+      // .master("local[*]")
       .config("spark.sql.adaptive.enabled", "true")
       .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
       .getOrCreate()
@@ -71,20 +71,29 @@ object FlightDelayPredictionApp {
       // =====================================================================================
       // STEP 1: Data Pipeline (Load & Preprocess Flight + Weather Data)
       // =====================================================================================
+      // Exécute (ou charge) la pipeline de données et retourne les DataFrames flights et weather
       val (flightData, weatherData) = if (tasks.contains("data-pipeline")) {
+        // Si la tâche "data-pipeline" est demandée, lancer la pipeline qui charge et pré-traite les données
         val (flights, weather) = DataPipeline.execute()
         info("[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... ")
+
+        // Debug : afficher le nombre d'enregistrements et de colonnes (attention : count() déclenche une action Spark)
         debug(f"- Final Flights dataset: ${flights.count()}%,d records with ${flights.columns.length}%3d columns")
         debug(f"- Final Weather dataset: ${weather.count()}%,d records with ${weather.columns.length}%3d columns")
 
         (flights, weather)
       } else {
+        // Sinon, on saute la pipeline et on charge les données pré-traitées depuis des fichiers parquet
         warn("[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... SKIPPED")
         warn("- Loading preprocessed data from parquet...")
+
         val flights = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_flights.parquet")
         val weather = spark.read.parquet(s"${configuration.common.output.basePath}/common/data/processed_weather.parquet")
+
+        // Debug : compter les enregistrements chargés (également une action Spark)
         debug(f"- Loaded Flights: ${flights.count()}%,d records")
         debug(f"- Loaded Weathers: ${weather.count()}%,d records")
+
         (flights, weather)
       }
 
@@ -139,6 +148,7 @@ object FlightDelayPredictionApp {
       info("Spark session stopped.\n")
     }
   }
+  /*Fin du main */
 
   /**
    * Run a single experiment

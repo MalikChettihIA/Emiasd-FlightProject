@@ -37,7 +37,8 @@ object FlightDataLoader extends DataLoader[Flight] {
     "diverted" -> "DIVERTED",
     "crsElapsedTime" -> "CRS_ELAPSED_TIME",
     "weatherDelay" -> "WEATHER_DELAY",
-    "nasDelay" -> "NAS_DELAY"
+    "nasDelay" -> "NAS_DELAY",
+    "unused" -> "UNUSED_COL"
   )
 
   // ===========================================================================================
@@ -56,7 +57,8 @@ object FlightDataLoader extends DataLoader[Flight] {
     StructField("DIVERTED", IntegerType, nullable = true),
     StructField("CRS_ELAPSED_TIME", DoubleType, nullable = true),
     StructField("WEATHER_DELAY", DoubleType, nullable = true),
-    StructField("NAS_DELAY", DoubleType, nullable = true)
+    StructField("NAS_DELAY", DoubleType, nullable = true),
+    StructField("UNUSED_COL", StringType, nullable = true)
   ))
 
   // ===========================================================================================
@@ -106,6 +108,9 @@ object FlightDataLoader extends DataLoader[Flight] {
       // Load from CSV file
       debug(s"Loading from CSV file:")
       debug(s"  - Path: $filePath")
+      val columnsToKeep = expectedSchema.fieldNames
+                        .filter(_ != "UNUSED_COL")
+                        .map(col)
       val df = spark.read.format("csv")
         .option("header", "true")
         .schema(expectedSchema)
@@ -113,14 +118,16 @@ object FlightDataLoader extends DataLoader[Flight] {
         .option("multiline", "true")
         .option("escape", "\"")
         .load(filePath)
+        .select(columnsToKeep: _*)
         .withColumn("FL_DATE", to_date(col("FL_DATE"), DEFAULT_DATE_FORMAT))
 
-      whenDebug {
-        val count = df.count
-        println(s"  - Loaded $count records from CSV")
-      }
+      df.cache() // Cache the DataFrame as it will be used multiple times
+      // whenDebug {
+      //   val count = df.count
+      //   println(s"  - Loaded $count records from CSV")
+      // }
 
-      // Save as Parquet for future use
+      // Save as Parquet for future use, c'est une action qui consomme plus
       outputPath.foreach { path =>
         info(s"Saving to Parquet format:")
         info(s"  - Path: $path")
@@ -132,7 +139,7 @@ object FlightDataLoader extends DataLoader[Flight] {
       }
 
       df
-    }
+    } 
 
     whenDebug {
       println("Schema:")

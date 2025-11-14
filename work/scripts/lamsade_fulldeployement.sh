@@ -257,19 +257,63 @@ EOF
 stop_app() {
     step "Stopping application on cluster..."
     
-    ssh "$CLUSTER_USER@$CLUSTER_HOST" << 'EOF'
-        cd /opt/cephfs/users/students/p6emiasd2025/$CLUSTER_USER/workspace
-        if [ -f stop-flight-app.sh ]; then
-            ./stop-flight-app.sh << ANSWERS
-1
-ANSWERS
-        else
-            echo "Stopping via YARN..."
-            yarn application -list | grep "Flight Delay" | awk '{print $1}' | xargs -I {} yarn application -kill {}
-        fi
+    ssh -i "$SSH_KEY_PATH" -p "$SSH_PORT" -T "$CLUSTER_USER@$CLUSTER_HOST" bash << 'EOF'
+echo "=========================================="
+echo "Searching for running Spark applications..."
+echo "=========================================="
+
+# Method 1: Kill spark-submit process (for client mode with nohup)
+echo -e "\n[1] Killing spark-submit processes..."
+SPARK_PIDS=$(ps aux | grep "[s]park-submit.*FlightDelayPredictionApp" | awk '{print $2}')
+
+if [ -n "$SPARK_PIDS" ]; then
+    echo "Found spark-submit PIDs: $SPARK_PIDS"
+    for PID in $SPARK_PIDS; do
+        echo "Killing PID $PID..."
+        kill -15 $PID 2>/dev/null || kill -9 $PID 2>/dev/null
+    done
+    sleep 2
+    echo "Spark processes killed"
+else
+    echo "No spark-submit processes found"
+fi
+
+# Method 2: Kill YARN applications
+echo -e "\n[2] Checking YARN applications..."
+YARN_APPS=$(/opt/shared/hadoop-current/bin/yarn application -list 2>/dev/null | grep -i "FlightDelayPredictionApp\|flight" | awk '{print $1}')
+
+if [ -n "$YARN_APPS" ]; then
+    echo "Found YARN applications:"
+    echo "$YARN_APPS"
+    for APP_ID in $YARN_APPS; do
+        echo "Killing YARN application: $APP_ID"
+        /opt/shared/hadoop-current/bin/yarn application -kill $APP_ID
+    done
+else
+    echo "No YARN applications found"
+fi
+
+# Method 3: Verification
+echo -e "\n[3] Verification..."
+sleep 2
+REMAINING=$(ps aux | grep "[s]park-submit.*FlightDelayPredictionApp")
+if [ -z "$REMAINING" ]; then
+    echo "✓ All Spark processes stopped successfully"
+else
+    echo "⚠ Some processes may still be running:"
+    echo "$REMAINING"
+fi
+
+echo "=========================================="
+echo "Stop operation completed"
+echo "=========================================="
 EOF
     
-    success "Stop command executed"
+    if [ $? -eq 0 ]; then
+        success "Stop command executed successfully"
+    else
+        error "Failed to stop application"
+    fi
 }
 
 # 9. Déploiement complet
