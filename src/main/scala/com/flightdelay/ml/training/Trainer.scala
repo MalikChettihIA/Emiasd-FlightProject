@@ -51,7 +51,7 @@ object Trainer {
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"  ✓ Final model trained in $trainingTime%.2f seconds")
+    println(f"   Final model trained in $trainingTime%.2f seconds")
 
     trainedModel
   }

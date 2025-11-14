@@ -10,15 +10,16 @@ common:
 
   # Logging configuration
   log: true                   # Enable/disable all logging
-  logLevel: "info"            # Minimum log level: debug, info, warn, error
-  loadDataFromCSV: false      # If true: load from CSV/TXT; if false: load from raw parquet
+  logLevel: "debug"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: true       # If true: load from CSV/TXT; if false: load from raw parquet
+  storeIntoParquet: false     # If true: save loaded data to parquet; if false: skip parquet saving
 
   data:
     basePath: "/data"
     flight:
-      path: "/data/FLIGHT-3Y/Flights/201201*.csv"
+      path: "/data/FLIGHT-3Y/Flights/*.csv"
     weather:
-      path: "/data/FLIGHT-3Y/Weather/201201*.txt"
+      path: "/data/FLIGHT-3Y/Weather/*.txt"
     airportMapping:
       path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
@@ -47,10 +48,10 @@ experiments:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: true
-      storeExplodeJoinData: true
-      weatherOriginDepthHours: -1
-      weatherDestinationDepthHours: -1
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherOriginDepthHours: 0
+      weatherDestinationDepthHours: 0
       maxCategoricalCardinality: 50
 
       flightSelectedFeatures:

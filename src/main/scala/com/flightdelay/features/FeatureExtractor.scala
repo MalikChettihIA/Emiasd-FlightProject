@@ -9,6 +9,7 @@ import com.flightdelay.data.utils.ColumnTypeDetector
 import com.flightdelay.features.pipelines.{EnhancedDataFeatureExtractorPipeline, ConfigurationBasedFeatureExtractorPipeline}
 import com.flightdelay.features.pca.{PCAFeatureExtractor, VarianceAnalysis}
 import com.flightdelay.features.leakage.DataLeakageProtection
+import com.flightdelay.utils.DebugUtils._
 
 import scala.sys.process._
 
@@ -72,7 +73,7 @@ object FeatureExtractor {
     var stepStartTime = System.currentTimeMillis()
     val cleaData = DataLeakageProtection.clean(data, target)
     var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"  - Data leakage protection completed in ${stepDuration}s")
+    info(s"  - Data leakage protection completed in ${stepDuration}s")
 
     // Step 2: Apply feature extraction pipeline
     stepStartTime = System.currentTimeMillis()
@@ -82,7 +83,7 @@ object FeatureExtractor {
                                      experiment.featureExtraction.weatherSelectedFeatures.isDefined
 
       if (useConfigBasedPipeline) {
-        println(s"  - Using ConfigurationBasedFeatureExtractorPipeline (transformations from config)")
+        info(s"  - Using ConfigurationBasedFeatureExtractorPipeline (transformations from config)")
 
         val configPipeline = ConfigurationBasedFeatureExtractorPipeline(
           featureConfig = experiment.featureExtraction,
@@ -96,26 +97,26 @@ object FeatureExtractor {
         val (model, transformed) = configPipeline.fitTransform(cleaData)
 
         // OPTIMIZATION: Cache transformed features before any further operations
-        println("  - Caching transformed features...")
+        info("  - Caching transformed features...")
         val cachedTransformed = transformed.cache()
 
         // Force materialization with a single count
         val transformedCount = cachedTransformed.count()
-        println(s"  - Transformed ${transformedCount} records")
+        info(s"  - Transformed ${transformedCount} records")
 
-        // ✅ Get transformed feature names (after StringIndexer, OneHotEncoder, explosion)
+        //  Get transformed feature names (after StringIndexer, OneHotEncoder, explosion)
         // These names correspond to the actual indices in the feature vector
         val transformedNames = configPipeline.getTransformedFeatureNames(cleaData)
-        println(s"  - Transformed feature count: ${transformedNames.length} features")
+        info(s"  - Transformed feature count: ${transformedNames.length} features")
 
         (cachedTransformed, transformedNames, model)
 
       } else {
         // Fallback to automatic type detection with EnhancedDataFeatureExtractorPipeline
-        println(s"  - Using EnhancedDataFeatureExtractorPipeline (automatic type detection)")
+        info(s"  - Using EnhancedDataFeatureExtractorPipeline (automatic type detection)")
 
-        // ⚠️ Column type detection is ONLY needed for EnhancedDataFeatureExtractorPipeline
-        println(s"  - Detecting column types...")
+        //  Column type detection is ONLY needed for EnhancedDataFeatureExtractorPipeline
+        info(s"  - Detecting column types...")
         val detectionStart = System.currentTimeMillis()
 
         val (allNumericCols, allTextCols, allBooleanCols, allDateCols) =
@@ -130,7 +131,7 @@ object FeatureExtractor {
         ColumnTypeDetector.printDateTypeDetails(cleaData, allDateCols)
 
         val detectionDuration = (System.currentTimeMillis() - detectionStart) / 1000.0
-        println(s"  - Column type detection completed in ${detectionDuration}s")
+        info(s"  - Column type detection completed in ${detectionDuration}s")
 
         // Determine scaler type based on feature extraction type
         val scalerType = if (experiment.featureExtraction.isPcaEnabled) {
@@ -143,7 +144,7 @@ object FeatureExtractor {
                            else if (experiment.featureExtraction.isFeatureSelectionEnabled) "Feature Selection mode"
                            else "Standard mode"
 
-        println(s"  - Mode: $pipelineMode${if (scalerType.isDefined) " with StandardScaler" else ""}")
+        info(s"  - Mode: $pipelineMode${if (scalerType.isDefined) " with StandardScaler" else ""}")
 
         val enhancedPipeline = new EnhancedDataFeatureExtractorPipeline(
           textCols = allTextCols,
@@ -162,18 +163,18 @@ object FeatureExtractor {
         val (model, transformed) = enhancedPipeline.fitTransform(cleaData)
 
         // OPTIMIZATION: Cache transformed features before any further operations
-        println("  - Caching transformed features...")
+        info("  - Caching transformed features...")
         val cachedTransformed = transformed.cache()
 
         // Force materialization with a single count
         val transformedCount = cachedTransformed.count()
-        println(s"  - Transformed ${transformedCount} records")
+        info(s"  - Transformed ${transformedCount} records")
 
         // Build feature names: indexed text columns + numeric columns + boolean + date-derived features
         val dateFeatureNames = buildDateFeatureNames(allDateCols, cleaData)
 
-        println(s"  - Date columns (${allDateCols.length}): ${allDateCols.mkString(", ")}")
-        println(s"  - Date-derived features (${dateFeatureNames.length}): ${dateFeatureNames.mkString(", ")}")
+        info(s"  - Date columns (${allDateCols.length}): ${allDateCols.mkString(", ")}")
+        info(s"  - Date-derived features (${dateFeatureNames.length}): ${dateFeatureNames.mkString(", ")}")
 
         val names = allTextCols.map("indexed_" + _) ++ allNumericCols ++ allBooleanCols ++ dateFeatureNames
         (cachedTransformed, names, model)
@@ -181,12 +182,12 @@ object FeatureExtractor {
     }
 
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"  - Feature pipeline completed in ${stepDuration}s")
-    println(s"  - Feature count: ${featureNames.length} features")
+    info(s"  - Feature pipeline completed in ${stepDuration}s")
+    info(s"  - Feature count: ${featureNames.length} features")
     if (featureNames.length <= 5) {
-      println(s"  - Feature names: ${featureNames.mkString(", ")}")
+      info(s"  - Feature names: ${featureNames.mkString(", ")}")
     } else {
-      println(s"  - Sample features: ${featureNames.take(5).mkString(", ")} ...")
+      info(s"  - Sample features: ${featureNames.take(5).mkString(", ")} ...")
     }
 
     stepStartTime = System.currentTimeMillis()
@@ -203,32 +204,32 @@ object FeatureExtractor {
       // No PCA: check if we need to rename featuresVec -> features
       // (StandardScaler in pipeline already does this if present)
       val finalFeatures = if (baseFeatures.columns.contains("features")) {
-        println(s"  - Column 'features' already exists (created by StandardScaler)")
+        info(s"  - Column 'features' already exists (created by StandardScaler)")
         baseFeatures.select(col("features"), col("label"))
       } else {
-        println(s"  - Renaming '${_featuresVec}' to 'features' for ML model compatibility")
+        info(s"  - Renaming '${_featuresVec}' to 'features' for ML model compatibility")
         baseFeatures.select(col(_featuresVec).alias("features"), col("label"))
       }
       (finalFeatures, None, None)
     }
     if (experiment.featureExtraction.isPcaEnabled) {
       stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-      println(s"  - PCA transformation completed in ${stepDuration}s")
+      info(s"  - PCA transformation completed in ${stepDuration}s")
     }
 
     // Display summary based on extraction type
-    println("=" * 80)
-    println("[STEP 3] Feature Extraction Summary")
-    println("=" * 80)
-    println(f"Total Features Extracted : ${featureNames.length}")
+    info("=" * 80)
+    info("[STEP 3] Feature Extraction Summary")
+    info("=" * 80)
+    info(f"Total Features Extracted : ${featureNames.length}")
     if (experiment.featureExtraction.isPcaEnabled) {
-      println(f"Extraction Type          : PCA")
+      info(f"Extraction Type          : PCA")
     } else if (experiment.featureExtraction.isFeatureSelectionEnabled) {
-      println(f"Extraction Type          : Feature Selection")
+      info(f"Extraction Type          : Feature Selection")
     } else {
-      println(f"Extraction Type          : Standard")
+      info(f"Extraction Type          : Standard")
     }
-    println("=" * 80)
+    info("=" * 80)
 
 
     stepStartTime = System.currentTimeMillis()
@@ -237,10 +238,10 @@ object FeatureExtractor {
       experiment,
       featureNames)
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"  - Results saved in ${stepDuration}s")
+    info(s"  - Results saved in ${stepDuration}s")
 
     val totalDuration = (System.currentTimeMillis() - extractionStartTime) / 1000.0
-    println(s"[STEP 3][FeatureExtractor] Feature Extraction - Completed in ${totalDuration}s")
+    info(s"[STEP 3][FeatureExtractor] Feature Extraction - Completed in ${totalDuration}s")
 
     // Create models package for reuse on test set (avoid data leakage)
     val models = FeatureExtractionModels(
@@ -269,34 +270,34 @@ object FeatureExtractor {
     val transformStartTime = System.currentTimeMillis()
     val target = experiment.target
 
-    println("[FeatureExtractor.transform] Transforming new data with pre-fitted models")
-    println("  ✓ No refitting - using models from training set to avoid data leakage")
+    info("[FeatureExtractor.transform] Transforming new data with pre-fitted models")
+    info("   No refitting - using models from training set to avoid data leakage")
 
     // Step 1: Clean data (remove leakage columns)
     var stepStartTime = System.currentTimeMillis()
     val cleanData = DataLeakageProtection.clean(data, target)
     var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"  - Data leakage protection completed in ${stepDuration}s")
+    info(s"  - Data leakage protection completed in ${stepDuration}s")
 
     // Step 2: Transform using base pipeline model (NO FIT)
     stepStartTime = System.currentTimeMillis()
     val baseTransformed = models.basePipelineModel.transform(cleanData)
 
     // Cache transformed features
-    println("  - Caching transformed features...")
+    info("  - Caching transformed features...")
     val cachedTransformed = baseTransformed.cache()
     val transformedCount = cachedTransformed.count()
-    println(s"  - Transformed ${transformedCount} records")
+    info(s"  - Transformed ${transformedCount} records")
 
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-    println(s"  - Base pipeline transformation completed in ${stepDuration}s")
-    println(s"  - Feature count: ${models.featureNames.length} features")
+    info(s"  - Base pipeline transformation completed in ${stepDuration}s")
+    info(s"  - Feature count: ${models.featureNames.length} features")
 
     // Step 3: Apply PCA if present (NO FIT)
     stepStartTime = System.currentTimeMillis()
     val finalTransformed = models.pcaModel match {
       case Some(pcaModel) =>
-        println(s"  - Applying PCA transformation (${models.varianceAnalysis.get.numComponents} components)...")
+        info(s"  - Applying PCA transformation (${models.varianceAnalysis.get.numComponents} components)...")
         val pcaTransformed = pcaModel.transform(cachedTransformed)
 
         // Select final columns: pcaFeatures -> features, label
@@ -304,7 +305,7 @@ object FeatureExtractor {
           .select(col(_pcaFeatures).alias("features"), col("label"))
 
         stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-        println(s"  - PCA transformation completed in ${stepDuration}s")
+        info(s"  - PCA transformation completed in ${stepDuration}s")
 
         finalData
 
@@ -312,16 +313,16 @@ object FeatureExtractor {
         // No PCA: check if we need to rename featuresVec -> features
         // (StandardScaler in pipeline already does this if present)
         if (cachedTransformed.columns.contains("features")) {
-          println(s"  - Column 'features' already exists (created by StandardScaler)")
+          info(s"  - Column 'features' already exists (created by StandardScaler)")
           cachedTransformed.select(col("features"), col("label"))
         } else {
-          println(s"  - Renaming '${_featuresVec}' to 'features' for ML model compatibility")
+          info(s"  - Renaming '${_featuresVec}' to 'features' for ML model compatibility")
           cachedTransformed.select(col(_featuresVec).alias("features"), col("label"))
         }
     }
 
     val totalDuration = (System.currentTimeMillis() - transformStartTime) / 1000.0
-    println(s"  ✓ Transform completed in ${totalDuration}s\n")
+    info(s"   Transform completed in ${totalDuration}s\n")
 
     finalTransformed
   }
@@ -340,7 +341,7 @@ object FeatureExtractor {
 
     val varianceThreshold = experiment.featureExtraction.pcaVarianceThreshold
 
-    println(s"- PCA enabled with ${varianceThreshold * 100}% variance threshold")
+    info(s"- PCA enabled with ${varianceThreshold * 100}% variance threshold")
 
     val (df, Some(pcaModel), Some(analysis)) = {
       val pca = PCAFeatureExtractor.varianceBased(
@@ -351,20 +352,20 @@ object FeatureExtractor {
       val (pcaModel, pcaData, analysis) = pca.fitTransform(data)
 
       // Print PCA summary
-      println("=" * 50)
-      println("[STEP 3] PCA Summary")
-      println("=" * 50)
-      println(f"Original features:    ${analysis.originalDimension}%4d")
-      println(f"PCA components:       ${analysis.numComponents}%4d")
-      println(f"Variance explained:   ${analysis.totalVarianceExplained * 100}%6.2f%%")
-      println(f"Dimensionality reduction: ${(1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100}%6.2f%%")
-      println("=" * 50)
+      info("=" * 50)
+      info("[STEP 3] PCA Summary")
+      info("=" * 50)
+      info(f"Original features:    ${analysis.originalDimension}%4d")
+      info(f"PCA components:       ${analysis.numComponents}%4d")
+      info(f"Variance explained:   ${analysis.totalVarianceExplained * 100}%6.2f%%")
+      info(f"Dimensionality reduction: ${(1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100}%6.2f%%")
+      info("=" * 50)
 
       // Save PCA metrics for visualization
       val pcaMetricsPath = s"${configuration.common.output.basePath}/${experiment.name}/metrics/pca_analysis"
-      println(s"[Saving PCA Metrics]")
-      println(s"  - Metrics path: $pcaMetricsPath")
-      println(s"  - Feature names count: ${featureNames.length}")
+      info(s"[Saving PCA Metrics]")
+      info(s"  - Metrics path: $pcaMetricsPath")
+      info(s"  - Feature names count: ${featureNames.length}")
 
       pca.saveVarianceAnalysis(analysis, s"${configuration.common.output.basePath}/${experiment.name}/metrics/pca_variance.csv")
       pca.savePCAProjections(pcaData, s"${configuration.common.output.basePath}/${experiment.name}/metrics/pca_projections.csv",
@@ -379,25 +380,25 @@ object FeatureExtractor {
       val finalData = pcaData
         .select(col(_pcaFeatures).alias("features"), col("label"))
 
-      println("=" * 80)
-      println("[STEP 3][Visualization Command]")
-      println("=" * 80)
+      info("=" * 80)
+      info("[STEP 3][Visualization Command]")
+      info("=" * 80)
 
-      println(s"  To visualize PCA analysis, run:")
-      println(s"  python work/scripts/visualize_pca.py $pcaMetricsPath")
-      println("")
+      info(s"  To visualize PCA analysis, run:")
+      info(s"  python work/scripts/visualize_pca.py $pcaMetricsPath")
+      info("")
 
       (finalData, Some(pcaModel), Some(analysis))
     }
 
-    println("=" * 80)
-    println("[STEP 3] Feature Extraction Summary (with PCA)")
-    println("=" * 80)
-    println(f"Original Features    : ${analysis.originalDimension}")
-    println(f"PCA Components       : ${analysis.numComponents}")
-    println(f"Variance Explained   : ${analysis.totalVarianceExplained * 100}%.2f%%")
-    println(f"Dimensionality Reduction: ${(1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100}%.1f%%")
-    println("=" * 80)
+    info("=" * 80)
+    info("[STEP 3] Feature Extraction Summary (with PCA)")
+    info("=" * 80)
+    info(f"Original Features    : ${analysis.originalDimension}")
+    info(f"PCA Components       : ${analysis.numComponents}")
+    info(f"Variance Explained   : ${analysis.totalVarianceExplained * 100}%.2f%%")
+    info(f"Dimensionality Reduction: ${(1 - analysis.numComponents.toDouble / analysis.originalDimension) * 100}%.1f%%")
+    info("=" * 80)
 
     (df, pcaModel, analysis)
   }
@@ -419,9 +420,9 @@ object FeatureExtractor {
     // Save PCA model if present
     pcaModel.foreach { model =>
       val pcaModelPath = s"${experimentOutputPath}/models/pca_model"
-      println(s"Saving PCA model to: $pcaModelPath")
+      info(s"Saving PCA model to: $pcaModelPath")
       model.write.overwrite().save(pcaModelPath)
-      println("- PCA model saved")
+      info("- PCA model saved")
     }
 
     // Save feature names if feature selection is enabled
@@ -436,23 +437,23 @@ object FeatureExtractor {
 
       // Save transformed feature names (these correspond to vector indices)
       val transformedNamesPath = s"${experimentOutputPath}/features/selected_features.txt"
-      println(s"Saving transformed feature names to: $transformedNamesPath")
+      info(s"Saving transformed feature names to: $transformedNamesPath")
       val transformedWriter = new PrintWriter(new File(transformedNamesPath))
       try {
         featureNames.foreach(transformedWriter.println)
-        println(s"  - Saved ${featureNames.length} transformed feature names")
+        info(s"  - Saved ${featureNames.length} transformed feature names")
       } finally {
         transformedWriter.close()
       }
 
       // Also save original feature names (from configuration) for reference
       val originalNamesPath = s"${experimentOutputPath}/features/original_feature_names.txt"
-      println(s"Saving original feature names to: $originalNamesPath")
+      info(s"Saving original feature names to: $originalNamesPath")
       val originalNames = experiment.featureExtraction.getAllFeatureNames
       val originalWriter = new PrintWriter(new File(originalNamesPath))
       try {
         originalNames.foreach(originalWriter.println)
-        println(s"  - Saved ${originalNames.size} original feature names")
+        info(s"  - Saved ${originalNames.size} original feature names")
       } finally {
         originalWriter.close()
       }
@@ -460,12 +461,12 @@ object FeatureExtractor {
 
     // Save extracted features
     val featuresPath = s"${experimentOutputPath}/features/extracted_features.parquet"
-    println(s"Saving extracted features:")
-    println(s"  - Path: $featuresPath")
+    info(s"Saving extracted features:")
+    info(s"  - Path: $featuresPath")
 
     // OPTIMIZATION: Count before save to avoid double materialization
     val recordCount = data.count()
-    println(s"  - Records to save: ${recordCount}")
+    info(s"  - Records to save: ${recordCount}")
 
     // OPTIMIZATION: Coalesce to reduce number of output files (improves write performance)
     // Use 100 partitions for balance between parallelism and file count
@@ -475,7 +476,7 @@ object FeatureExtractor {
       .mode("overwrite")
       .option("compression", "zstd")
       .parquet(featuresPath)
-    println(s"  - Saved ${recordCount} records with extracted features")
+    info(s"  - Saved ${recordCount} records with extracted features")
 
     data
   }

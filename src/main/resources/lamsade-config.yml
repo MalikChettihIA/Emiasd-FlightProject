@@ -10,8 +10,9 @@ common:
 
   # Logging configuration
   log: true                   # Enable/disable all logging
-  logLevel: "info"            # Minimum log level: debug, info, warn, error
-  loadDataFromCSV: false      # If true: load from CSV/TXT; if false: load from raw parquet
+  logLevel: "debug"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: true      # If true: load from CSV/TXT; if false: load from raw parquet
+  storeIntoParquet: false     # If true: save loaded data to parquet; if false: skip parquet saving
 
   data:
     basePath: "hdfs:///students/p6emiasd2025/mchettih/data"
@@ -47,10 +48,10 @@ experiments:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: true
-      storeExplodeJoinData: true
-      weatherOriginDepthHours: -1
-      weatherDestinationDepthHours: -1
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherOriginDepthHours: 0
+      weatherDestinationDepthHours: 0
       maxCategoricalCardinality: 50
 
       flightSelectedFeatures:

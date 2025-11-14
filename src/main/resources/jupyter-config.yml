@@ -12,6 +12,7 @@ common:
   log: true                    # Enable/disable all logging
   logLevel: "debug"            # Minimum log level: debug, info, warn, error
   loadDataFromCSV: false       # If true: load from CSV/TXT; if false: load from raw parquet
+  storeIntoParquet: false      # If true: save loaded data to parquet; if false: skip parquet saving
 
   data:
     basePath: "/home/jovyan/work/data"

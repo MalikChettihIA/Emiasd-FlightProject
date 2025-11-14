@@ -88,6 +88,10 @@ object ConfigurationLoader {
       .map(_.toString.toBoolean)
       .getOrElse(true)
 
+    val storeIntoParquet = commonData.get("storeIntoParquet")
+      .map(_.toString.toBoolean)
+      .getOrElse(true)
+
     // Parse data config
     val dataData = commonData("data").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
     val dataConfig = parseDataConfig(dataData)
@@ -116,6 +120,7 @@ object ConfigurationLoader {
       log = log,
       logLevel = logLevel,
       loadDataFromCSV = loadDataFromCSV,
+      storeIntoParquet = storeIntoParquet,
       data = dataConfig,
       output = outputConfig,
       mlflow = mlflowConfig

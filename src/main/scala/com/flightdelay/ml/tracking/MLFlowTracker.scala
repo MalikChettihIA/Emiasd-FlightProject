@@ -316,7 +316,7 @@ object MLFlowTracker {
         client.get.setTag(runId, s"model.metadata.$key", value)
       }
 
-      println(s"[MLFlow] ✓ Model logged successfully")
+      println(s"[MLFlow]  Model logged successfully")
 
     } match {
       case Success(_) => // Success
@@ -360,7 +360,7 @@ object MLFlowTracker {
         client.get.setTag(runId, s"model.metadata.$key", value)
       }
 
-      println(s"[MLFlow] ✓ Pipeline model logged successfully")
+      println(s"[MLFlow]  Pipeline model logged successfully")
 
     } match {
       case Success(_) => // Success
@@ -407,7 +407,7 @@ object MLFlowTracker {
         client.get.setTag(runId, s"model.registry_tag.$key", value)
       }
 
-      println(s"[MLFlow] ✓ Model registration metadata logged")
+      println(s"[MLFlow]  Model registration metadata logged")
       println(s"[MLFlow]   Model URI: $modelUri")
 
     } match {
@@ -717,7 +717,7 @@ object MLFlowTracker {
       )
     )
 
-    println("[MLFlow] ✓ Datasets logged from configuration")
+    println("[MLFlow]  Datasets logged from configuration")
   }
 
   /**
@@ -812,7 +812,7 @@ object MLFlowTracker {
         println(s"[MLFlow]   Description: ${summary}")
       }
 
-      println(s"[MLFlow] ✓ UI metadata set successfully")
+      println(s"[MLFlow]  UI metadata set successfully")
 
     } match {
       case Success(_) => // Success

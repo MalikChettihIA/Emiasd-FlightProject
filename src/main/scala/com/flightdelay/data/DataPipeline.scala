@@ -55,7 +55,7 @@ object DataPipeline {
     info(s"[DataPipeline][Step 4/7] Completed in ${stepDuration}s")
 
     stepStartTime = System.currentTimeMillis()
-    val processedWeatherData = WeatherPreprocessingPipeline.execute()
+    val processedWeatherData = WeatherPreprocessingPipeline.execute(processedFlightData)
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     info(s"[DataPipeline][Step 5/7] Completed in ${stepDuration}s")
 
@@ -76,11 +76,13 @@ object DataPipeline {
     val cachedWeatherData = processedWeatherData.cache()
 
     // Force materialization
-    val flightCount = cachedFlightData.count()
-    debug(s"  - Cached flight data: ${flightCount} records")
-    val weatherCount = cachedWeatherData.count()
-    debug(s"  - Cached weather data: ${weatherCount} records")
-    stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    whenDebug{
+      val flightCount = cachedFlightData.count()
+      debug(s"  - Cached flight data: ${flightCount} records")
+      val weatherCount = cachedWeatherData.count()
+      debug(s"  - Cached weather data: ${weatherCount} records")
+      stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    }
     //info(s"[DataPipeline][Step 7/7] Completed in ${stepDuration}s")
 
     val totalDuration = (System.currentTimeMillis() - pipelineStartTime) / 1000.0

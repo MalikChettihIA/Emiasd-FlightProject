@@ -92,6 +92,7 @@ object WBANAirportTimezoneLoader extends DataLoader[Nothing] {
         debug(s"  - Saved records to Parquet")
       }
 
+
       df
     }
 

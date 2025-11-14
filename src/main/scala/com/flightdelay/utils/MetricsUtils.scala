@@ -24,7 +24,7 @@ object MetricsUtils {
       debug(s"${desc} → Starting job: $desc")
       val result = body
       val duration = (System.currentTimeMillis() - startTime) / 1000.0
-      debug(f"${desc} ✓ Completed in ${duration}%.2f s")
+      debug(f"${desc}  Completed in ${duration}%.2f s")
       result
     } finally {
       sc.clearJobGroup()

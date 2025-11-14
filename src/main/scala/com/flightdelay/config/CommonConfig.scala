@@ -6,6 +6,7 @@ package com.flightdelay.config
  * @param log Enable/disable all logging output
  * @param logLevel Minimum log level to display (debug, info, warn, error)
  * @param loadDataFromCSV If true, load from CSV/TXT files; if false, load from raw parquet files
+ * @param storeIntoParquet If true, save loaded data to parquet files; if false, skip parquet saving
  * @param data Data sources configuration
  * @param output Output base path configuration
  * @param mlflow MLFlow tracking configuration
@@ -15,6 +16,7 @@ case class CommonConfig(
   log: Boolean = true,
   logLevel: String = "info",
   loadDataFromCSV: Boolean = true,
+  storeIntoParquet: Boolean = false,
   data: DataConfig,
   output: OutputConfig,
   mlflow: MLFlowConfig = MLFlowConfig()

@@ -1,8 +1,10 @@
 package com.flightdelay.utils
 
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.SparkSession
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Classe utilitaire pour écrire des DataFrames dans des fichiers CSV
@@ -32,9 +34,9 @@ object CsvWriter {
    * @param outputPath Chemin de sortie
    * @param spark SparkSession implicite
    */
-  def write(df: DataFrame, outputPath: String)(implicit spark: SparkSession): Unit = {
-    println("")
-    println("- Writing Csv "+outputPath)
+  def write(df: DataFrame, outputPath: String)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
+    info("")
+    info("- Writing Csv "+outputPath)
     write(df, outputPath, CsvConfig())
   }
 
@@ -46,7 +48,7 @@ object CsvWriter {
    * @param config Configuration CSV
    * @param spark SparkSession implicite
    */
-  def write(df: DataFrame, outputPath: String, config: CsvConfig)(implicit spark: SparkSession): Unit = {
+  def write(df: DataFrame, outputPath: String, config: CsvConfig)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     df.write
       .mode(config.mode)
       .option("header", config.header.toString)
@@ -74,7 +76,7 @@ object CsvWriter {
                        df: DataFrame,
                        outputPath: String,
                        config: CsvConfig = CsvConfig()
-                     )(implicit spark: SparkSession): Unit = {
+                     )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
     df.coalesce(1)
       .write
@@ -106,7 +108,7 @@ object CsvWriter {
                                outputPath: String,
                                fileName: String,
                                config: CsvConfig = CsvConfig()
-                             )(implicit spark: SparkSession): Unit = {
+                             )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
     val tempPath = s"$outputPath/temp_${System.currentTimeMillis()}"
 
@@ -167,7 +169,7 @@ object CsvWriter {
                      dataFrames: Map[String, DataFrame],
                      outputDir: String,
                      config: CsvConfig = CsvConfig()
-                   )(implicit spark: SparkSession): Unit = {
+                   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
     dataFrames.foreach { case (name, df) =>
       val path = s"$outputDir/$name"
@@ -191,7 +193,7 @@ object CsvWriter {
                         outputPath: String,
                         partitionCols: Seq[String],
                         config: CsvConfig = CsvConfig()
-                      )(implicit spark: SparkSession): Unit = {
+                      )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
     df.write
       .mode(config.mode)

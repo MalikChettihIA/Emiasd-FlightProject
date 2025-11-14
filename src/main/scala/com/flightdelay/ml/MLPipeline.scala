@@ -9,6 +9,7 @@ import com.flightdelay.ml.tracking.MLFlowTracker
 import com.flightdelay.ml.training.{CrossValidator, Trainer}
 import org.apache.spark.ml.{PipelineModel, Transformer}
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * MLPipeline - Point d'entrée unique pour l'entraînement et l'évaluation de modèles ML
@@ -80,29 +81,20 @@ object MLPipeline {
    * @return MLResult with trained model and comprehensive metrics
    */
   def train(
-    experiment: ExperimentConfig
+             rawData: DataFrame,
+             experiment: ExperimentConfig
   )(implicit spark: SparkSession, configuration: AppConfiguration): MLResult = {
 
-    println("=" * 100)
-    println(s"[ML PIPELINE] Starting for experiment: ${experiment.name}")
-    println("=" * 100)
-    println(s"Strategy: Hold-out test (${experiment.train.trainRatio * 100}%) + K-fold CV (${experiment.train.crossValidation.numFolds} folds)")
-    println(s"Model: ${experiment.model.modelType}")
-    println(s"Target: ${experiment.target}")
+    info("=" * 100)
+    info(s"[ML PIPELINE] Starting for experiment: ${experiment.name}")
+    info("=" * 100)
+    info(s"Strategy: Hold-out test (${experiment.train.trainRatio * 100}%) + K-fold CV (${experiment.train.crossValidation.numFolds} folds)")
+    info(s"Model: ${experiment.model.modelType}")
+    info(s"Target: ${experiment.target}")
     if (experiment.train.gridSearch.enabled) {
-      println(s"Grid Search: ENABLED (metric: ${experiment.train.gridSearch.evaluationMetric})")
+      info(s"Grid Search: ENABLED (metric: ${experiment.train.gridSearch.evaluationMetric})")
     }
-    println("=" * 100)
-
-    // Load joined and exploded data (before feature extraction)
-    val joinedDataPath = s"${configuration.common.output.basePath}/${experiment.name}/data/joined_exploded_data.parquet"
-
-    println(s"Loading prepared data:")
-    println(s"  - Path: $joinedDataPath")
-    val rawData = spark.read.parquet(joinedDataPath)
-    println(f"  - Loaded ${rawData.count()}%,d records")
-    println(f"  - Schema")
-    rawData.printSchema()
+    info("=" * 100)
 
 
     val startTime = System.currentTimeMillis()
@@ -138,9 +130,9 @@ object MLPipeline {
     // ========================================================================
     // STEP 1: Initial split (dev/test) BEFORE feature extraction
     // ========================================================================
-    println("[ML PIPELINE][STEP 1] Initial Hold-out Split (before feature extraction)")
-    println("-" * 80)
-    println("Note: Splitting BEFORE feature extraction to avoid data leakage")
+    info("[ML PIPELINE][STEP 1] Initial Hold-out Split (before feature extraction)")
+    info("=" * 80)
+    info("Note: Splitting BEFORE feature extraction to avoid data leakage")
 
     val testRatio = 1.0 - experiment.train.trainRatio
     val (devDataRaw, testDataRaw) = DelayBalancedDatasetBuilder.buildBalancedTrainTest(
@@ -148,47 +140,47 @@ object MLPipeline {
       trainRatio = experiment.train.trainRatio
     )
 
-    println(f"  - Development set: ${devDataRaw.count()}%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
-    println(f"  - Hold-out test:   ${testDataRaw.count()}%,d samples (${testRatio * 100}%.0f%%)")
+    info(f"  - Development set: ${devDataRaw.count()}%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
+    info(f"  - Hold-out test:   ${testDataRaw.count()}%,d samples (${testRatio * 100}%.0f%%)")
 
     // ========================================================================
     // STEP 2,3: Feature extraction (fit on TRAIN only, transform both)
     // ========================================================================
-    println("[ML PIPELINE][STEP 2] Feature Extraction (fit on dev set only)")
-    println("-" * 80)
-    println("✓ CRITICAL: Feature transformers are fit ONLY on training data")
-    println("            to prevent data leakage from test set")
+    info("[ML PIPELINE][STEP 2] Feature Extraction (fit on dev set only)")
+    info("=" * 80)
+    info(" CRITICAL: Feature transformers are fit ONLY on training data")
+    info("            to prevent data leakage from test set")
 
     // Extract features from dev set (fit + transform)
     // Returns both transformed data AND fitted models for reuse on test set
     val (devData, featureModels) = FeatureExtractor.extract(devDataRaw, experiment)
-    println(f"  ✓ Dev features extracted: ${devData.count()}%,d records")
+    info(f"   Dev features extracted: ${devData.count()}%,d records")
 
     // Transform test set using pre-fitted models from dev set (NO REFITTING)
-    println("-" * 80)
-    println("[ML PIPELINE][STEP 3] Feature Extraction (test set)")
-    println("-" * 80)
-    println(" Using pre-fitted models from dev set - NO DATA LEAKAGE")
-    println("  - StringIndexer: uses categories learned from dev set only")
-    println("  - Scaler: uses statistics (mean/std) from dev set only")
-    println("  - PCA: uses components fitted on dev set only\n")
+    info("=" * 80)
+    info("[ML PIPELINE][STEP 3] Feature Extraction (test set)")
+    info("=" * 80)
+    info(" Using pre-fitted models from dev set - NO DATA LEAKAGE")
+    info("  - StringIndexer: uses categories learned from dev set only")
+    info("  - Scaler: uses statistics (mean/std) from dev set only")
+    info("  - PCA: uses components fitted on dev set only\n")
     val testData = FeatureExtractor.transform(testDataRaw, featureModels, experiment)
-    println(f"  ✓ Test features extracted: ${testData.count()}%,d records")
+    info(f"   Test features extracted: ${testData.count()}%,d records")
 
     // ========================================================================
     // STEP 4: K-fold CV + Grid Search on dev set
     // ========================================================================
-    println("[ML PIPELINE][STEP 4] Cross-Validation on Development Set")
-    println("-" * 80)
+    info("[ML PIPELINE][STEP 4] Cross-Validation on Development Set")
+    info("=" * 80)
 
     val cvResult = CrossValidator.validate(devData, experiment)
 
-    println(f"  CV Results (${cvResult.numFolds} folds):")
-    println(f"    Accuracy:  ${cvResult.avgMetrics.accuracy * 100}%6.2f%% ± ${cvResult.stdMetrics.accuracy * 100}%.2f%%")
-    println(f"    Precision: ${cvResult.avgMetrics.precision * 100}%6.2f%% ± ${cvResult.stdMetrics.precision * 100}%.2f%%")
-    println(f"    Recall:    ${cvResult.avgMetrics.recall * 100}%6.2f%% ± ${cvResult.stdMetrics.recall * 100}%.2f%%")
-    println(f"    F1-Score:  ${cvResult.avgMetrics.f1Score * 100}%6.2f%% ± ${cvResult.stdMetrics.f1Score * 100}%.2f%%")
-    println(f"    AUC-ROC:   ${cvResult.avgMetrics.areaUnderROC}%6.4f ± ${cvResult.stdMetrics.areaUnderROC}%.4f")
+    info(f"  CV Results (${cvResult.numFolds} folds):")
+    info(f"    Accuracy:  ${cvResult.avgMetrics.accuracy * 100}%6.2f%% ± ${cvResult.stdMetrics.accuracy * 100}%.2f%%")
+    info(f"    Precision: ${cvResult.avgMetrics.precision * 100}%6.2f%% ± ${cvResult.stdMetrics.precision * 100}%.2f%%")
+    info(f"    Recall:    ${cvResult.avgMetrics.recall * 100}%6.2f%% ± ${cvResult.stdMetrics.recall * 100}%.2f%%")
+    info(f"    F1-Score:  ${cvResult.avgMetrics.f1Score * 100}%6.2f%% ± ${cvResult.stdMetrics.f1Score * 100}%.2f%%")
+    info(f"    AUC-ROC:   ${cvResult.avgMetrics.areaUnderROC}%6.4f ± ${cvResult.stdMetrics.areaUnderROC}%.4f")
 
     // Log CV metrics to MLFlow
     runId.foreach { rid =>
@@ -222,8 +214,8 @@ object MLPipeline {
     // ========================================================================
     // STEP 5: Train final model on full dev set
     // ========================================================================
-    println("[ML PIPELINE][STEP 5] Training Final Model on Full Development Set")
-    println("-" * 80)
+    info("[ML PIPELINE][STEP 5] Training Final Model on Full Development Set")
+    info("=" * 80)
 
     val finalModel = Trainer.trainFinal(
       devData,
@@ -233,31 +225,31 @@ object MLPipeline {
 
     // ========================================================================
     // STEP 6: Final evaluation on hold-out test set
-    // ========================================================================
-    println("[STEP 6] Final Evaluation on Hold-out Test Set")
-    println("-" * 80)
+    // =======================================================================
+    info("[STEP 6] Final Evaluation on Hold-out Test Set")
+    info("=" * 80)
 
-    // ✅ OPTIMIZATION: Save final model then reload to avoid broadcast OOM
+    // OPTIMIZATION: Save final model then reload to avoid broadcast OOM
     // This is critical for large models (e.g., Random Forest with 300 trees)
     val experimentOutputPath = s"${configuration.common.output.basePath}/${experiment.name}"
     val modelPath = s"$experimentOutputPath/models/${experiment.model.modelType}_final"
 
-    println(s"  💾 Saving final model to: $modelPath")
+    info(s"   Saving final model to: $modelPath")
     finalModel.asInstanceOf[PipelineModel].write.overwrite().save(modelPath)
 
-    println(s"  📂 Reloading model for evaluation to avoid broadcast...")
+    info(s"   Reloading model for evaluation to avoid broadcast...")
     val reloadedModel = PipelineModel.load(modelPath)
 
-    println(s"  🔍 Evaluating on hold-out test set...")
+    info(s"   Evaluating on hold-out test set...")
     val testPredictions = reloadedModel.transform(testData)
     val holdOutMetrics = ModelEvaluator.evaluate(testPredictions)
 
-    println(f"  Hold-out Test Metrics:")
-    println(f"    Accuracy:  ${holdOutMetrics.accuracy * 100}%6.2f%%")
-    println(f"    Precision: ${holdOutMetrics.precision * 100}%6.2f%%")
-    println(f"    Recall:    ${holdOutMetrics.recall * 100}%6.2f%%")
-    println(f"    F1-Score:  ${holdOutMetrics.f1Score * 100}%6.2f%%")
-    println(f"    AUC-ROC:   ${holdOutMetrics.areaUnderROC}%6.4f")
+    info(f"  Hold-out Test Metrics:")
+    info(f"    Accuracy:  ${holdOutMetrics.accuracy * 100}%6.2f%%")
+    info(f"    Precision: ${holdOutMetrics.precision * 100}%6.2f%%")
+    info(f"    Recall:    ${holdOutMetrics.recall * 100}%6.2f%%")
+    info(f"    F1-Score:  ${holdOutMetrics.f1Score * 100}%6.2f%%")
+    info(f"    AUC-ROC:   ${holdOutMetrics.areaUnderROC}%6.4f")
 
     // Log hold-out metrics to MLFlow
     runId.foreach { rid =>
@@ -275,9 +267,9 @@ object MLPipeline {
     // ========================================================================
     // STEP 7: Save metrics
     // ========================================================================
-    println("[STEP 7] Saving Metrics")
-    println("-" * 80)
-    println("  ✓ Model already saved in Step 5 (to avoid broadcast OOM)")
+    info("[STEP 7] Saving Metrics")
+    info("=" * 80)
+    info("   Model already saved in Step 5 (to avoid broadcast OOM)")
 
     // Save comprehensive metrics (CSV + TXT summary)
     saveMetrics(experiment, cvResult, holdOutMetrics, testPredictions, experimentOutputPath)
@@ -292,7 +284,7 @@ object MLPipeline {
     val metricsPath = s"$experimentOutputPath/metrics"
     generatePlots(metricsPath)
 
-    println(f"  ✓ Total pipeline time: $totalTime%.2f seconds")
+    info(f"   Total pipeline time: $totalTime%.2f seconds")
 
     // Log training time and artifacts to MLFlow
     runId.foreach { rid =>
@@ -327,7 +319,7 @@ object MLPipeline {
 
         // Log configuration directory to MLFlow
         MLFlowTracker.logArtifactWithPath(rid, configDestPath, "configuration")
-        println(s"  ✓ Configuration saved to MLFlow: configuration/${configuration.environment}-config.yml")
+        info(s"   Configuration saved to MLFlow: configuration/${configuration.environment}-config.yml")
       }
 
       // 4. Log feature files to "features/" subdirectory
@@ -335,7 +327,7 @@ object MLPipeline {
       val featuresDir = new java.io.File(featuresPath)
       if (featuresDir.exists() && featuresDir.isDirectory) {
         MLFlowTracker.logArtifactWithPath(rid, featuresPath, "features")
-        println(s"  ✓ Feature files saved to MLFlow: features/")
+        info(s"   Feature files saved to MLFlow: features/")
       }
 
       // 5. Log visualization plots to "plots/" subdirectory
@@ -343,7 +335,7 @@ object MLPipeline {
       val plotsDir = new java.io.File(plotsPath)
       if (plotsDir.exists() && plotsDir.isDirectory) {
         MLFlowTracker.logArtifactWithPath(rid, plotsPath, "plots")
-        println(s"  ✓ Visualization plots saved to MLFlow: plots/")
+        info(s"   Visualization plots saved to MLFlow: plots/")
       }
     }
 
@@ -352,9 +344,9 @@ object MLPipeline {
     // ========================================================================
     displayBestModelSummary(experiment, cvResult, holdOutMetrics, totalTime)
 
-    println("=" * 100)
-    println(s"[ML PIPELINE] Completed for experiment: ${experiment.name}")
-    println("=" * 100)
+    info("=" * 100)
+    info(s"[ML PIPELINE] Completed for experiment: ${experiment.name}")
+    info("=" * 100)
 
     // End MLFlow run
     runId.foreach { rid =>
@@ -394,62 +386,62 @@ object MLPipeline {
     cvResult: CrossValidator.CVResult,
     holdOutMetrics: EvaluationMetrics,
     totalTime: Double
-  ): Unit = {
-    println("\n" + "=" * 100)
-    println("BEST MODEL SUMMARY")
-    println("=" * 100)
+  )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
+    info("=" * 100)
+    info("BEST MODEL SUMMARY")
+    info("=" * 100)
 
-    println(s"\n📊 Experiment: ${experiment.name}")
-    println(s"   ${experiment.description}")
+    info(s"\n Experiment: ${experiment.name}")
+    info(s"   ${experiment.description}")
 
-    println(s"\n🤖 Model Type: ${experiment.model.modelType.toUpperCase}")
+    info(s"\n🤖 Model Type: ${experiment.model.modelType.toUpperCase}")
 
     // Display best hyperparameters
-    println(s"\n⚙️  Best Hyperparameters:")
+    info(s"\n⚙️  Best Hyperparameters:")
     if (cvResult.bestHyperparameters.nonEmpty) {
       cvResult.bestHyperparameters.toSeq.sortBy(_._1).foreach { case (param, value) =>
-        println(s"   - ${param.padTo(25, ' ')} : $value")
+        info(s"   - ${param.padTo(25, ' ')} : $value")
       }
     } else {
       // Display default hyperparameters from config
       val hp = experiment.model.hyperparameters
-      println(s"   - ${"numTrees".padTo(25, ' ')} : ${hp.numTrees.head}")
-      println(s"   - ${"maxDepth".padTo(25, ' ')} : ${hp.maxDepth.head}")
-      println(s"   - ${"maxBins".padTo(25, ' ')} : ${hp.maxBins}")
-      println(s"   - ${"minInstancesPerNode".padTo(25, ' ')} : ${hp.minInstancesPerNode}")
-      println(s"   - ${"subsamplingRate".padTo(25, ' ')} : ${hp.subsamplingRate}")
-      println(s"   - ${"featureSubsetStrategy".padTo(25, ' ')} : ${hp.featureSubsetStrategy}")
-      println(s"   - ${"impurity".padTo(25, ' ')} : ${hp.impurity}")
+      info(s"   - ${"numTrees".padTo(25, ' ')} : ${hp.numTrees.head}")
+      info(s"   - ${"maxDepth".padTo(25, ' ')} : ${hp.maxDepth.head}")
+      info(s"   - ${"maxBins".padTo(25, ' ')} : ${hp.maxBins}")
+      info(s"   - ${"minInstancesPerNode".padTo(25, ' ')} : ${hp.minInstancesPerNode}")
+      info(s"   - ${"subsamplingRate".padTo(25, ' ')} : ${hp.subsamplingRate}")
+      info(s"   - ${"featureSubsetStrategy".padTo(25, ' ')} : ${hp.featureSubsetStrategy}")
+      info(s"   - ${"impurity".padTo(25, ' ')} : ${hp.impurity}")
     }
 
     // Display performance metrics
-    println(s"\n📈 Performance Metrics:")
-    println(s"   Cross-Validation (${cvResult.numFolds}-fold):")
-    println(f"     Accuracy  : ${cvResult.avgMetrics.accuracy * 100}%6.2f%% ± ${cvResult.stdMetrics.accuracy * 100}%5.2f%%")
-    println(f"     Precision : ${cvResult.avgMetrics.precision * 100}%6.2f%% ± ${cvResult.stdMetrics.precision * 100}%5.2f%%")
-    println(f"     Recall    : ${cvResult.avgMetrics.recall * 100}%6.2f%% ± ${cvResult.stdMetrics.recall * 100}%5.2f%%")
-    println(f"     F1-Score  : ${cvResult.avgMetrics.f1Score * 100}%6.2f%% ± ${cvResult.stdMetrics.f1Score * 100}%5.2f%%")
-    println(f"     AUC-ROC   : ${cvResult.avgMetrics.areaUnderROC}%6.4f ± ${cvResult.stdMetrics.areaUnderROC}%6.4f")
+    info(s"\n Performance Metrics:")
+    info(s"   Cross-Validation (${cvResult.numFolds}-fold):")
+    info(f"     Accuracy  : ${cvResult.avgMetrics.accuracy * 100}%6.2f%% ± ${cvResult.stdMetrics.accuracy * 100}%5.2f%%")
+    info(f"     Precision : ${cvResult.avgMetrics.precision * 100}%6.2f%% ± ${cvResult.stdMetrics.precision * 100}%5.2f%%")
+    info(f"     Recall    : ${cvResult.avgMetrics.recall * 100}%6.2f%% ± ${cvResult.stdMetrics.recall * 100}%5.2f%%")
+    info(f"     F1-Score  : ${cvResult.avgMetrics.f1Score * 100}%6.2f%% ± ${cvResult.stdMetrics.f1Score * 100}%5.2f%%")
+    info(f"     AUC-ROC   : ${cvResult.avgMetrics.areaUnderROC}%6.4f ± ${cvResult.stdMetrics.areaUnderROC}%6.4f")
 
-    println(s"\n   Hold-out Test Set:")
-    println(f"     Accuracy  : ${holdOutMetrics.accuracy * 100}%6.2f%%")
-    println(f"     Precision : ${holdOutMetrics.precision * 100}%6.2f%%")
-    println(f"     Recall    : ${holdOutMetrics.recall * 100}%6.2f%%")
-    println(f"     F1-Score  : ${holdOutMetrics.f1Score * 100}%6.2f%%")
-    println(f"     AUC-ROC   : ${holdOutMetrics.areaUnderROC}%6.4f")
-    println(f"     RECd      : ${holdOutMetrics.recallDelayed * 100}%6.2f%%  (Recall Delayed)")
-    println(f"     RECo      : ${holdOutMetrics.recallOnTime * 100}%6.2f%%  (Recall On-time)")
+    info(s"\n   Hold-out Test Set:")
+    info(f"     Accuracy  : ${holdOutMetrics.accuracy * 100}%6.2f%%")
+    info(f"     Precision : ${holdOutMetrics.precision * 100}%6.2f%%")
+    info(f"     Recall    : ${holdOutMetrics.recall * 100}%6.2f%%")
+    info(f"     F1-Score  : ${holdOutMetrics.f1Score * 100}%6.2f%%")
+    info(f"     AUC-ROC   : ${holdOutMetrics.areaUnderROC}%6.4f")
+    info(f"     RECd      : ${holdOutMetrics.recallDelayed * 100}%6.2f%%  (Recall Delayed)")
+    info(f"     RECo      : ${holdOutMetrics.recallOnTime * 100}%6.2f%%  (Recall On-time)")
 
     // Display confusion matrix
-    println(s"\n   Confusion Matrix (Test Set):")
-    println(f"     True Positives  : ${holdOutMetrics.truePositives}%,d")
-    println(f"     True Negatives  : ${holdOutMetrics.trueNegatives}%,d")
-    println(f"     False Positives : ${holdOutMetrics.falsePositives}%,d")
-    println(f"     False Negatives : ${holdOutMetrics.falseNegatives}%,d")
+    info(s"\n   Confusion Matrix (Test Set):")
+    info(f"     True Positives  : ${holdOutMetrics.truePositives}%,d")
+    info(f"     True Negatives  : ${holdOutMetrics.trueNegatives}%,d")
+    info(f"     False Positives : ${holdOutMetrics.falsePositives}%,d")
+    info(f"     False Negatives : ${holdOutMetrics.falseNegatives}%,d")
 
-    println(f"\n⏱️  Total Training Time: $totalTime%.2f seconds")
+    info(f"\n⏱️  Total Training Time: $totalTime%.2f seconds")
 
-    println("\n" + "=" * 100)
+    info("\n" + "=" * 100)
   }
 
   /**
@@ -461,7 +453,7 @@ object MLPipeline {
     holdOutMetrics: EvaluationMetrics,
     testPredictions: DataFrame,
     basePath: String
-  )(implicit spark: SparkSession): Unit = {
+  )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     import com.flightdelay.utils.MetricsWriter
     import org.apache.spark.sql.functions._
 
@@ -545,9 +537,9 @@ object MLPipeline {
     }
     MetricsWriter.writeCsv(rocHeaders, rocRows, s"$metricsPath/holdout_roc_data.csv")
 
-    println(s"  ✓ Metrics saved to: $metricsPath")
-    println(s"\n  [Visualization] To visualize ml pipeline metrics, run:")
-    println(s"    python work/scripts/visualize_ml_pipeline.py $metricsPath")
+    info(s"   Metrics saved to: $metricsPath")
+    info(s"\n  [Visualization] To visualize ml pipeline metrics, run:")
+    info(s"    python work/scripts/visualize_ml_pipeline.py $metricsPath")
   }
 
   /**
@@ -559,7 +551,7 @@ object MLPipeline {
     holdOutMetrics: EvaluationMetrics,
     totalTime: Double,
     basePath: String
-  ): Unit = {
+  )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val metricsPath = s"$basePath/metrics"
     val summaryFile = s"$metricsPath/training_summary.txt"
 
@@ -647,7 +639,7 @@ object MLPipeline {
     val writer = new java.io.PrintWriter(summaryFile)
     try {
       writer.write(summary.toString())
-      println(s"  ✓ Training summary saved to: $summaryFile")
+      println(s"   Training summary saved to: $summaryFile")
     } finally {
       writer.close()
     }
@@ -667,12 +659,12 @@ object MLPipeline {
    *
    * @param metricsPath Path to metrics directory containing CSV files
    */
-  private def generatePlots(metricsPath: String): Unit = {
+  private def generatePlots(metricsPath: String)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     import scala.sys.process._
     import scala.util.{Try, Success, Failure}
 
-    println("\n[STEP 8] Generating Visualization Plots")
-    println("-" * 80)
+    info("[STEP 8] Generating Visualization Plots")
+    info("=" * 80)
 
     // Path to Python script (mounted in Docker container at /scripts)
     val scriptPath = "/scripts/visualize_ml_pipeline.py"
@@ -680,28 +672,28 @@ object MLPipeline {
     // Check if script exists
     val scriptFile = new java.io.File(scriptPath)
     if (!scriptFile.exists()) {
-      println(s"  ⚠ Warning: Visualization script not found: $scriptPath")
-      println(s"  ⚠ Skipping plot generation")
+      warn(s"   Warning: Visualization script not found: $scriptPath")
+      warn(s"   Skipping plot generation")
       return
     }
 
     // Execute Python script
     val command = s"python3 $scriptPath $metricsPath"
-    println(s"  📊 Running: $command")
+    info(s"   Running: $command")
 
     Try {
       val exitCode = command.!
       exitCode
     } match {
       case Success(0) =>
-        println(s"  ✓ Plots generated successfully in: $metricsPath/plots-ml-pipeline/")
+        info(s"   Plots generated successfully in: $metricsPath/plots-ml-pipeline/")
       case Success(exitCode) =>
-        println(s"  ⚠ Warning: Plot generation failed with exit code: $exitCode")
-        println(s"  ⚠ Continuing without plots...")
+        warn(s"   Warning: Plot generation failed with exit code: $exitCode")
+        warn(s"   Continuing without plots...")
       case Failure(e) =>
-        println(s"  ⚠ Warning: Could not execute Python script: ${e.getMessage}")
-        println(s"  ⚠ Make sure Python 3 and required libraries are installed")
-        println(s"  ⚠ Continuing without plots...")
+        warn(s"   Warning: Could not execute Python script: ${e.getMessage}")
+        warn(s"   Make sure Python 3 and required libraries are installed")
+        warn(s"   Continuing without plots...")
     }
   }
 }

@@ -147,7 +147,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
         val source = scala.io.Source.fromFile(foundPath)
         try {
           val names = source.getLines().toArray
-          println(s"✓ Loaded ${names.length} feature names from: $foundPath")
+          println(s" Loaded ${names.length} feature names from: $foundPath")
           names
         } finally {
           source.close()

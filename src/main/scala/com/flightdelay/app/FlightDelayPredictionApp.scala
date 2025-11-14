@@ -153,17 +153,22 @@ object FlightDelayPredictionApp {
     // =====================================================================================
     // STEP 2: Feature Pipeline (Join + Explode + Extract Features)
     // =====================================================================================
-    if (tasks.contains("feature-extraction")) {
-      info("-" * 80)
+    val mlData = if (tasks.contains("feature-extraction")) {
       info(s"[STEP 2] Feature Pipeline for ${experiment.name}")
-      info("-" * 80)
+      info("=" * 80)
       info(s"Feature Type: ${experiment.featureExtraction.featureType}")
 
-      FeaturePipeline.execute(flightData, weatherData, experiment)
-
-      info("-" * 80)
+      val mlData = FeaturePipeline.execute(flightData, weatherData, experiment)
+      info("=" * 80)
+      mlData
     } else {
       warn(s"[STEP 2] Feature pipeline for ${experiment.name}... SKIPPED")
+      val mlDataPath = s"${configuration.common.output.basePath}/${experiment.name}/data/joined_exploded_data.parquet"
+
+      warn(s"Loading prepared data:")
+      warn(s"  - Path: $mlDataPath")
+      val mlData = spark.read.parquet(mlDataPath)
+      mlData
     }
 
     // =====================================================================================
@@ -175,7 +180,7 @@ object FlightDelayPredictionApp {
       info("-" * 80)
 
       // Train model using new MLPipeline (Option B: K-fold + Hold-out)
-      val mlResult = MLPipeline.train(experiment)
+      val mlResult = MLPipeline.train(mlData, experiment)
 
       // Display summary
       info("-" * 80)

@@ -4,6 +4,7 @@ import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import com.flightdelay.utils.MetricsUtils
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Utility to build balanced train/test datasets (50/50 delayed vs on-time).
@@ -77,7 +78,7 @@ object DelayBalancedDatasetBuilder {
     require(labeledDf.columns.contains("is_delayed"), "labeledDf must contain 'is_delayed'")
 
     MetricsUtils.withUiLabels(
-      groupId = "BuildBalancedTrainTest",
+      groupId = "DelayBalancedDatasetBuilder.buildBalancedTrainTest",
       desc    = "Create balanced Train/Test datasets (50/50 delayed vs on-time)",
       tags    = "sampling,split,balance"
     ) {
@@ -123,7 +124,7 @@ object DelayBalancedDatasetBuilder {
         val total = d.count()
         val nDel  = d.filter(col("is_delayed") === 1).count()
         val nOn   = d.filter(col("is_delayed") === 0).count()
-        println(f"[$name] total=$total%8d | delayed=$nDel%8d | on-time=$nOn%8d | balanced=${nDel==nOn}")
+        info(f"[$name] total=$total%8d | delayed=$nDel%8d | on-time=$nOn%8d | balanced=${nDel==nOn}")
       }
       logSplit("TRAIN (balanced)", devDataRaw)
       logSplit("TEST  (balanced)", testDataRaw)

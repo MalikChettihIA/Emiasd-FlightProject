@@ -35,9 +35,6 @@ object FlightPreprocessingPipeline {
 
     val enrichedWithWBANPath = s"${configuration.common.output.basePath}/common/data/wban_enriched_flights.parquet"
     debug(f"[Pipeline Step 1/9] Wrinting Enriched parquer file... {enrichedWithWBANPath}")
-    enrichedWithWBAN
-      .write.mode("overwrite")
-      .parquet(enrichedWithWBANPath)
 
     // Execute preprocessing pipeline (each step creates a new DataFrame)
     debug("[Pipeline Step 2/9] Cleaning flight data...")
@@ -52,160 +49,21 @@ object FlightPreprocessingPipeline {
     debug("[Pipeline Step 5/9] Generating flight features...")
     val generatedFlightData = FlightDataGenerator.preprocess(enrichedWithArrival)
 
-    //debug("[Pipeline Step 5/9] Creating previous late flight features...")
-    //val generatedPreviousLateFlightData = FlightPreviousLateFlightFeatureGenerator.createLateAircraftFeature(generatedFlightData)
-
-    // ⭐ CHECKPOINT 1: After heavy feature generation
-    //debug("[Pipeline Step 5.5/9] Checkpointing after feature generation...")
-    //val checkpointed1 = generatedPreviousLateFlightData.checkpoint()
-    //checkpointed1.count()
-    //logMemoryUsage("After feature generation")
 
     debug("[Pipeline Step 6/9] Generating labels...")
-    //val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(checkpointed1)
     val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFlightData)
 
-    // ⭐ CHECKPOINT 2: After label generation
-    //debug("[Pipeline Step 6.5/9] Checkpointing after label generation...")
-    //val checkpointed2 = generatedFightDataWithLabels.checkpoint()
-    //checkpointed2.count()
-    //logMemoryUsage("After label generation")
 
-    // Calculate avg delay features for ALL delay thresholds (15min, 30min, 45min, 60min, 90min)
-    //debug("[Pipeline Step 7/9] Calculating avg delay features...")
-    //val generatedFlightsWithAvgDelay = FlightAvgDelayFeatureGenerator.enrichFlightsWithAvgDelay(
-    //  flightData = checkpointed2,
-    //  enableCheckpoint = true
-    //)
-
-    // ⭐ CHECKPOINT 3: After avg delay (memory intensive)
-    //debug("[Pipeline Step 7.5/9] Checkpointing after avg delay...")
-    //val checkpointed3 = generatedFlightsWithAvgDelay.checkpoint()
-    //checkpointed3.count()
-    //logMemoryUsage("After avg delay")
 
     // Validate schema
     debug("[Pipeline Step 9/9] Validating schema...")
     validatePreprocessedSchema(generatedFightDataWithLabels)
 
-    // ⭐ OPTIMIZED WRITE STRATEGY
-    writeFlightDataSafely(generatedFightDataWithLabels, processedParquetPath)
-
-    // Cleanup checkpoints
-    //checkpointed1.unpersist()
-    //checkpointed2.unpersist()
-    //checkpointed3.unpersist()
-
     // Relire depuis le disque pour retourner un DataFrame propre
-    spark.read.parquet(processedParquetPath)
+    generatedFightDataWithLabels
   }
 
-  /**
-   * Stratégie d'écriture sécurisée pour éviter les OOM sur les données flight
-   */
-  private def writeFlightDataSafely(
-                                     flightDf: DataFrame,
-                                     outputPath: String
-                                   )(implicit sparkSession: SparkSession, configuration: AppConfiguration): Unit = {
 
-    debug(s"Saving preprocessed flight data to parquet:")
-    debug(s"  - Path: $outputPath")
-    debug("  - Using optimized write strategy")
-
-    logMemoryUsage("Before write")
-
-    val rowCount = flightDf.count()
-    debug(s"  - Rows to write: ${rowCount}")
-
-    // ⭐ CHECKPOINT FINAL avant write
-    debug("[Step 1/3] Final checkpoint before write...")
-    val checkpointed = flightDf
-      .repartition(100, col("UTC_FL_DATE"))  // Partition par date
-      .checkpoint()
-
-    checkpointed.count()
-    debug("  ✓ Checkpoint completed")
-
-    logMemoryUsage("After checkpoint")
-
-    // ⭐ WRITE avec partitionnement
-    debug("[Step 2/3] Writing to parquet with date partitioning...")
-    try {
-      checkpointed
-        .write
-        .mode("overwrite")
-        .partitionBy("UTC_FL_DATE")           // ⭐ Partition par date UTC
-        .option("compression", "snappy")      // ⭐ Snappy plus léger
-        .option("maxRecordsPerFile", 500000)
-        .parquet(outputPath)
-
-      debug("  ✓ Write completed successfully")
-
-    } catch {
-      case e: Exception =>
-        debug(s"  ✗ Write failed: ${e.getMessage}")
-        debug("  Attempting fallback: batch write strategy...")
-
-        writeFlightInBatches(checkpointed, outputPath)
-    }
-
-    // Cleanup
-    debug("  [Step 3/3] Cleaning up...")
-    checkpointed.unpersist()
-    System.gc()
-
-    logMemoryUsage("After write")
-
-    debug(s"   Flight data saved successfully")
-  }
-
-  /**
-   * Fallback: écriture par batch pour les flights
-   */
-  private def writeFlightInBatches(
-                                    flightDf: DataFrame,
-                                    outputPath: String,
-                                    batchSize: Int = 1000000  // 1M rows per batch
-                                  )(implicit sparkSession: SparkSession, configuration: AppConfiguration): Unit = {
-
-    val totalRows = flightDf.count()
-    val numBatches = Math.ceil(totalRows.toDouble / batchSize).toInt
-
-    debug(s"  Writing in ${numBatches} batches of ${batchSize} rows...")
-
-    val withBatchNum = flightDf
-      .withColumn("temp_row_id", monotonically_increasing_id())
-      .withColumn("temp_batch_num", (col("temp_row_id") / batchSize).cast("int"))
-      .cache()
-
-    withBatchNum.count()
-
-    (0 until numBatches).foreach { batchNum =>
-      debug(s"  Batch ${batchNum + 1}/${numBatches}... ")
-
-      val batchData = withBatchNum
-        .filter(col("temp_batch_num") === batchNum)
-        .drop("temp_row_id", "temp_batch_num")
-
-      batchData
-        .coalesce(5)
-        .write
-        .mode("overwrite")
-        .option("compression", "snappy")
-        .parquet(s"${outputPath}/batch_${batchNum}")
-
-      debug("✓")
-
-      if (batchNum % 2 == 1) {
-        System.gc()
-        Thread.sleep(300)
-      }
-    }
-
-    withBatchNum.unpersist()
-
-    debug(s"  ✓ All ${numBatches} batches written")
-  }
 
   /**
    * Validate the schema of preprocessed data
@@ -270,7 +128,7 @@ object FlightPreprocessingPipeline {
           debug(s"  ✗ Wrong type for $colName: expected $expectedType, got $actualType")
           validationPassed = false
         } else {
-          debug(s"  ✓ $colName ($expectedType)")
+          debug(s"   $colName ($expectedType)")
         }
       }
     }
@@ -282,7 +140,7 @@ object FlightPreprocessingPipeline {
         debug(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
-        debug(s"  ✓ $colName")
+        debug(s"   $colName")
       }
     }
 
@@ -293,39 +151,20 @@ object FlightPreprocessingPipeline {
         debug(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
-        debug(s"  ✓ $colName")
+        debug(s"   $colName")
       }
     }
 
     // Summary
     debug("=" * 80)
     if (validationPassed) {
-      debug(s"✓ Schema Validation PASSED - ${df.columns.length} columns validated")
+      debug(s" Schema Validation PASSED - ${df.columns.length} columns validated")
     } else {
-      debug("✗ Schema Validation FAILED")
+      debug(" Schema Validation FAILED")
       throw new RuntimeException("Schema validation failed. Check logs for details.")
     }
     debug("=" * 80)
   }
 
-  /**
-   * Monitoring mémoire
-   */
-  private def logMemoryUsage(label: String)(implicit sparkSession: SparkSession, configuration: AppConfiguration): Unit = {
-    val runtime = Runtime.getRuntime
-    val maxMemory = runtime.maxMemory() / (1024 * 1024 * 1024)
-    val totalMemory = runtime.totalMemory() / (1024 * 1024 * 1024)
-    val freeMemory = runtime.freeMemory() / (1024 * 1024 * 1024)
-    val usedMemory = totalMemory - freeMemory
 
-    val usagePercent = ((usedMemory / maxMemory) * 100).toInt
-
-    debug(f"  [$label] Memory: ${usedMemory}%.2f GB / ${maxMemory}%.2f GB (${usagePercent}%%)")
-
-    if (usagePercent > 85) {
-      debug(s"  ⚠️  WARNING: Memory at ${usagePercent}% - forcing GC...")
-      System.gc()
-      Thread.sleep(1000)
-    }
-  }
 }

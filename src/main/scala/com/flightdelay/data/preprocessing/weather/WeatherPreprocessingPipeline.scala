@@ -14,7 +14,7 @@ object WeatherPreprocessingPipeline {
    * @param spark Session Spark
    * @return DataFrame complètement préprocessé
    */
-  def execute()(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  def execute(flightData:DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     info("=" * 80)
     info("[DataPipeline][Step 5/7] Weather Data Preprocessing Pipeline - Start")
@@ -35,138 +35,10 @@ object WeatherPreprocessingPipeline {
     val porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf = porcessedWithVisibilityFeaturesDf.transform(WeatherInteractionFeatures.createInteractionFeatures)
     val porcessWithWeatherConditionFeaturesDf = porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf.transform(WeatherTypeFeatureGenerator.createFeatures)
     val processedWithPressureTendencyFeaturesDf = porcessWithWeatherConditionFeaturesDf.transform(WeatherPressionFeatures.createPressureFeatures)
-    val processedWeatherDf = WeatherDataCleaner.preprocess(processedWithPressureTendencyFeaturesDf)
+    val processedWeatherDf = WeatherDataCleaner.preprocess(processedWithPressureTendencyFeaturesDf, flightData)
 
-    // ⭐ PERSIST to disk before write to break DAG and prevent OOM
-    debug("\n[Pipeline Step 8/8] Persisting to disk before write to break DAG...")
-    import org.apache.spark.storage.StorageLevel
-    val persistedData = processedWeatherDf.persist(StorageLevel.DISK_ONLY)
-
-    // Force persist materialization (but data stays on disk, not in memory)
-    whenDebug{
-      val recordCount = persistedData.count()
-      debug(s"  ✓ Persisted ${recordCount} records to disk")
-      logMemoryUsage("After persist")
-    }
-
-    // ⭐ OPTIMIZED WRITE STRATEGY
-    writeWeatherDataSafely(persistedData, processedParquetPath)
-
-    // Cleanup persisted data
-    persistedData.unpersist()
-
-    // Relire les données sauvegardées pour retourner un DataFrame propre
-    spark.read.parquet(processedParquetPath)
+    processedWeatherDf
   }
 
-  /**
-   * Stratégie d'écriture sécurisée pour éviter les OOM sur les données météo
-   */
-  private def writeWeatherDataSafely(
-                                      weatherDf: DataFrame,
-                                      outputPath: String
-                                    )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
-    import spark.implicits._
-
-    debug(s"\nSaving preprocessed weather data to parquet:")
-    debug(s"  - Path: $outputPath")
-    debug("  - Using optimized write strategy")
-
-    // ⭐ WRITE directement sans partitionBy pour minimiser la mémoire
-    debug("\n  [Step 1/2] Writing to parquet (using existing partitions)...")
-    try {
-      weatherDf
-        .write
-        .mode("overwrite")
-        .option("compression", "snappy")
-        .parquet(outputPath)
-
-      debug("  ✓ Write completed successfully")
-
-    } catch {
-      case e: Exception =>
-        debug(s"  ✗ Write failed: ${e.getMessage}")
-        debug("\n  Attempting fallback: batch write strategy...")
-
-        writeWeatherInBatches(weatherDf, outputPath)
-    }
-
-    debug(s"\n  ✓ Weather data saved successfully")
-  }
-
-  /**
-   * Fallback: écriture par batch pour les données météo
-   */
-  private def writeWeatherInBatches(
-                                     weatherDf: DataFrame,
-                                     outputPath: String,
-                                     batchSize: Int = 2000000  // 2M rows per batch
-                                   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
-
-    import spark.implicits._
-
-    val totalRows = weatherDf.count()
-    val numBatches = Math.ceil(totalRows.toDouble / batchSize).toInt
-
-    debug(s"  Writing in ${numBatches} batches of ${batchSize} rows...")
-
-    // Ajouter batch_num pour partitionner
-    val withBatchNum = weatherDf
-      .withColumn("temp_row_id", monotonically_increasing_id())
-      .withColumn("temp_batch_num", (col("temp_row_id") / batchSize).cast("int"))
-      .cache()
-
-    withBatchNum.count()  // Matérialise
-
-    // Écrire chaque batch
-    (0 until numBatches).foreach { batchNum =>
-      debug(s"  Batch ${batchNum + 1}/${numBatches}... ")
-
-      val batchData = withBatchNum
-        .filter(col("temp_batch_num") === batchNum)
-        .drop("temp_row_id", "temp_batch_num")
-
-      batchData
-        .coalesce(5)
-        .write
-        .mode("overwrite")
-        .option("compression", "snappy")
-        .parquet(s"${outputPath}/batch_${batchNum}")
-
-      debug("✓")
-
-      // GC tous les 2 batches
-      if (batchNum % 2 == 1) {
-        System.gc()
-        Thread.sleep(300)
-      }
-    }
-
-    withBatchNum.unpersist()
-
-    debug(s"  ✓ All ${numBatches} batches written")
-    debug(s"  ℹ️  Data can be read with: spark.read.parquet('${outputPath}/batch_*')")
-  }
-
-  /**
-   * Monitoring mémoire
-   */
-  private def logMemoryUsage(label: String)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
-    val runtime = Runtime.getRuntime
-    val maxMemory = runtime.maxMemory() / (1024 * 1024 * 1024)
-    val totalMemory = runtime.totalMemory() / (1024 * 1024 * 1024)
-    val freeMemory = runtime.freeMemory() / (1024 * 1024 * 1024)
-    val usedMemory = totalMemory - freeMemory
-
-    val usagePercent = ((usedMemory / maxMemory) * 100).toInt
-
-    debug(f"  [$label] Memory: ${usedMemory}%.2f GB / ${maxMemory}%.2f GB (${usagePercent}%%)")
-
-    if (usagePercent > 85) {
-      debug(s"  ⚠️  WARNING: Memory usage at ${usagePercent}% - forcing GC...")
-      System.gc()
-      Thread.sleep(1000)
-    }
-  }
 }

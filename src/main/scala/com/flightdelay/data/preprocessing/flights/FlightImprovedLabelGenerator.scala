@@ -39,7 +39,7 @@ object FlightImprovedLabelGenerator {
     // Étape 1 : Validation des colonnes requises
     debug("[Step 1] Validating required columns...")
     validateRequiredColumns(flightData)
-    debug("  ✓ All required columns present")
+    debug("   All required columns present")
 
     // Étape 2 : Remplissage des valeurs manquantes (stratégie intelligente)
     debug("[Step 2] Handling missing values with intelligent strategy...")
@@ -224,8 +224,8 @@ object FlightImprovedLabelGenerator {
       col("label_is_weather_nas_delayed_15min")
     )
 
-    debug(s"  ✓ Created ${delayTypes.size * DELAY_THRESHOLDS.size} threshold labels")
-    debug(s"  ✓ Default label set to: label_is_weather_nas_delayed_15min")
+    debug(s"   Created ${delayTypes.size * DELAY_THRESHOLDS.size} threshold labels")
+    debug(s"   Default label set to: label_is_weather_nas_delayed_15min")
 
     result
   }
@@ -291,12 +291,12 @@ object FlightImprovedLabelGenerator {
           .otherwise(lit("none"))
       )
 
-    debug("    ✓ weather_contribution_pct")
-    debug("    ✓ nas_contribution_pct")
-    debug("    ✓ cascading_score")
-    debug("    ✓ dominant_delay_type")
-    debug("    ✓ is_mixed_delay")
-    debug("    ✓ delay_severity")
+    debug("     weather_contribution_pct")
+    debug("     nas_contribution_pct")
+    debug("     cascading_score")
+    debug("     dominant_delay_type")
+    debug("     is_mixed_delay")
+    debug("     delay_severity")
 
     df
   }

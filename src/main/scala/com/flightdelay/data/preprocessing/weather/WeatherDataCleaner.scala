@@ -1,7 +1,7 @@
 package com.flightdelay.data.preprocessing.weather
 
 import com.flightdelay.config.AppConfiguration
-import com.flightdelay.data.preprocessing.DataPreprocessor
+import com.flightdelay.data.preprocessing.BiDataPreprocessor
 import com.flightdelay.utils.MetricsUtils.withUiLabels
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -12,9 +12,9 @@ import com.flightdelay.utils.DebugUtils._
  * Classe spécialisée pour le nettoyage des données météo
  * Responsable du nettoyage, filtrage, normalisation temporelle et validation
  */
-object WeatherDataCleaner extends DataPreprocessor {
+object WeatherDataCleaner extends BiDataPreprocessor {
 
-  override def preprocess(rawWeatherData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  override def preprocess(rawWeatherData: DataFrame, flightData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.preprocess()")
     debug("=" * 80)
@@ -22,7 +22,7 @@ object WeatherDataCleaner extends DataPreprocessor {
     debug("=" * 80)
 
     val cleanedData    = performBasicCleaning(rawWeatherData)
-    val filteredByWBAN = filterWeatherByFlightWBANs(cleanedData)
+    val filteredByWBAN = filterWeatherByFlightWBANs(cleanedData, flightData)
     val normalizedTime = normalizeWeatherTime(filteredByWBAN)
     val typedData      = convertAndValidateDataTypes(normalizedTime)
     val finalData      = performFinalValidation(typedData)
@@ -51,7 +51,7 @@ object WeatherDataCleaner extends DataPreprocessor {
    * @param configuration Configuration de l'application
    * @return DataFrame filtré contenant uniquement les stations WBAN référencées par les vols
    */
-  private def filterWeatherByFlightWBANs(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  private def filterWeatherByFlightWBANs(df: DataFrame, flightDF : DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
     info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.filterWeatherByFlightWBANs()")
     debug("Phase 1.5: Filter Weather by Flight WBANs")
 
@@ -60,12 +60,6 @@ object WeatherDataCleaner extends DataPreprocessor {
       desc = "Remove Weather stations not referenced by any flights",
       tags = "prep,semi-join,wban"
     ) {
-
-      debug("  - Loading flight data from parquet...")
-
-      // Charger les données de vols brutes depuis le parquet
-      val rawFlightPath = s"${configuration.common.output.basePath}/common/data/processed_flights.parquet"
-      val flightDF = spark.read.parquet(rawFlightPath)
 
       debug("  - Extracting WBAN stations used by flights...")
 

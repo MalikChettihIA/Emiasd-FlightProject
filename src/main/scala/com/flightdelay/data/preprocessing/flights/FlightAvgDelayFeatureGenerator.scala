@@ -63,14 +63,14 @@ object FlightAvgDelayFeatureGenerator {
 
       // OPTIMISATION 2 : Checkpoint pour matérialiser
       val checkpointed = if (enableCheckpoint) {
-        debug("  ✓ Checkpointing intermediate data...")
+        debug("   Checkpointing intermediate data...")
         flightWithTimestamps.checkpoint()
       } else {
         flightWithTimestamps
       }
 
       val rowCount = checkpointed.count()
-      debug(s"  ✓ Processing $rowCount flights")
+      debug(s"   Processing $rowCount flights")
 
       whenDebug{
         logMemoryUsage("After checkpoint")
@@ -110,7 +110,7 @@ object FlightAvgDelayFeatureGenerator {
         col("*") +: allNewColumns: _*
       )
 
-      debug(s"  ✓ Generated ${DELAY_THRESHOLDS.size} proportion features + 5 base statistics")
+      debug(s"   Generated ${DELAY_THRESHOLDS.size} proportion features + 5 base statistics")
 
       // Étape 4 : Remplacer les null par 0
       debug("[Step 4] Filling null values...")
@@ -253,7 +253,7 @@ object FlightAvgDelayFeatureGenerator {
         .na.fill(0.0)
         .na.fill(0)
 
-      debug("  ✓ Enrichment completed")
+      debug("   Enrichment completed")
 
       enriched
     }
