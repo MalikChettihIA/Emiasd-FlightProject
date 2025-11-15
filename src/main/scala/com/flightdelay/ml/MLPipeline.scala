@@ -10,6 +10,9 @@ import com.flightdelay.ml.training.{CrossValidator, Trainer}
 import org.apache.spark.ml.{PipelineModel, Transformer}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import com.flightdelay.utils.DebugUtils._
+import org.apache.hadoop.fs.{FileSystem, Path}
+import java.io.{BufferedWriter, OutputStreamWriter}
+import java.nio.charset.StandardCharsets
 
 /**
  * MLPipeline - Point d'entrée unique pour l'entraînement et l'évaluation de modèles ML
@@ -305,17 +308,24 @@ object MLPipeline {
         val configDestPath = s"$experimentOutputPath/configuration"
         val configDestFile = s"$configDestPath/${configuration.environment}-config.yml"
 
-        // Create config directory and copy file
-        val configDir = new java.io.File(configDestPath)
-        if (!configDir.exists()) configDir.mkdirs()
-
         val source = scala.io.Source.fromURL(configSourcePath, "UTF-8")
         val configContent = source.mkString
         source.close()
 
-        val writer = new java.io.PrintWriter(configDestFile)
-        writer.write(configContent)
-        writer.close()
+        // Write using Hadoop FileSystem (HDFS-compatible)
+        val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+        val configDirPath = new Path(configDestPath)
+        if (!fs.exists(configDirPath)) {
+          fs.mkdirs(configDirPath)
+        }
+        val configFilePath = new Path(configDestFile)
+        val out = fs.create(configFilePath, true)
+        val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
+        try {
+          writer.write(configContent)
+        } finally {
+          writer.close()
+        }
 
         // Log configuration directory to MLFlow
         MLFlowTracker.logArtifactWithPath(rid, configDestPath, "configuration")
@@ -635,8 +645,16 @@ object MLPipeline {
     summary.append(s"Generated: ${java.time.LocalDateTime.now()}\n")
     summary.append("=" * 100 + "\n")
 
-    // Write to file
-    val writer = new java.io.PrintWriter(summaryFile)
+    // Write to file using Hadoop FileSystem (HDFS-compatible)
+    val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+    val metricsDirPath = new Path(metricsPath)
+    if (!fs.exists(metricsDirPath)) {
+      fs.mkdirs(metricsDirPath)
+    }
+    
+    val summaryPath = new Path(summaryFile)
+    val out = fs.create(summaryPath, true)
+    val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
     try {
       writer.write(summary.toString())
       println(s"   Training summary saved to: $summaryFile")

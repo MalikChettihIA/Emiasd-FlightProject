@@ -12,6 +12,9 @@ import com.flightdelay.features.leakage.DataLeakageProtection
 import com.flightdelay.utils.DebugUtils._
 
 import scala.sys.process._
+import org.apache.hadoop.fs.{FileSystem, Path}
+import java.io.{BufferedWriter, OutputStreamWriter}
+import java.nio.charset.StandardCharsets
 
 /**
  * Stores all fitted models from feature extraction pipeline
@@ -412,7 +415,7 @@ object FeatureExtractor {
     pcaModel: Option[PCAModel],
     experiment: ExperimentConfig,
     featureNames: Array[String]
-  )(implicit configuration: AppConfiguration): (DataFrame) = {
+  )(implicit configuration: AppConfiguration, spark: SparkSession): (DataFrame) = {
 
     //Experiment OutputPath:
     val experimentOutputPath = s"${configuration.common.output.basePath}/${experiment.name}"
@@ -427,32 +430,38 @@ object FeatureExtractor {
 
     // Save feature names if feature selection is enabled
     if (experiment.featureExtraction.isFeatureSelectionEnabled) {
-      import java.io.PrintWriter
-      import java.io.File
-
-      val outputDir = new File(s"${experimentOutputPath}/features")
-      if (!outputDir.exists()) {
-        outputDir.mkdirs()
+      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val featuresDirPath = new Path(s"${experimentOutputPath}/features")
+      if (!fs.exists(featuresDirPath)) {
+        fs.mkdirs(featuresDirPath)
       }
 
       // Save transformed feature names (these correspond to vector indices)
-      val transformedNamesPath = s"${experimentOutputPath}/features/selected_features.txt"
-      info(s"Saving transformed feature names to: $transformedNamesPath")
-      val transformedWriter = new PrintWriter(new File(transformedNamesPath))
+      val transformedNamesPath = new Path(s"${experimentOutputPath}/features/selected_features.txt")
+      info(s"Saving transformed feature names to: ${transformedNamesPath.toString}")
+      val transformedOut = fs.create(transformedNamesPath, true)
+      val transformedWriter = new BufferedWriter(new OutputStreamWriter(transformedOut, StandardCharsets.UTF_8))
       try {
-        featureNames.foreach(transformedWriter.println)
+        featureNames.foreach { name =>
+          transformedWriter.write(name)
+          transformedWriter.newLine()
+        }
         info(s"  - Saved ${featureNames.length} transformed feature names")
       } finally {
         transformedWriter.close()
       }
 
       // Also save original feature names (from configuration) for reference
-      val originalNamesPath = s"${experimentOutputPath}/features/original_feature_names.txt"
-      info(s"Saving original feature names to: $originalNamesPath")
+      val originalNamesPath = new Path(s"${experimentOutputPath}/features/original_feature_names.txt")
+      info(s"Saving original feature names to: ${originalNamesPath.toString}")
       val originalNames = experiment.featureExtraction.getAllFeatureNames
-      val originalWriter = new PrintWriter(new File(originalNamesPath))
+      val originalOut = fs.create(originalNamesPath, true)
+      val originalWriter = new BufferedWriter(new OutputStreamWriter(originalOut, StandardCharsets.UTF_8))
       try {
-        originalNames.foreach(originalWriter.println)
+        originalNames.foreach { name =>
+          originalWriter.write(name)
+          originalWriter.newLine()
+        }
         info(s"  - Saved ${originalNames.size} original feature names")
       } finally {
         originalWriter.close()

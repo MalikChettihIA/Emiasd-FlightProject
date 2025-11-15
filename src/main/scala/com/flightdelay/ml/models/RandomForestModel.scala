@@ -5,6 +5,9 @@ import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.{Pipeline, Transformer}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.sql.DataFrame
+import org.apache.hadoop.fs.{FileSystem, Path}
+import java.io.{BufferedWriter, OutputStreamWriter}
+import java.nio.charset.StandardCharsets
 
 /**
  * Random Forest model implementation for flight delay prediction.
@@ -240,9 +243,17 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
 
     val csvContent = (header +: rows).mkString("\n")
 
-    // Write to file
+    // Write to file using Hadoop FileSystem (HDFS-compatible)
     try {
-      val writer = new java.io.PrintWriter(new java.io.File(outputPath))
+      val spark = org.apache.spark.sql.SparkSession.active
+      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val outputPathObj = new Path(outputPath)
+      val parentDir = outputPathObj.getParent
+      if (parentDir != null && !fs.exists(parentDir)) {
+        fs.mkdirs(parentDir)
+      }
+      val out = fs.create(outputPathObj, true)
+      val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
       try {
         writer.write(csvContent)
         println(s" Feature importances saved to: $outputPath")
