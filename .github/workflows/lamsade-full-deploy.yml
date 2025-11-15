@@ -1,0 +1,397 @@
+name: Lamsade Build Test
+
+on:
+  push:
+    branches:
+      - feature/ci-cd-integration
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  # ============================================================================
+  # JOB 1: Build and Package (Test only)
+  # ============================================================================
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        cache: 'sbt'
+
+    - name: Setup sbt
+      uses: sbt/setup-sbt@v1
+
+    - name: Cache sbt dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.sbt
+          ~/.ivy2/cache
+          ~/.coursier/cache
+        key: ${{ runner.os }}-sbt-${{ hashFiles('**/build.sbt', '**/plugins.sbt') }}
+        restore-keys: |
+          ${{ runner.os }}-sbt-
+
+    - name: Clean and package
+      run: sbt clean package
+
+    - name: List generated JARs
+      run: |
+        echo "📦 JARs générés:"
+        find work/apps -name "*.jar" -type f 2>/dev/null || echo "No JARs in work/apps"
+        find target -name "*.jar" -type f 2>/dev/null || echo "No JARs in target"
+
+    - name: Upload main JAR artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: flight-delay-jar
+        path: work/apps/Emiasd-Flight-Data-Analysis.jar
+        retention-days: 30
+
+    - name: Upload MLflow dependencies
+      uses: actions/upload-artifact@v4
+      with:
+        name: mlflow-jars
+        path: |
+          work/apps/mlflow-client-3.4.0.jar
+          work/apps/mlflow-spark_2.13-3.4.0.jar
+        retention-days: 30
+
+    - name: Upload configuration
+      uses: actions/upload-artifact@v4
+      with:
+        name: config-files
+        path: src/main/resources/prodlamsade-config.yml
+        retention-days: 30
+
+  # ============================================================================
+  # JOB 2: Deploy to Lamsade Cluster (DISABLED FOR TESTING)
+  # ============================================================================
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: false  # Disabled for testing compilation only
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download JAR artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: '*-jar*'
+        path: ./artifacts/
+        merge-multiple: true
+
+    - name: Download configuration
+      uses: actions/download-artifact@v4
+      with:
+        name: config-files
+        path: ./artifacts/config/
+
+    - name: Setup SSH
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.LAMSADE_SSH_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_lamsade
+        chmod 600 ~/.ssh/id_lamsade
+        ssh-keyscan -p 5022 ssh.lamsade.dauphine.fr >> ~/.ssh/known_hosts 2>/dev/null || true
+
+    - name: Create remote directories
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+      run: |
+        ssh -i ~/.ssh/id_lamsade -p $SSH_PORT $CLUSTER_USER@$CLUSTER_HOST << 'EOF'
+          cd ~/workspace
+          mkdir -p apps config logs
+          echo "✓ Remote directories created"
+        EOF
+
+    - name: Deploy JARs to cluster
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+      run: |
+        echo "📤 Uploading JARs to cluster..."
+        scp -i ~/.ssh/id_lamsade -P $SSH_PORT ./artifacts/*.jar $CLUSTER_USER@$CLUSTER_HOST:~/workspace/apps/
+        echo "✅ JARs deployed successfully"
+
+    - name: Deploy configuration to cluster
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+      run: |
+        echo "📤 Uploading configuration..."
+        scp -i ~/.ssh/id_lamsade -P $SSH_PORT ./artifacts/config/prodlamsade-config.yml $CLUSTER_USER@$CLUSTER_HOST:~/workspace/config/
+        echo "✅ Configuration deployed successfully"
+
+    - name: Verify deployment
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+      run: |
+        echo "🔍 Verifying deployment..."
+        ssh -i ~/.ssh/id_lamsade -p $SSH_PORT $CLUSTER_USER@$CLUSTER_HOST << 'EOF'
+          echo "=== Workspace structure ==="
+          ls -lh ~/workspace/apps/
+          ls -lh ~/workspace/config/
+          echo "=== Deployment verified ==="
+        EOF
+
+  # ============================================================================
+  # JOB 3: Upload Data to HDFS (DISABLED FOR TESTING)
+  # ============================================================================
+  upload-hdfs:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: false  # Disabled for testing compilation only
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.LAMSADE_SSH_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_lamsade
+        chmod 600 ~/.ssh/id_lamsade
+        ssh-keyscan -p 5022 ssh.lamsade.dauphine.fr >> ~/.ssh/known_hosts 2>/dev/null || true
+
+    - name: Upload data to HDFS
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+        HDFS_BASE: /students/p6emiasd2025/${{ secrets.LAMSADE_USER }}
+      run: |
+        echo "📤 Uploading data to HDFS..."
+        ssh -i ~/.ssh/id_lamsade -p $SSH_PORT $CLUSTER_USER@$CLUSTER_HOST << 'EOF'
+          HDFS_BASE="/students/p6emiasd2025/$USER"
+          
+          echo "🔍 Checking HDFS directory: $HDFS_BASE/data"
+          
+          if /opt/shared/hadoop-current/bin/hdfs dfs -test -d $HDFS_BASE/data; then
+            echo "✓ HDFS directory exists"
+            FILE_COUNT=$(/opt/shared/hadoop-current/bin/hdfs dfs -count $HDFS_BASE/data | awk '{print $2}')
+            if [ "$FILE_COUNT" -eq "0" ]; then
+              echo "📤 Directory empty, uploading data..."
+              /opt/shared/hadoop-current/bin/hdfs dfs -put ~/workspace/data/* $HDFS_BASE/data
+              echo "✅ Data uploaded to HDFS"
+            else
+              echo "ℹ️  HDFS directory already contains data, skipping upload"
+            fi
+          else
+            echo "📁 Creating HDFS directory..."
+            /opt/shared/hadoop-current/bin/hdfs dfs -mkdir -p $HDFS_BASE/data
+            /opt/shared/hadoop-current/bin/hdfs dfs -put ~/workspace/data/* $HDFS_BASE/data
+            echo "✅ Data uploaded to HDFS"
+          fi
+        EOF
+
+  # ============================================================================
+  # JOB 4: Run Application on Cluster (DISABLED FOR TESTING)
+  # ============================================================================
+  run:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: false  # Disabled for testing compilation only
+    
+    steps:
+    - name: Setup SSH
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.LAMSADE_SSH_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_lamsade
+        chmod 600 ~/.ssh/id_lamsade
+        ssh-keyscan -p 5022 ssh.lamsade.dauphine.fr >> ~/.ssh/known_hosts 2>/dev/null || true
+
+    - name: Execute Spark job on cluster
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+        TASKS: ${{ github.event.inputs.tasks || 'data-pipeline,feature-extraction,train' }}
+      run: |
+        echo "🚀 Launching Spark application with tasks: $TASKS"
+        ssh -i ~/.ssh/id_lamsade -p $SSH_PORT $CLUSTER_USER@$CLUSTER_HOST << 'EOF'
+          LOG_DIR=$HOME/workspace/logs
+          mkdir -p $LOG_DIR
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          LOG_FILE=$LOG_DIR/flight-app-${TIMESTAMP}.log
+          LATEST_LOG=$LOG_DIR/latest.log
+          
+          echo "📝 Log file: $LOG_FILE"
+          
+          nohup /opt/shared/spark-current/bin/spark-submit \
+            --master yarn \
+            --deploy-mode client \
+            --class com.flightdelay.app.FlightDelayPredictionApp \
+            --files $HOME/workspace/config/prodlamsade-config.yml \
+            --driver-memory 32G \
+            --driver-cores 8 \
+            --executor-memory 8G \
+            --num-executors 6 \
+            --conf spark.driver.maxResultSize=8g \
+            --conf spark.sql.shuffle.partitions=400 \
+            --conf spark.default.parallelism=400 \
+            --conf spark.kryoserializer.buffer.max=1024m \
+            --conf spark.memory.fraction=0.8 \
+            --conf spark.rpc.message.maxSize=2047 \
+            --conf spark.sql.debug.maxToStringFields=1000 \
+            --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+            --conf spark.network.timeout=800s \
+            --conf spark.executor.heartbeatInterval=60s \
+            --conf spark.memory.offHeap.enabled=true \
+            --conf spark.memory.offHeap.size=2g \
+            --conf spark.memory.storageFraction=0.3 \
+            --jars $HOME/workspace/apps/mlflow-client-3.4.0.jar,$HOME/workspace/apps/mlflow-spark_2.13-3.4.0.jar \
+            $HOME/workspace/apps/Emiasd-Flight-Data-Analysis.jar \
+            prodlamsade $TASKS > $LOG_FILE 2>&1 &
+          
+          JOB_PID=$!
+          ln -sf $LOG_FILE $LATEST_LOG
+          
+          echo "✅ Job started with PID: $JOB_PID"
+          echo "📝 Log file: $LOG_FILE"
+          echo "🔗 Latest log: $LATEST_LOG"
+          
+          # Wait a bit and check if job is still running
+          sleep 5
+          if ps -p $JOB_PID > /dev/null; then
+            echo "✓ Job is running"
+          else
+            echo "⚠️  Job may have failed, check logs"
+            exit 1
+          fi
+        EOF
+
+    - name: Monitor job startup
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+      run: |
+        echo "⏳ Monitoring job startup (30 seconds)..."
+        sleep 30
+        ssh -i ~/.ssh/id_lamsade -p $SSH_PORT $CLUSTER_USER@$CLUSTER_HOST << 'EOF'
+          echo "=== Last 50 lines of latest log ==="
+          tail -n 50 ~/workspace/logs/latest.log || echo "No log file found"
+        EOF
+
+  # ============================================================================
+  # JOB 5: Download Logs (DISABLED FOR TESTING)
+  # ============================================================================
+  download-logs:
+    runs-on: ubuntu-latest
+    needs: run
+    if: false  # Disabled for testing compilation only
+    
+    steps:
+    - name: Setup SSH
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.LAMSADE_SSH_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_lamsade
+        chmod 600 ~/.ssh/id_lamsade
+        ssh-keyscan -p 5022 ssh.lamsade.dauphine.fr >> ~/.ssh/known_hosts 2>/dev/null || true
+
+    - name: Download latest logs
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+      run: |
+        mkdir -p ./logs-from-cluster
+        echo "📥 Downloading logs from cluster..."
+        scp -i ~/.ssh/id_lamsade -P $SSH_PORT $CLUSTER_USER@$CLUSTER_HOST:~/workspace/logs/latest.log ./logs-from-cluster/ || echo "No logs found"
+
+    - name: Upload logs as artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: lamsade-logs
+        path: ./logs-from-cluster/
+        retention-days: 7
+
+  # ============================================================================
+  # JOB 6: Cluster Inspection (DISABLED FOR TESTING)
+  # ============================================================================
+  inspect-cluster:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: false  # Disabled for testing compilation only
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.LAMSADE_SSH_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_lamsade
+        chmod 600 ~/.ssh/id_lamsade
+        ssh-keyscan -p 5022 ssh.lamsade.dauphine.fr >> ~/.ssh/known_hosts 2>/dev/null || true
+
+    - name: Upload inspection script
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+      run: |
+        if [ -f "work/scripts/rapport_cluster.sh" ]; then
+          scp -i ~/.ssh/id_lamsade -P $SSH_PORT work/scripts/rapport_cluster.sh $CLUSTER_USER@$CLUSTER_HOST:~/workspace/
+        else
+          echo "⚠️  Inspection script not found, skipping"
+        fi
+
+    - name: Run cluster inspection
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+      run: |
+        ssh -i ~/.ssh/id_lamsade -p $SSH_PORT $CLUSTER_USER@$CLUSTER_HOST << 'EOF'
+          if [ -f "$HOME/workspace/rapport_cluster.sh" ]; then
+            bash $HOME/workspace/rapport_cluster.sh -j -o $HOME/workspace/report_cluster.json > $HOME/workspace/report_cluster.txt 2>&1 || true
+          fi
+        EOF
+
+    - name: Download inspection reports
+      env:
+        CLUSTER_USER: ${{ secrets.LAMSADE_USER }}
+        CLUSTER_HOST: ssh.lamsade.dauphine.fr
+        SSH_PORT: 5022
+      run: |
+        mkdir -p ./cluster-reports
+        scp -i ~/.ssh/id_lamsade -P $SSH_PORT $CLUSTER_USER@$CLUSTER_HOST:~/workspace/report_cluster.json ./cluster-reports/ 2>/dev/null || true
+        scp -i ~/.ssh/id_lamsade -P $SSH_PORT $CLUSTER_USER@$CLUSTER_HOST:~/workspace/report_cluster.txt ./cluster-reports/ 2>/dev/null || true
+
+    - name: Upload inspection reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: cluster-inspection-reports
+        path: ./cluster-reports/
+        retention-days: 7
