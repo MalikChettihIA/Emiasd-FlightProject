@@ -1,0 +1,117 @@
+---
+- name: Flight Project - Deployment
+  hosts: lamsade
+  gather_facts: no
+  
+  vars:
+    local_project_dir: "/home/nribal/psl/06-flight/02-git/Emiasd-FlightProject"
+    cluster_user: "hbalamou"
+    workspace: "~/workspace"
+    hdfs_base: "/students/p6emiasd2025/{{ cluster_user }}"
+    tasks_to_run: "data-pipeline,feature-extraction,train"
+    ssh_key: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519_hbalamou.key"
+    ssh_opts: "-p 5022 -o StrictHostKeyChecking=no -o LogLevel=ERROR"
+    
+  tasks:
+    # Compilation
+    - name: Compile with SBT
+      delegate_to: localhost
+      shell: cd {{ local_project_dir }} && sbt clean package
+      tags: [compile, build]
+    
+    # Déploiement
+    - name: Create remote directories
+      delegate_to: localhost
+      shell: ssh -i {{ ssh_key }} {{ ssh_opts }} {{ cluster_user }}@ssh.lamsade.dauphine.fr "mkdir -p ~/workspace/{apps,config,logs}"
+      tags: [setup, deploy]
+        
+    - name: Deploy JAR files
+      delegate_to: localhost
+      shell: scp -i {{ ssh_key }} -P 5022 -o StrictHostKeyChecking=no -o LogLevel=ERROR {{ local_project_dir }}/work/apps/*.jar {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/apps/
+      tags: [deploy]
+        
+    - name: Deploy configuration
+      delegate_to: localhost
+      shell: scp -i {{ ssh_key }} -P 5022 -o StrictHostKeyChecking=no -o LogLevel=ERROR {{ local_project_dir }}/src/main/resources/prodlamsade-config.yml {{ cluster_user }}@ssh.lamsade.dauphine.fr:{{ workspace }}/config/
+      tags: [deploy]
+
+    # Exécution
+    - name: Clean HDFS output directory
+      delegate_to: localhost
+      shell: |
+        ssh -i {{ ssh_key }} {{ ssh_opts }} {{ cluster_user }}@ssh.lamsade.dauphine.fr \
+        "/opt/shared/hadoop-current/bin/hdfs dfs -rm -r -skipTrash {{ hdfs_base }}/output 2>/dev/null || true"
+      tags: [run]
+
+    - name: Test spark-submit command first
+      delegate_to: localhost
+      shell: ssh -i {{ ssh_key }} {{ ssh_opts }} {{ cluster_user }}@ssh.lamsade.dauphine.fr "/opt/shared/spark-current/bin/spark-submit --version"
+      register: spark_version
+      tags: [run]
+    
+    - name: Display spark version
+      debug:
+        var: spark_version.stdout_lines
+      tags: [run]
+
+    - name: Run Spark job with nohup (simpler than screen)
+      delegate_to: localhost
+      shell: |
+        ssh -i {{ ssh_key }} {{ ssh_opts }} {{ cluster_user }}@ssh.lamsade.dauphine.fr "
+        LOG_DIR=\$HOME/workspace/logs
+        mkdir -p \$LOG_DIR
+        LOG_FILE=\$LOG_DIR/flight-app-\$(date +%Y%m%d_%H%M%S).log
+        nohup /opt/shared/spark-current/bin/spark-submit \
+          --master yarn --deploy-mode client \
+          --class com.flightdelay.app.FlightDelayPredictionApp \
+          --files \$HOME/workspace/config/prodlamsade-config.yml \
+          --driver-memory 32G --driver-cores 8 \
+          --executor-memory 8G --num-executors 6 \
+          --conf spark.driver.maxResultSize=8g \
+          --conf spark.sql.shuffle.partitions=400 \
+          --conf spark.default.parallelism=400 \
+          --conf spark.kryoserializer.buffer.max=1024m \
+          --conf spark.memory.fraction=0.8 \
+          --conf spark.rpc.message.maxSize=2047 \
+          --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+          --conf spark.network.timeout=800s \
+          --conf spark.executor.heartbeatInterval=60s \
+          --conf spark.memory.offHeap.enabled=true \
+          --conf spark.memory.offHeap.size=2g \
+          --conf spark.memory.storageFraction=0.3 \
+          --jars \$HOME/workspace/apps/mlflow-client-3.4.0.jar,\$HOME/workspace/apps/mlflow-spark_2.13-3.4.0.jar \
+          \$HOME/workspace/apps/Emiasd-Flight-Data-Analysis.jar \
+          prodlamsade {{ tasks_to_run }} > \$LOG_FILE 2>&1 &
+        ln -sf \$LOG_FILE \$HOME/workspace/logs/latest.log
+        echo \"Job started with PID: \$!\"
+        echo \"Log file: \$LOG_FILE\"
+        "
+      register: spark_submit_result
+      tags: [run]
+    
+    - name: Display spark submission result
+      debug:
+        var: spark_submit_result.stdout_lines
+      tags: [run]
+    
+    - name: Wait a few seconds and check if process is running
+      delegate_to: localhost
+      shell: ssh -i {{ ssh_key }} {{ ssh_opts }} {{ cluster_user }}@ssh.lamsade.dauphine.fr "ps aux | grep spark-submit | grep -v grep || echo 'No spark-submit process found'"
+      register: process_check
+      tags: [run]
+    
+    - name: Display process status
+      debug:
+        var: process_check.stdout_lines
+      tags: [run]
+    
+    - name: Show first lines of log file
+      delegate_to: localhost
+      shell: ssh -i {{ ssh_key }} {{ ssh_opts }} {{ cluster_user }}@ssh.lamsade.dauphine.fr "tail -50 ~/workspace/logs/latest.log 2>/dev/null || echo 'Log file not created yet'"
+      register: log_preview
+      tags: [run]
+    
+    - name: Display log preview
+      debug:
+        var: log_preview.stdout_lines
+      tags: [run]

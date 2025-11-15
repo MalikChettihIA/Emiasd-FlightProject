@@ -1,7 +1,9 @@
 package com.flightdelay.features.joiners
 
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+import com.flightdelay.utils.DebugUtils._
 
 object FlightWeatherDataJoiner {
 
@@ -10,7 +12,14 @@ object FlightWeatherDataJoiner {
    *
    * @param flightDF DataFrame des vols
    * @param weatherDF DataFrame météo
-   * @param weatherDepthHours Nombre d'heures d'observations météo à récupérer avant le vol (par défaut: 12)
+   * @param weatherOriginDepthHours Nombre d'heures d'observations météo à récupérer avant le vol
+   *                                - Valeur négative : pas de jointure météo pour l'origine
+   *                                - 0 : jointure à l'heure exacte du départ
+   *                                - >0 : jointure avec historique (max 11)
+   * @param weatherDestinationDepthHours Nombre d'heures d'observations météo à récupérer avant le vol
+   *                                     - Valeur négative : pas de jointure météo pour la destination
+   *                                     - 0 : jointure à l'heure exacte de l'arrivée
+   *                                     - >0 : jointure avec historique (max 11)
    * @param removeLeakageColumns Si true, supprime automatiquement les colonnes qui causent du data leakage (par défaut: false)
    * @param selectedFlightColumns Colonnes du DataFrame vols à conserver (si None, toutes les colonnes)
    * @param selectedWeatherColumns Colonnes du DataFrame météo à inclure dans les observations (si None, toutes les colonnes)
@@ -19,44 +28,81 @@ object FlightWeatherDataJoiner {
   def joinFlightsWithWeather(
                               flightDF: DataFrame,
                               weatherDF: DataFrame,
-                              weatherDepthHours: Int = 12,
+                              weatherOriginDepthHours: Int = 0,
+                              weatherDestinationDepthHours: Int = 0,
                               removeLeakageColumns: Boolean = true,
                               selectedFlightColumns: Option[Seq[String]] = None,
                               selectedWeatherColumns: Option[Seq[String]] = None
-                            ): DataFrame = {
+                            )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
-    require(weatherDepthHours > 0 && weatherDepthHours <= 24,
-      s"weatherDepthHours doit être entre 1 et 24, valeur fournie: $weatherDepthHours")
 
-    // Première jointure : aéroport d'origine
-    val withOriginWeather = joinWeatherForAirport(
-      flightDF,
-      weatherDF,
-      "origin",
-      weatherDepthHours,
-      selectedFlightColumns,
-      selectedWeatherColumns
-    )
+    // Validation : valeurs négatives acceptées (= pas de jointure), sinon max 11
+    require(weatherOriginDepthHours <= 11,
+      s"weatherOriginDepthHours doit être <= 11 (ou négatif pour désactiver), valeur fournie: $weatherOriginDepthHours")
 
-    // Deuxième jointure : aéroport de destination
-    val withBothWeather = joinWeatherForAirport(
-      withOriginWeather,
-      weatherDF,
-      "destination",
-      weatherDepthHours,
-      selectedFlightColumns,
-      selectedWeatherColumns
-    )
+    require(weatherDestinationDepthHours <= 11,
+      s"weatherDestinationDepthHours doit être <= 11 (ou négatif pour désactiver), valeur fournie: $weatherDestinationDepthHours")
+
+    // Si les deux sont négatifs, pas de jointure du tout
+    if (weatherOriginDepthHours < 0 && weatherDestinationDepthHours < 0) {
+      info("[FlightWeatherJoiner]   Both weatherOriginDepthHours and weatherDestinationDepthHours are negative - NO weather join")
+      return flightDF
+    }
+
+    // Première jointure : aéroport d'origine (seulement si >= 0)
+    val withOriginWeather = if (weatherOriginDepthHours >= 0) {
+      joinWeatherForAirport(
+        flightDF,
+        weatherDF,
+        "origin",
+        weatherOriginDepthHours,
+        selectedFlightColumns,
+        selectedWeatherColumns
+      )
+    } else {
+      info(s"[FlightWeatherJoiner] Skipping origin weather join (weatherOriginDepthHours=$weatherOriginDepthHours)")
+      flightDF
+    }
+
+    // Deuxième jointure : aéroport de destination (seulement si >= 0)
+    val withBothWeather = if (weatherDestinationDepthHours >= 0) {
+      joinWeatherForAirport(
+        withOriginWeather,
+        weatherDF,
+        "destination",
+        weatherDestinationDepthHours,
+        selectedFlightColumns,
+        selectedWeatherColumns
+      )
+    } else {
+      info(s"[FlightWeatherJoiner] Skipping destination weather join (weatherDestinationDepthHours=$weatherDestinationDepthHours)")
+      withOriginWeather
+    }
+
+    // Supprimer les colonnes météo non désirées basées sur les valeurs négatives
+    var finalResult = withBothWeather
+
+    // Si weatherOriginDepthHours < 0, supprimer origin_weather_observations si elle existe
+    if (weatherOriginDepthHours < 0 && finalResult.columns.contains("origin_weather_observations")) {
+      info(s"[FlightWeatherJoiner] Removing origin_weather_observations column (weatherOriginDepthHours=$weatherOriginDepthHours)")
+      finalResult = finalResult.drop("origin_weather_observations")
+    }
+
+    // Si weatherDestinationDepthHours < 0, supprimer destination_weather_observations si elle existe
+    if (weatherDestinationDepthHours < 0 && finalResult.columns.contains("destination_weather_observations")) {
+      info(s"[FlightWeatherJoiner] Removing destination_weather_observations column (weatherDestinationDepthHours=$weatherDestinationDepthHours)")
+      finalResult = finalResult.drop("destination_weather_observations")
+    }
 
     // Supprimer les colonnes de leakage si demandé
     if (removeLeakageColumns) {
       removeDataLeakageColumns(
-        withBothWeather,
+        finalResult,
         keepRelativeTime = removeLeakageColumns,  // ou true si tu veux garder hours_before_flight
         selectedWeatherColumns = selectedWeatherColumns
       )
     } else {
-      withBothWeather
+      finalResult
     }
   }
 
@@ -72,10 +118,9 @@ object FlightWeatherDataJoiner {
                                 df: DataFrame,
                                 keepRelativeTime: Boolean = false,
                                 selectedWeatherColumns: Option[Seq[String]] = None
-                              ): DataFrame = {
+                              )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     val leakagePatterns = Set(
-      "DEP_TIME",
       "DEP_DELAY",
       "DEP_DELAY_NEW",
       "ARR_TIME",
@@ -105,7 +150,7 @@ object FlightWeatherDataJoiner {
     val columnsToKeep = currentColumns.diff(columnsToRemove)
 
     if (columnsToRemove.nonEmpty) {
-      println(s"[Anti-Leakage] Colonnes supprimées : ${columnsToRemove.toSeq.sorted.mkString(", ")}")
+      info(s"[Anti-Leakage] Colonnes supprimées : ${columnsToRemove.toSeq.sorted.mkString(", ")}")
     }
 
     val dfCleaned = df.select(columnsToKeep.toSeq.sorted.map(col): _*)
@@ -168,8 +213,8 @@ object FlightWeatherDataJoiner {
               """)
           )
         }
-        println(s"[Anti-Leakage] Time transformé en hours_before_flight (index relatif)")
-        println(s"[Anti-Leakage] Champs conservés dans observations météo : ${weatherColsToKeep.mkString(", ")}, hours_before_flight")
+        info(s"[Anti-Leakage] Time transformé en hours_before_flight (index relatif)")
+        info(s"[Anti-Leakage] Champs conservés dans observations météo : ${weatherColsToKeep.mkString(", ")}, hours_before_flight")
 
       } else if (structFields.nonEmpty) {
         // Supprimer complètement Time et Date
@@ -184,8 +229,8 @@ object FlightWeatherDataJoiner {
               """)
           )
         }
-        println(s"[Anti-Leakage] Champs supprimés des observations météo : WBAN, Time, Date")
-        println(s"[Anti-Leakage] Champs conservés dans observations météo : ${weatherColsToKeep.mkString(", ")}")
+        info(s"[Anti-Leakage] Champs supprimés des observations météo : WBAN, Time, Date")
+        info(s"[Anti-Leakage] Champs conservés dans observations météo : ${weatherColsToKeep.mkString(", ")}")
       }
     }
 
@@ -193,6 +238,9 @@ object FlightWeatherDataJoiner {
   }
   /**
    * Jointure spatio-temporelle pour UN aéroport (origine OU destination)
+   *
+   * Note: Cette fonction ne doit être appelée que si weatherDepthHours >= 0
+   *       (les valeurs négatives sont gérées dans joinFlightsWithWeather)
    */
   def joinWeatherForAirport(
                              flightDF: DataFrame,
@@ -201,15 +249,15 @@ object FlightWeatherDataJoiner {
                              weatherDepthHours: Int,
                              selectedFlightColumns: Option[Seq[String]] = None,
                              selectedWeatherColumns: Option[Seq[String]] = None
-                           ): DataFrame = {
+                           )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     require(
       airportType == "origin" || airportType == "destination",
       "airportType doit être 'origin' ou 'destination'"
     )
 
-    require(weatherDepthHours > 0 && weatherDepthHours <= 24,
-      s"weatherDepthHours doit être entre 1 et 24, valeur fournie: $weatherDepthHours")
+    require(weatherDepthHours >= 0 && weatherDepthHours <= 11,
+      s"weatherDepthHours doit être entre 0 et 11, valeur fournie: $weatherDepthHours (utilisez des valeurs négatives dans joinFlightsWithWeather pour désactiver)")
 
     import flightDF.sparkSession.implicits._
 
@@ -348,7 +396,7 @@ object FlightWeatherDataJoiner {
         }
 
         if (missingRequired.nonEmpty) {
-          println(s"[FlightWeatherJoinner] Colonnes ajoutées automatiquement pour $airportType: ${missingRequired.mkString(", ")}")
+          info(s"[FlightWeatherJoinner] Colonnes ajoutées automatiquement pour $airportType: ${missingRequired.mkString(", ")}")
         }
 
         finalCols

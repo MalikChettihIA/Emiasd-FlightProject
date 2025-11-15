@@ -5,6 +5,9 @@ import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.{Pipeline, Transformer}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.sql.DataFrame
+import org.apache.hadoop.fs.{FileSystem, Path}
+import java.io.{BufferedWriter, OutputStreamWriter}
+import java.nio.charset.StandardCharsets
 
 /**
  * Random Forest model implementation for flight delay prediction.
@@ -29,7 +32,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
    * @return Trained RandomForest model wrapped in a Pipeline
    */
   def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
-    val hp = experiment.train.hyperparameters
+    val hp = experiment.model.hyperparameters
 
     // Use first value from arrays for single training
     // (Grid Search will iterate over all combinations)
@@ -41,7 +44,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     val featureSubsetStrategy = hp.featureSubsetStrategy.getOrElse(Seq("auto")).head
     val impurity = hp.impurity.getOrElse("gini")
 
-    println(s"\n[RandomForest] Training with hyperparameters:")
+    println(s"[RandomForest] Training with hyperparameters:")
     println(s"  - Number of trees: $numTrees")
     println(s"  - Max depth: $maxDepth")
     println(s"  - Max bins: $maxBins")
@@ -72,7 +75,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(rf))
 
-    println("\nStarting training...")
+    println("Starting training...")
     val startTime = System.currentTimeMillis()
 
     val model = pipeline.fit(data)
@@ -80,7 +83,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"\n- Training completed in $trainingTime%.2f seconds")
+    println(f"- Training completed in $trainingTime%.2f seconds")
 
     // Extract and display feature importance
     val rfModel = model.stages(0).asInstanceOf[RandomForestClassificationModel]
@@ -91,7 +94,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
       saveFeatureImportance(rfModel, path)
     }
 
-    println("=" * 80 + "\n")
+    println("=" * 80)
 
     model
   }
@@ -145,7 +148,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
       }
     }
 
-    println(f"\nTop $topN Feature Importances:")
+    println(f"Top $topN Feature Importances:")
     println("=" * 90)
     println(f"${"Rank"}%-6s ${"Index"}%-7s ${"Feature Name"}%-60s ${"Importance"}%12s")
     println("=" * 90)
@@ -171,10 +174,10 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     println("=" * 90)
 
     // Print legend
-    println("\nImportance Levels: █ ≥10%  ▓ ≥5%  ▒ ≥1%  ░ <1%")
+    println("Importance Levels:  ≥10% ≥5% ≥1% <1%")
 
     // Print abbreviations used
-    println("\nAbbreviations:")
+    println("Abbreviations:")
     println("  idx_    = indexed_")
     println("  org_w_  = origin_weather_")
     println("  dst_w_  = destination_weather_")
@@ -206,18 +209,18 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
         val source = scala.io.Source.fromFile(foundPath)
         try {
           val names = source.getLines().toArray
-          println(s"\n✓ Loaded ${names.length} feature names from: $foundPath")
+          println(s" Loaded ${names.length} feature names from: $foundPath")
           names
         } finally {
           source.close()
         }
       }.getOrElse {
-        println(s"\n⚠ Could not load feature names (tried ${possiblePaths.length} locations)")
+        println(s" Could not load feature names (tried ${possiblePaths.length} locations)")
         Array.empty[String]
       }
     } catch {
       case ex: Exception =>
-        println(s"\n⚠ Error loading feature names: ${ex.getMessage}")
+        println(s" Error loading feature names: ${ex.getMessage}")
         Array.empty[String]
     }
   }
@@ -240,18 +243,26 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
 
     val csvContent = (header +: rows).mkString("\n")
 
-    // Write to file
+    // Write to file using Hadoop FileSystem (HDFS-compatible)
     try {
-      val writer = new java.io.PrintWriter(new java.io.File(outputPath))
+      val spark = org.apache.spark.sql.SparkSession.active
+      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val outputPathObj = new Path(outputPath)
+      val parentDir = outputPathObj.getParent
+      if (parentDir != null && !fs.exists(parentDir)) {
+        fs.mkdirs(parentDir)
+      }
+      val out = fs.create(outputPathObj, true)
+      val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
       try {
         writer.write(csvContent)
-        println(s"\n✓ Feature importances saved to: $outputPath")
+        println(s" Feature importances saved to: $outputPath")
       } finally {
         writer.close()
       }
     } catch {
       case ex: Exception =>
-        println(s"\n⚠ Failed to save feature importances: ${ex.getMessage}")
+        println(s" Failed to save feature importances: ${ex.getMessage}")
     }
   }
 }

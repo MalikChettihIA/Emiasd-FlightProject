@@ -26,5 +26,5 @@ trait DataLoader[T] {
    * @param spark Implicit SparkSession
    * @return DataFrame with properly typed domain objects
    */
-  def loadFromFilePath(filePath: String, validate: Boolean = false, outputPath: Option[String] = None)(implicit spark: SparkSession): DataFrame
+  def loadFromFilePath(filePath: String, validate: Boolean = false, outputPath: Option[String] = None)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame
 }

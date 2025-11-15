@@ -2,6 +2,8 @@ package com.flightdelay.data.preprocessing.weather
 
 import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+import com.flightdelay.utils.DebugUtils._
 
 object WeatherPreprocessingPipeline {
 
@@ -12,44 +14,31 @@ object WeatherPreprocessingPipeline {
    * @param spark Session Spark
    * @return DataFrame complètement préprocessé
    */
-  def execute()(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  def execute(flightData:DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
-    println("\n" + "=" * 80)
-    println("[Preprocessing] Weather Data Preprocessing Pipeline - Start")
-    println("=" * 80)
+    info("=" * 80)
+    info("[DataPipeline][Step 5/7] Weather Data Preprocessing Pipeline - Start")
+    info("=" * 80)
 
     val processedParquetPath = s"${configuration.common.output.basePath}/common/data/processed_weather.parquet"
 
     // Load raw data from parquet
     val rawParquetPath = s"${configuration.common.output.basePath}/common/data/raw_weather.parquet"
-    println(s"\nLoading raw data from parquet:")
-    println(s"  - Path: $rawParquetPath")
+    debug(s"\nLoading raw data from parquet:")
+    debug(s"  - Path: $rawParquetPath")
     val originalDf = spark.read.parquet(rawParquetPath)
-    println(s"  - Loaded ${originalDf.count()} raw records")
+    debug(s"  - Loaded raw records")
 
     // Execute preprocessing pipeline (each step creates a new DataFrame)
     val processedWithSkyConditionFeatureDf = originalDf.transform(SkyConditionFeatures.createSkyConditionFeatures)
     val porcessedWithVisibilityFeaturesDf = processedWithSkyConditionFeatureDf.transform(VisibilityFeatures.createVisibilityFeatures)
     val porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf = porcessedWithVisibilityFeaturesDf.transform(WeatherInteractionFeatures.createInteractionFeatures)
     val porcessWithWeatherConditionFeaturesDf = porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf.transform(WeatherTypeFeatureGenerator.createFeatures)
-    val processedWeatherDf = WeatherDataCleaner.preprocess(porcessWithWeatherConditionFeaturesDf)
-
-    println(s"\nSaving preprocessed data to parquet:")
-    println(s"  - Path: $processedParquetPath")
-
-    // OPTIMIZATION: Coalesce and use zstd compression
-    // Write directly without caching (write will trigger computation once)
-    processedWeatherDf
-      .write
-      .mode("overwrite")
-      .option("compression", "zstd")
-      .parquet(processedParquetPath)
-
-    println("\n" + "=" * 80)
-    println("[Preprocessing] Weather Data Preprocessing Pipeline - End")
-    println("=" * 80 + "\n")
+    val processedWithPressureTendencyFeaturesDf = porcessWithWeatherConditionFeaturesDf.transform(WeatherPressionFeatures.createPressureFeatures)
+    val processedWeatherDf = WeatherDataCleaner.preprocess(processedWithPressureTendencyFeaturesDf, flightData)
 
     processedWeatherDf
   }
+
 
 }

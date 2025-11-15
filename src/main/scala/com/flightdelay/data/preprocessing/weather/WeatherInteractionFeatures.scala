@@ -1,8 +1,10 @@
 package com.flightdelay.data.preprocessing.weather
 
-import org.apache.spark.sql.DataFrame
+import com.flightdelay.config.AppConfiguration
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import com.flightdelay.utils.DebugUtils._
 
 object WeatherInteractionFeatures {
 
@@ -10,7 +12,9 @@ object WeatherInteractionFeatures {
    * Applique toutes les features d'interaction
    * OPTIMISÉ : Utilise uniquement des expressions Spark natives (pas d'UDF)
    */
-  def createInteractionFeatures(df: DataFrame): DataFrame = {
+  def createInteractionFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherInteractionFeatures.createInteractionFeatures()")
 
     df
       // 1. Calculer l'indice de sévérité météorologique combiné
@@ -71,6 +75,37 @@ object WeatherInteractionFeatures {
           .when(col("feature_visibility_miles") < 5.0 ||
             col("feature_ceiling") < 3000, lit(1)) // Low
           .otherwise(lit(0))                       // None
+      )
+
+      // 6. Flight Category selon les règles officielles FAA
+      // Combine visibility ET ceiling height pour déterminer les conditions de vol
+      // Règles : utilise OR pour visibilité et plafond (la condition la plus restrictive s'applique)
+      .withColumn("feature_flight_category",
+        when(
+          (col("feature_visibility_miles") < 1.0) ||
+          (col("feature_ceiling") < 500),
+          lit("LIFR")  // Low Instrument Flight Rules - Conditions les plus sévères
+        )
+        .when(
+          (col("feature_visibility_miles") < 3.0) ||
+          (col("feature_ceiling") < 1000),
+          lit("IFR")  // Instrument Flight Rules - Conditions sévères
+        )
+        .when(
+          (col("feature_visibility_miles") <= 5.0) ||
+          (col("feature_ceiling") <= 3000),
+          lit("MVFR")  // Marginal Visual Flight Rules - Conditions modérées
+        )
+        .otherwise(lit("VFR"))  // Visual Flight Rules - Bonnes conditions
+      )
+
+      // 7. Version ordinale de Flight Category pour les modèles ML
+      // Plus le score est élevé, plus les conditions sont sévères
+      .withColumn("feature_flight_category_ordinal",
+        when(col("feature_flight_category") === "LIFR", lit(3))  // Sévérité maximale
+          .when(col("feature_flight_category") === "IFR", lit(2))
+          .when(col("feature_flight_category") === "MVFR", lit(1))
+          .otherwise(lit(0))  // VFR = sévérité minimale
       )
 
       // Nettoyer les colonnes temporaires

@@ -18,10 +18,13 @@ case class FeatureTransformationConfig(
  */
 case class FeatureExtractionConfig(
    featureType: String,
+   dxCol: String,
+   delayThresholdMin: Int,
    pcaVarianceThreshold: Double,
    storeJoinData: Boolean,
    storeExplodeJoinData: Boolean,
-   weatherDepthHours : Int,
+   weatherOriginDepthHours : Int,
+   weatherDestinationDepthHours : Int,
    maxCategoricalCardinality: Int = 50,
    flightSelectedFeatures: Option[Map[String, FeatureTransformationConfig]] = None,
    weatherSelectedFeatures: Option[Map[String, FeatureTransformationConfig]] = None

@@ -162,7 +162,7 @@ class HybridFeatureSelector(
    * Fit the feature selection pipeline
    */
   def fit(data: DataFrame): PipelineModel = {
-    println(s"\nFitting Hybrid Feature Selector...")
+    println(s"Fitting Hybrid Feature Selector...")
     println(s"  Numerical features: ${numericalIndices.length}")
     println(s"  Categorical features: ${categoricalIndices.length}")
     println(s"  Categorical selector: $categoricalSelectorType (threshold=$categoricalThreshold)")
@@ -180,7 +180,7 @@ class HybridFeatureSelector(
     // Extract selection information
     val info = extractSelectionInfo(model, data)
 
-    println(s"\nFeature Selection Complete:")
+    println(s"Feature Selection Complete:")
     println(s"  Original features: ${info.originalFeatures}")
     println(s"  Selected numerical: ${info.selectedNumerical}")
     println(s"  Selected categorical: ${info.selectedCategorical}")

@@ -109,7 +109,7 @@ class PCAFeatureExtractor(
     val transformed = model.transform(data)
     val analysis = analyzeVariance(model, data)
 
-    println(s"\nPCA Transformation Complete:")
+    println(s"PCA Transformation Complete:")
     println(s"  Original features: ${getInputDimension(data)}")
     println(s"  PCA components: ${model.getK}")
     println(f"  Variance explained: ${analysis.cumulativeVariance.last * 100}%.2f%%")
@@ -198,13 +198,13 @@ class PCAFeatureExtractor(
    * Print detailed variance analysis report
    */
   def printVarianceReport(analysis: VarianceAnalysis): Unit = {
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("PCA Variance Analysis Report")
     println("=" * 80)
     println(f"Original Dimensions: ${analysis.originalDimension}")
     println(f"Selected Components: ${analysis.numComponents}")
     println(f"Total Variance Explained: ${analysis.totalVarianceExplained * 100}%.2f%%")
-    println("\nVariance by Component:")
+    println("Variance by Component:")
     println("-" * 80)
     println(f"${"Component"}%-12s ${"Individual"}%-15s ${"Cumulative"}%-15s ${"Cumulative %"}%-15s")
     println("-" * 80)
@@ -213,7 +213,7 @@ class PCAFeatureExtractor(
       case ((idx, individual), cumulative) =>
         println(f"PC-$idx%-10d ${individual}%-15.6f ${cumulative}%-15.6f ${cumulative * 100}%-15.2f%%")
     }
-    println("=" * 80 + "\n")
+    println("=" * 80)
   }
 
   /**

@@ -5,6 +5,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 
 import com.flightdelay.config.AppConfiguration
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Génère les features liées à l'arrivée du vol
@@ -22,28 +23,32 @@ object FlightArrivalDataGenerator {
    */
   def preprocess(flightDf: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
-    println("\n" + "=" * 80)
-    println("[Preprocessing] Flight Arrival Data Generation - Start")
-    println("=" * 80)
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightArrivalDataGenerator.preprocess")
+
+    debug("=" * 80)
+    debug("[Preprocessing] Flight Arrival Data Generation - Start")
+    debug("=" * 80)
 
     // Étape 1: Calculer l'heure et la date d'arrivée UTC
-    println("\nStep 1: Computing UTC arrival time and date")
+    debug("Step 1: Computing UTC arrival time and date")
     val withUTCArrival = computeUTCArrival(flightDf)
 
     // Étape 2: Calculer l'heure et la date d'arrivée locale (timezone de destination)
-    println("Step 2: Computing local arrival time and date (destination timezone)")
+    debug("Step 2: Computing local arrival time and date (destination timezone)")
     val withLocalArrival = computeLocalArrival(withUTCArrival)
 
     // Étape 3: Générer les features dérivées
-    println("Step 3: Generating derived features")
+    debug("Step 3: Generating derived features")
     val enrichedDf = generateDerivedFeatures(withLocalArrival)
 
     // Display statistics
-    displayStatistics(enrichedDf)
+    whenDebug{
+      displayStatistics(enrichedDf)
+    }
 
-    println("\n" + "=" * 80)
-    println("[Preprocessing] Flight Arrival Data Generation - End")
-    println("=" * 80)
+    debug("=" * 80)
+    debug("[Preprocessing] Flight Arrival Data Generation - End")
+    debug("=" * 80)
 
     enrichedDf
   }
@@ -52,7 +57,9 @@ object FlightArrivalDataGenerator {
    * Calcule l'heure et la date d'arrivée en UTC
    * UTC_ARR_TIME = UTC_CRS_DEP_TIME + CRS_ELAPSED_TIME
    */
-  private def computeUTCArrival(df: DataFrame): DataFrame = {
+  private def computeUTCArrival(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightArrivalDataGenerator.computeUTCArrival")
     df
       // Convertir UTC_CRS_DEP_TIME en minutes depuis minuit
       .withColumn("_utc_dep_minutes",
@@ -90,7 +97,10 @@ object FlightArrivalDataGenerator {
    * Calcule l'heure et la date d'arrivée locale (timezone de destination)
    * Local = UTC + DEST_TIMEZONE offset
    */
-  private def computeLocalArrival(df: DataFrame): DataFrame = {
+  private def computeLocalArrival(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightArrivalDataGenerator.computeLocalArrival")
+
     df
       // Convertir UTC_ARR_TIME en minutes
       .withColumn("_utc_arr_minutes",
@@ -128,7 +138,10 @@ object FlightArrivalDataGenerator {
   /**
    * Génère des features dérivées à partir des données d'arrivée
    */
-  private def generateDerivedFeatures(df: DataFrame): DataFrame = {
+  private def generateDerivedFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.flights.FlightArrivalDataGenerator.generateDerivedFeatures")
+
     df
       // Heure d'arrivée (0-23)
       .withColumn("feature_arrival_hour",
@@ -145,6 +158,17 @@ object FlightArrivalDataGenerator {
       // Date d'arrivée au format string YYYY-MM-DD (pour la jointure météo)
       .withColumn("feature_utc_arrival_date",
         date_format(col("UTC_ARR_DATE"), "yyyy-MM-dd")
+      )
+      // Période de temps de l'arrivée (8 périodes de 3h)
+      .withColumn("feature_arrival_time_period",
+        when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(3), "Late_Night")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(6), "Early_Morning")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(9), "Morning")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(12), "Late_Morning")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(15), "Early_Afternoon")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(18), "Late_Afternoon")
+          .when((col("CRS_ARR_TIME").cast(IntegerType) / lit(100)) < lit(21), "Evening")
+          .otherwise("Night")
       )
       // Indicateur si le vol traverse minuit (en temps local)
       .withColumn("feature_crosses_midnight_local",
@@ -175,19 +199,19 @@ object FlightArrivalDataGenerator {
   /**
    * Affiche des statistiques sur les données d'arrivée générées
    */
-  private def displayStatistics(df: DataFrame): Unit = {
+  private def displayStatistics(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val totalFlights = df.count()
     val crossesMidnightLocal = df.filter(col("feature_crosses_midnight_local") === 1).count()
     val crossesMidnightUTC = df.filter(col("feature_crosses_midnight_utc") === 1).count()
     val fliesEastward = df.filter(col("feature_flies_eastward") === 1).count()
     val fliesWestward = df.filter(col("feature_flies_westward") === 1).count()
 
-    println(s"\nArrival Data Statistics:")
-    println(s"  - Total flights: ${totalFlights}")
-    println(s"  - Crosses midnight (local): ${crossesMidnightLocal} (${(crossesMidnightLocal * 100.0 / totalFlights).round}%)")
-    println(s"  - Crosses midnight (UTC): ${crossesMidnightUTC} (${(crossesMidnightUTC * 100.0 / totalFlights).round}%)")
-    println(s"  - Flies eastward: ${fliesEastward} (${(fliesEastward * 100.0 / totalFlights).round}%)")
-    println(s"  - Flies westward: ${fliesWestward} (${(fliesWestward * 100.0 / totalFlights).round}%)")
+    debug(s"Arrival Data Statistics:")
+    debug(s"  - Total flights: ${totalFlights}")
+    debug(s"  - Crosses midnight (local): ${crossesMidnightLocal} (${(crossesMidnightLocal * 100.0 / totalFlights).round}%)")
+    debug(s"  - Crosses midnight (UTC): ${crossesMidnightUTC} (${(crossesMidnightUTC * 100.0 / totalFlights).round}%)")
+    debug(s"  - Flies eastward: ${fliesEastward} (${(fliesEastward * 100.0 / totalFlights).round}%)")
+    debug(s"  - Flies westward: ${fliesWestward} (${(fliesWestward * 100.0 / totalFlights).round}%)")
 
   }
 }

@@ -1,8 +1,10 @@
 package com.flightdelay.data.preprocessing.weather
 
-import org.apache.spark.sql.DataFrame
+import com.flightdelay.config.AppConfiguration
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import com.flightdelay.utils.DebugUtils._
 
 object SkyConditionFeatures {
 
@@ -10,8 +12,9 @@ object SkyConditionFeatures {
    * Applique toutes les transformations pour SkyCondition
    * OPTIMISÉ : Utilise uniquement des expressions Spark natives (pas d'UDF)
    */
-  def createSkyConditionFeatures(df: DataFrame): DataFrame = {
+  def createSkyConditionFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
+    info("- Calling com.flightdelay.data.preprocessing.weather.SkyConditionFeatures.createSkyConditionFeatures()")
     df
       // 1. Extraire le trigramme le plus critique
       // Ordre de priorité : VV > OVC > BKN > SCT > FEW > CLR
@@ -47,11 +50,11 @@ object SkyConditionFeatures {
       )
 
       // 4. Détection des conditions spécifiques
-      .withColumn("feature_has_overcast", col("SkyCondition").contains("OVC"))
-      .withColumn("feature_has_broken", col("SkyCondition").contains("BKN"))
-      .withColumn("feature_has_obscured", col("SkyCondition").contains("VV"))
+      .withColumn("feature_has_overcast", when(col("SkyCondition").contains("OVC"), 1).otherwise(0))
+      .withColumn("feature_has_broken", when(col("SkyCondition").contains("BKN"), 1).otherwise(0))
+      .withColumn("feature_has_obscured", when(col("SkyCondition").contains("VV"), 1).otherwise(0))
       .withColumn("feature_is_clear",
-        col("SkyCondition").contains("CLR") || col("SkyCondition").contains("SKC"))
+        (col("SkyCondition").contains("CLR") || col("SkyCondition").contains("SKC")).cast(IntegerType))
 
       // 5. Extraire les altitudes des couches nuageuses (en pieds)
       // Approche : Extraire jusqu'à 4 couches (max typique), puis calculer min/max

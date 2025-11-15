@@ -26,7 +26,7 @@ object CrossValidator {
 
     val numFolds = experiment.train.crossValidation.numFolds
 
-    println(s"\n[CrossValidator] Starting K-Fold Cross-Validation")
+    println(s"[CrossValidator] Starting K-Fold Cross-Validation")
     println(s"  - Number of folds: $numFolds")
     println(s"  - Grid Search: ${if (experiment.train.gridSearch.enabled) "ENABLED" else "DISABLED"}")
 
@@ -47,14 +47,14 @@ object CrossValidator {
                               numFolds: Int
                             )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
 
-    println(s"\n[K-Fold CV] Performing $numFolds-fold cross-validation...")
+    println(s"[K-Fold CV] Performing $numFolds-fold cross-validation...")
 
     // Add fold index column
     val dataWithFold = devData.withColumn("fold", (rand(config.common.seed) * numFolds).cast("int"))
 
     // Perform K-fold CV
     val foldMetrics = (0 until numFolds).map { foldIdx =>
-      println(s"\n  --- Fold ${foldIdx + 1}/$numFolds ---")
+      println(s"  --- Fold ${foldIdx + 1}/$numFolds ---")
 
       // Split data
       val trainFold = dataWithFold.filter(col("fold") =!= foldIdx).drop("fold")
@@ -206,7 +206,7 @@ object CrossValidator {
                                       numFolds: Int
                                     )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
 
-    println(s"\n[Grid Search] Building parameter grid...")
+    println(s"[Grid Search] Building parameter grid...")
 
     val paramGrid = buildParameterGrid(experiment)
 
@@ -214,7 +214,7 @@ object CrossValidator {
     println(s"  - Evaluation metric: ${experiment.train.gridSearch.evaluationMetric}")
 
     val gridResults = paramGrid.zipWithIndex.map { case (params, idx) =>
-      println(s"\n[Grid Search] Testing combination ${idx + 1}/${paramGrid.size}")
+      println(s"[Grid Search] Testing combination ${idx + 1}/${paramGrid.size}")
       params.foreach { case (k, v) => println(s"    $k: $v") }
 
       val cvResult = validateWithParams(devData, experiment, params, numFolds)
@@ -227,7 +227,7 @@ object CrossValidator {
 
     val (bestParams, bestCVResult, bestMetricValue) = gridResults.maxBy(_._3)
 
-    println(s"\n" + "=" * 80)
+    println(s"=" * 80)
     println("[Grid Search] BEST COMBINATION FOUND")
     println("=" * 80)
     bestParams.toSeq.sortBy(_._1).foreach { case (k, v) =>
@@ -240,7 +240,7 @@ object CrossValidator {
   }
 
   private def buildParameterGrid(experiment: ExperimentConfig): Seq[Map[String, Any]] = {
-    val hp = experiment.train.hyperparameters
+    val hp = experiment.model.hyperparameters
     val modelType = experiment.model.modelType.toLowerCase
 
     modelType match {

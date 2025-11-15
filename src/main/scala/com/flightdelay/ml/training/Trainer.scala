@@ -32,7 +32,7 @@ object Trainer {
     bestHyperparameters: Map[String, Any]
   )(implicit spark: SparkSession, config: AppConfiguration): Transformer = {
 
-    println(s"\n[Trainer] Training final model on full development set")
+    println(s"[Trainer] Training final model on full development set")
     println(s"  - Samples: ${devData.count()}")
 
     if (bestHyperparameters.nonEmpty) {
@@ -51,7 +51,7 @@ object Trainer {
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"  ✓ Final model trained in $trainingTime%.2f seconds")
+    println(f"   Final model trained in $trainingTime%.2f seconds")
 
     trainedModel
   }

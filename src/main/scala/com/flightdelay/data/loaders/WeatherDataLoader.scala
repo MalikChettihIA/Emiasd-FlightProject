@@ -3,9 +3,7 @@ package com.flightdelay.data.loaders
 import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.functions._
-
-import scala.util.{Failure, Success, Try}
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Data loader specifically designed for weather data
@@ -125,53 +123,63 @@ object WeatherDataLoader extends DataLoader[Nothing] {
    * @param spark Implicit SparkSession
    * @return DataFrame containing weather data
    */
-  override def loadFromFilePath(filePath: String, validate: Boolean = false, outputPath: Option[String] = None)(implicit spark: SparkSession): DataFrame = {
-    println("\n" + "=" * 80)
-    println("[STEP 1][DataLoader] Weather Data Loading - Start")
-    println("=" * 80)
+  override def loadFromFilePath(filePath: String, validate: Boolean = false, outputPath: Option[String] = None)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    debug("=" * 80)
+    debug("[STEP 1][DataLoader] Weather Data Loading - Start")
+    debug("=" * 80)
 
-    // Check if Parquet file exists and load from it if available
-    val rawDf = outputPath match {
-      case Some(parquetPath) if parquetFileExists(parquetPath) =>
-        println(s"\nLoading from existing Parquet file:")
-        println(s"  - Path: $parquetPath")
-        val df = spark.read.parquet(parquetPath)
-        val count = df.count
-        println(s"  - Loaded $count records from Parquet (optimized)")
-        df
+    val rawDf = if (!configuration.common.loadDataFromCSV) {
+      // Load from existing Parquet file
+      val parquetPath = outputPath.get
+      info(s"Loading from existing Parquet file:")
+      info(s"  - Path: $parquetPath")
 
-      case _ =>
-        println(s"\nLoading from CSV file:")
-        println(s"  - Path: $filePath")
-        val df = spark.read.format("csv")
-          .option("header", "true")
-          .schema(expectedSchema)
-          .option("multiline", "true")
-          .option("escape", "\"")
-          .load(filePath)
+      val df = spark.read.parquet(parquetPath)
 
-        val count = df.count
-        println(s"  - Loaded $count records from CSV")
+      whenDebug {
+        val count = df.count()
+        println(s"  - Loaded $count records from Parquet")
+      }
 
-        // Save as Parquet for future use
-        outputPath.foreach { path =>
-          println(s"\nSaving to Parquet format:")
-          println(s"  - Path: $path")
-          df.write
-            .mode("overwrite")
-            .option("compression", "snappy")
-            .parquet(path)
-          println(s"  - Saved $count records to Parquet")
-        }
+      df
+    } else {
+      // Load from TXT file
+      debug(s"Loading from TXT file:")
+      debug(s"  - Path: $filePath")
+      val df = spark.read.format("csv")
+        .option("header", "true")
+        .schema(expectedSchema)
+        .option("multiline", "true")
+        .option("escape", "\"")
+        .load(filePath)
 
-        df
+      df.cache() 
+      // whenDebug {
+      //   val count = df.count
+      //   println(s"  - Loaded $count records from TXT")
+      // }
+
+      // Save as Parquet for future use
+      outputPath.foreach { path =>
+        info(s"Saving to Parquet format:")
+        info(s"  - Path: $path")
+        df.write
+          .mode("overwrite")
+          .option("compression", "snappy")
+          .parquet(path)
+        debug(s"  - Saved records to Parquet")
+      }
+
+      df
     }
 
-    println("\nSchema:")
-    rawDf.printSchema
+    whenDebug{
+      println("Schema:")
+      rawDf.printSchema
+    }
 
     if (validate && (!validateSchema(rawDf)))
-      println("! Schema validation failed")
+      error("! Schema validation failed")
 
     rawDf
   }
@@ -198,7 +206,7 @@ object WeatherDataLoader extends DataLoader[Nothing] {
    * @param df DataFrame to validate
    * @return Boolean indicating if schema is valid
    */
-  private def validateSchema(df: DataFrame): Boolean = {
+  private def validateSchema(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Boolean = {
     val requiredColumns = Set(
       "WBAN",
       "Date",
@@ -210,7 +218,7 @@ object WeatherDataLoader extends DataLoader[Nothing] {
 
     if (!hasRequiredColumns) {
       val missingColumns = requiredColumns -- availableColumns
-      println(s"Missing required columns: ${missingColumns.mkString(", ")}")
+      error(s"Missing required columns: ${missingColumns.mkString(", ")}")
     }
 
     hasRequiredColumns

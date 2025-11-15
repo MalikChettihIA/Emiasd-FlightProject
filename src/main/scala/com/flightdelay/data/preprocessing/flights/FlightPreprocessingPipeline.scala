@@ -1,10 +1,10 @@
 package com.flightdelay.data.preprocessing.flights
 
-import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
-import com.flightdelay.data.preprocessing.weather.WeatherInteractionFeatures
-import com.flightdelay.data.utils.TimeFeatureUtils
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+import com.flightdelay.utils.DebugUtils._
 
 object FlightPreprocessingPipeline {
 
@@ -17,77 +17,64 @@ object FlightPreprocessingPipeline {
    */
   def execute()(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
-    println("\n" + "=" * 80)
-    println("[Preprocessing] Flight Data Preprocessing Pipeline - Start")
-    println("=" * 80)
+    info("=" * 80)
+    info("[DataPipeline][Step 4/7] Flight Data Preprocessing Pipeline - Start")
+    info("=" * 80)
 
     val processedParquetPath = s"${configuration.common.output.basePath}/common/data/processed_flights.parquet"
 
     // Load raw data from parquet
     val rawParquetPath = s"${configuration.common.output.basePath}/common/data/raw_flights.parquet"
-    println(s"\nLoading raw data from parquet:")
-    println(s"  - Path: $rawParquetPath")
+    debug(s"Loading raw data from parquet:")
+    debug(s"  - Path: $rawParquetPath")
     val originalDf = spark.read.parquet(rawParquetPath)
-    println(s"  - Loaded ${originalDf.count()} raw records")
+    debug(s"  - Loaded ${originalDf.count()} raw records")
+
+    debug("[Pipeline Step 1/9] Enriching with WBAN...")
+    val enrichedWithWBAN = FlightWBANEnricher.preprocess(originalDf)
+
+    val enrichedWithWBANPath = s"${configuration.common.output.basePath}/common/data/wban_enriched_flights.parquet"
+    debug(f"[Pipeline Step 1/9] Wrinting Enriched parquer file... {enrichedWithWBANPath}")
 
     // Execute preprocessing pipeline (each step creates a new DataFrame)
-    val cleanedFlightData = FlightDataCleaner.preprocess(originalDf)
-    val enrichedWithWBAN = FlightWBANEnricher.preprocess(cleanedFlightData)
-    val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithWBAN)
+    debug("[Pipeline Step 2/9] Cleaning flight data...")
+    val cleanedFlightData = FlightDataCleaner.preprocess(enrichedWithWBAN)
+
+    debug("[Pipeline Step 3/9] Enriching with Datasets ...")
+    val enrichedWithDataset = FlightDataSetFilterGenerator.preprocess(cleanedFlightData)
+
+    debug("[Pipeline Step 4/9] Generating arrival data...")
+    val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithDataset)
+
+    debug("[Pipeline Step 5/9] Generating flight features...")
     val generatedFlightData = FlightDataGenerator.preprocess(enrichedWithArrival)
-    val generatedPreviousLateFlightData = PreviousLateFlightFeatureGenerator.createLateAircraftFeature(generatedFlightData)
-    generatedPreviousLateFlightData.checkpoint()
-    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedPreviousLateFlightData)
-    generatedFightDataWithLabels.checkpoint()
-    // Calculate avg delay features for ALL delay thresholds (15min, 30min, 45min, 60min, 90min)
-    val generatedFlightsWithAvgDelay = AvgDelayFeatureGenerator.enrichFlightsWithAvgDelay(generatedFightDataWithLabels)
-    generatedFightDataWithLabels.checkpoint()
-    val finalCleanedData = FlightDataBalancer.preprocess(generatedFlightsWithAvgDelay)
+
+
+    debug("[Pipeline Step 6/9] Generating labels...")
+    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFlightData)
+
+
 
     // Validate schema
-    validatePreprocessedSchema(finalCleanedData)
+    debug("[Pipeline Step 9/9] Validating schema...")
+    validatePreprocessedSchema(generatedFightDataWithLabels)
 
-    // OPTIMIZATION: Cache final data because it will be:
-    // 1. Counted once
-    // 2. Written to parquet
-    // 3. Returned and used by DataPipeline (cached again there)
-    val cachedFinalData = finalCleanedData.cache()
-    val processedCount = cachedFinalData.count()
-
-    // Save processed data to parquet
-    println(s"\nSaving preprocessed data to parquet:")
-    println(s"  - Path: $processedParquetPath")
-    println(s"  - Records to save: ${processedCount}")
-
-    // OPTIMIZATION: Coalesce and use zstd compression
-    cachedFinalData.coalesce(8)
-      .write
-      .mode("overwrite")
-      .option("compression", "zstd")
-      .parquet(processedParquetPath)
-    println(s"  - Saved ${processedCount} preprocessed records")
-    cachedFinalData.printSchema()
-
-    println(s"\nSaving preprocessed data to parquet:")
-
-    println("\n" + "=" * 80)
-    println("[Preprocessing] Flight Data Preprocessing Pipeline - End")
-    println("=" * 80 + "\n")
-
-    cachedFinalData
+    // Relire depuis le disque pour retourner un DataFrame propre
+    generatedFightDataWithLabels
   }
+
+
 
   /**
    * Validate the schema of preprocessed data
    * Ensures all required columns exist with correct data types
    */
-  private def validatePreprocessedSchema(df: DataFrame): Unit = {
-    println("\n" + "=" * 80)
-    println("Schema Validation")
-    println("=" * 80)
+  private def validatePreprocessedSchema(df: DataFrame)(implicit sparkSession: SparkSession, configuration: AppConfiguration): Unit = {
+    debug("" + "=" * 80)
+    debug("Schema Validation")
+    debug("=" * 80)
 
     // Required base columns (from raw data)
-    // Note: ARR_DELAY_NEW, WEATHER_DELAY, NAS_DELAY are removed by FlightDataLeakageCleaner
     val requiredBaseColumns = Map(
       "UTC_FL_DATE" -> DateType,
       "OP_CARRIER_AIRLINE_ID" -> IntegerType,
@@ -130,53 +117,54 @@ object FlightPreprocessingPipeline {
     var validationPassed = true
 
     // Validate base columns with types
-    println("\nValidating base columns:")
+    debug("Validating base columns:")
     requiredBaseColumns.foreach { case (colName, expectedType) =>
       if (!availableColumns.contains(colName)) {
-        println(s"  ✗ Missing column: $colName")
+        debug(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
         val actualType = schema(colName).dataType
         if (actualType != expectedType) {
-          println(s"  ✗ Wrong type for $colName: expected $expectedType, got $actualType")
+          debug(s"  ✗ Wrong type for $colName: expected $expectedType, got $actualType")
           validationPassed = false
         } else {
-          println(s"  - $colName ($expectedType)")
+          debug(s"   $colName ($expectedType)")
         }
       }
     }
 
     // Validate generated columns
-    println("\nValidating generated columns:")
+    debug("Validating generated columns:")
     requiredGeneratedColumns.foreach { colName =>
       if (!availableColumns.contains(colName)) {
-        println(s"  ✗ Missing column: $colName")
+        debug(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
-        println(s"  - $colName")
+        debug(s"   $colName")
       }
     }
 
     // Validate label columns
-    println("\nValidating label columns:")
+    debug("Validating label columns:")
     requiredLabelColumns.foreach { colName =>
       if (!availableColumns.contains(colName)) {
-        println(s"  ✗ Missing column: $colName")
+        debug(s"  ✗ Missing column: $colName")
         validationPassed = false
       } else {
-        println(s"  - $colName")
+        debug(s"   $colName")
       }
     }
 
     // Summary
-    println("\n" + "=" * 80)
+    debug("=" * 80)
     if (validationPassed) {
-      println(s"- Schema Validation PASSED - ${df.columns.length} columns validated")
+      debug(s" Schema Validation PASSED - ${df.columns.length} columns validated")
     } else {
-      println("✗ Schema Validation FAILED")
+      debug(" Schema Validation FAILED")
       throw new RuntimeException("Schema validation failed. Check logs for details.")
     }
-    println("=" * 80)
+    debug("=" * 80)
   }
+
 
 }

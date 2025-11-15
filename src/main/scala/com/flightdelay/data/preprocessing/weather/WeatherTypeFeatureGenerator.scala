@@ -1,8 +1,10 @@
 package com.flightdelay.data.preprocessing.weather
 
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import com.flightdelay.utils.DebugUtils._
 
 object WeatherTypeFeatureGenerator extends Serializable {
 
@@ -11,7 +13,9 @@ object WeatherTypeFeatureGenerator extends Serializable {
    * @param weatherDF DataFrame contenant au minimum la colonne WeatherType
    * @return DataFrame avec les features météo ajoutées
    */
-  def createWeatherFeatures(weatherDF: DataFrame): DataFrame = {
+  def createWeatherFeatures(weatherDF: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherTypeFeatureGenerator.createWeatherFeatures()")
 
     weatherDF
       // 1. INTENSITÉ (String Indexing pour ML)
@@ -23,6 +27,13 @@ object WeatherTypeFeatureGenerator extends Serializable {
         when(col("WeatherType").startsWith("+"), "heavy")
           .when(col("WeatherType").startsWith("-"), "light")
           .otherwise("moderate"))
+      // Version ordinale de l'intensité des précipitations (-1, 0, +1)
+      // Plus pratique pour les modèles ML que deux colonnes binaires séparées
+      .withColumn("feature_precipitation_intensity",
+        when(col("WeatherType").startsWith("+"), lit(1))   // Heavy precipitation (+)
+          .when(col("WeatherType").startsWith("-"), lit(-1))  // Light precipitation (-)
+          .otherwise(lit(0))  // Moderate precipitation (no prefix)
+          .cast(IntegerType))
 
       // 2. ORAGE (TS)
       .withColumn("has_thunderstorm",
@@ -113,7 +124,9 @@ object WeatherTypeFeatureGenerator extends Serializable {
    * @param weatherDF DataFrame avec données météo
    * @return DataFrame avec Icing_Risk_Flag et Icing_Risk_Level
    */
-  def addIcingRiskFeatures(weatherDF: DataFrame): DataFrame = {
+  def addIcingRiskFeatures(weatherDF: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
+    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherTypeFeatureGenerator.addIcingRiskFeatures()")
 
     // D'abord créer les features de base
     val withFeatures = createWeatherFeatures(weatherDF)
@@ -142,7 +155,7 @@ object WeatherTypeFeatureGenerator extends Serializable {
   /**
    * Alias pour addIcingRiskFeatures (pour compatibilité avec votre code)
    */
-  def createFeatures(weatherDF: DataFrame): DataFrame = {
+  def createFeatures(weatherDF: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
     addIcingRiskFeatures(weatherDF)
   }
 }

@@ -28,8 +28,8 @@ from sklearn.metrics import roc_curve, auc
 
 # Set style
 sns.set_style("whitegrid")
-plt.rcParams['figure.figsize'] = (12, 8)
-plt.rcParams['font.size'] = 10
+plt.rcParams['figure.figsize'] = (5, 3)  # Reduced again for MLFlow UI
+plt.rcParams['font.size'] = 7  # Reduced font size
 
 def load_ml_pipeline_metrics(metrics_dir):
     """Load all ML Pipeline metrics CSV files"""
@@ -77,7 +77,7 @@ def plot_cv_folds_detailed(metrics, output_dir):
     df = metrics['cv_folds']
     metric_cols = ['accuracy', 'precision', 'recall', 'f1_score', 'auc_roc']
 
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig, axes = plt.subplots(2, 3, figsize=(7, 4))  # Reduced by half for MLFlow
     axes = axes.flatten()
 
     for idx, metric in enumerate(metric_cols):
@@ -98,11 +98,11 @@ def plot_cv_folds_detailed(metrics, output_dir):
                         alpha=0.2, color='#e74c3c', label=f'±1σ: {std_val:.2f}%')
 
         # Styling
-        ax.set_xlabel('Fold Number', fontweight='bold', fontsize=11)
-        ax.set_ylabel(f'{metric.replace("_", " ").title()} (%)', fontweight='bold', fontsize=11)
+        ax.set_xlabel('Fold Number', fontweight='bold', fontsize=6)
+        ax.set_ylabel(f'{metric.replace("_", " ").title()} (%)', fontweight='bold', fontsize=6)
         ax.set_title(f'{metric.replace("_", " ").title()} Across CV Folds',
-                     fontsize=12, fontweight='bold')
-        ax.legend(fontsize=9)
+                     fontsize=7, fontweight='bold')
+        ax.legend(fontsize=5)
         ax.grid(alpha=0.3)
         ax.set_xticks(df['fold'])
         ax.set_ylim([0, 105])
@@ -112,7 +112,7 @@ def plot_cv_folds_detailed(metrics, output_dir):
 
     plt.tight_layout()
     output_file = output_dir / "cv_folds_detailed.png"
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
     print(f"✓ Saved: {output_file}")
     plt.close()
 
@@ -143,7 +143,7 @@ def plot_cv_vs_holdout_comparison(metrics, output_dir):
             holdout_data.append(holdout_row['value'].values[0] * 100)
             labels.append(metric.replace('_', '\n').title())
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(7, 2.5))  # Reduced by half for MLFlow
 
     # Plot 1: Bar chart comparison
     ax1 = axes[0]
@@ -161,21 +161,21 @@ def plot_cv_vs_holdout_comparison(metrics, output_dir):
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height + cv_std[i] + 1,
                 f'{cv_data[i]:.1f}%',
-                ha='center', va='bottom', fontsize=9, fontweight='bold')
+                ha='center', va='bottom', fontsize=5, fontweight='bold')
 
     for i, bar in enumerate(bars2):
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height + 1,
                 f'{holdout_data[i]:.1f}%',
-                ha='center', va='bottom', fontsize=9, fontweight='bold')
+                ha='center', va='bottom', fontsize=5, fontweight='bold')
 
-    ax1.set_xlabel('Metric', fontweight='bold', fontsize=12)
-    ax1.set_ylabel('Score (%)', fontweight='bold', fontsize=12)
+    ax1.set_xlabel('Metric', fontweight='bold', fontsize=6)
+    ax1.set_ylabel('Score (%)', fontweight='bold', fontsize=6)
     ax1.set_title('Cross-Validation vs Hold-out Test Performance',
-                  fontsize=14, fontweight='bold')
+                  fontsize=7, fontweight='bold')
     ax1.set_xticks(x)
-    ax1.set_xticklabels(labels, fontsize=10)
-    ax1.legend(fontsize=11, loc='lower right')
+    ax1.set_xticklabels(labels, fontsize=5)
+    ax1.legend(fontsize=6, loc='lower right')
     ax1.grid(axis='y', alpha=0.3)
     ax1.set_ylim([0, 105])
 
@@ -193,21 +193,21 @@ def plot_cv_vs_holdout_comparison(metrics, output_dir):
         ax2.text(width, bar.get_y() + bar.get_height()/2,
                 f' {gap:.2f}%' if width >= 0 else f'{gap:.2f}% ',
                 ha='left' if width >= 0 else 'right',
-                va='center', fontsize=9, fontweight='bold')
+                va='center', fontsize=5, fontweight='bold')
 
-    ax2.set_xlabel('Gap (CV - Hold-out) [%]', fontweight='bold', fontsize=12)
-    ax2.set_title('Generalization Gap Analysis', fontsize=14, fontweight='bold')
+    ax2.set_xlabel('Gap (CV - Hold-out) [%]', fontweight='bold', fontsize=6)
+    ax2.set_title('Generalization Gap Analysis', fontsize=7, fontweight='bold')
     ax2.axvline(x=0, color='black', linestyle='-', linewidth=1)
     ax2.axvline(x=2, color='orange', linestyle='--', linewidth=1, alpha=0.5, label='±2% threshold')
     ax2.axvline(x=-2, color='orange', linestyle='--', linewidth=1, alpha=0.5)
     ax2.axvline(x=5, color='red', linestyle='--', linewidth=1, alpha=0.5, label='±5% threshold')
     ax2.axvline(x=-5, color='red', linestyle='--', linewidth=1, alpha=0.5)
-    ax2.legend(fontsize=9, loc='best')
+    ax2.legend(fontsize=5, loc='best')
     ax2.grid(axis='x', alpha=0.3)
 
     plt.tight_layout()
     output_file = output_dir / "cv_vs_holdout_comparison.png"
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
     print(f"✓ Saved: {output_file}")
     plt.close()
 
@@ -222,7 +222,7 @@ def plot_box_plot_stability(metrics, output_dir):
     # Prepare data
     data_to_plot = [df[col].values * 100 for col in metric_cols]
 
-    fig, ax = plt.subplots(figsize=(12, 7))
+    fig, ax = plt.subplots(figsize=(5, 3))  # Reduced by half for MLFlow
 
     bp = ax.boxplot(data_to_plot,
                     labels=[m.replace('_', '\n').title() for m in metric_cols],
@@ -242,9 +242,9 @@ def plot_box_plot_stability(metrics, output_dir):
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
 
-    ax.set_ylabel('Score (%)', fontweight='bold', fontsize=12)
+    ax.set_ylabel('Score (%)', fontweight='bold', fontsize=6)
     ax.set_title('Distribution of Metrics Across CV Folds (Stability Analysis)',
-                 fontsize=14, fontweight='bold')
+                 fontsize=7, fontweight='bold')
     ax.grid(axis='y', alpha=0.3)
     ax.set_ylim([0, 105])
 
@@ -257,7 +257,7 @@ def plot_box_plot_stability(metrics, output_dir):
                markersize=8, label='Mean'),
         Patch(facecolor='gray', alpha=0.3, label='IQR (25%-75%)')
     ]
-    ax.legend(handles=legend_elements, loc='lower right', fontsize=10)
+    ax.legend(handles=legend_elements, loc='lower right', fontsize=5)
 
     # Add stability assessment
     max_std = df[metric_cols].std().max() * 100
@@ -273,12 +273,12 @@ def plot_box_plot_stability(metrics, output_dir):
 
     textstr = f'Stability: {stability}\nMax StdDev: {max_std:.2f}%'
     props = dict(boxstyle='round', facecolor=color, alpha=0.3, edgecolor=color, linewidth=2)
-    ax.text(0.02, 0.98, textstr, transform=ax.transAxes, fontsize=11,
+    ax.text(0.02, 0.98, textstr, transform=ax.transAxes, fontsize=6,
             verticalalignment='top', bbox=props, fontweight='bold')
 
     plt.tight_layout()
     output_file = output_dir / "cv_stability_boxplot.png"
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
     print(f"✓ Saved: {output_file}")
     plt.close()
 
@@ -303,24 +303,24 @@ def plot_confusion_matrix_holdout(metrics, output_dir):
     cm = np.array([[tn, fp], [fn, tp]])
     total = cm.sum()
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3))  # Reduced by half for MLFlow
 
     # Plot 1: Confusion Matrix (counts)
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=['Predicted\nNegative (0)', 'Predicted\nPositive (1)'],
                 yticklabels=['Actual\nNegative (0)', 'Actual\nPositive (1)'],
                 ax=ax1, cbar_kws={'label': 'Count'},
-                annot_kws={'fontsize': 16, 'fontweight': 'bold'})
+                annot_kws={'fontsize': 8, 'fontweight': 'bold'})
 
     ax1.set_title('Confusion Matrix - Hold-out Test (Counts)',
-                 fontsize=14, fontweight='bold', pad=15)
+                 fontsize=7, fontweight='bold', pad=5)
 
     # Add percentage annotations
     for i in range(2):
         for j in range(2):
             percentage = cm[i, j] / total * 100
             ax1.text(j + 0.5, i + 0.7, f'({percentage:.1f}%)',
-                   ha='center', va='center', fontsize=12, color='gray')
+                   ha='center', va='center', fontsize=6, color='gray')
 
     # Plot 2: Normalized Confusion Matrix (percentages)
     cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
@@ -329,10 +329,10 @@ def plot_confusion_matrix_holdout(metrics, output_dir):
                 xticklabels=['Predicted\nNegative (0)', 'Predicted\nPositive (1)'],
                 yticklabels=['Actual\nNegative (0)', 'Actual\nPositive (1)'],
                 ax=ax2, cbar_kws={'label': 'Percentage (%)'},
-                annot_kws={'fontsize': 16, 'fontweight': 'bold'})
+                annot_kws={'fontsize': 8, 'fontweight': 'bold'})
 
     ax2.set_title('Normalized Confusion Matrix (Row %)',
-                 fontsize=14, fontweight='bold', pad=15)
+                 fontsize=7, fontweight='bold', pad=5)
 
     # Add performance metrics as text
     accuracy = (tp + tn) / total * 100
@@ -348,12 +348,12 @@ def plot_confusion_matrix_holdout(metrics, output_dir):
         f'F1-Score:  {f1:.2f}%'
     ])
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5, edgecolor='black', linewidth=2)
-    ax2.text(1.35, 0.5, textstr, transform=ax2.transAxes, fontsize=11,
+    ax2.text(1.35, 0.5, textstr, transform=ax2.transAxes, fontsize=6,
             verticalalignment='center', bbox=props, fontfamily='monospace')
 
     plt.tight_layout()
     output_file = output_dir / "confusion_matrix_holdout.png"
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
     print(f"✓ Saved: {output_file}")
     plt.close()
 
@@ -384,7 +384,7 @@ def plot_metrics_radar(metrics, output_dir):
     if not categories:
         return
 
-    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(projection='polar'))
+    fig, ax = plt.subplots(figsize=(4, 4), subplot_kw=dict(projection='polar'))  # Reduced by half for MLFlow
 
     # Number of variables
     N = len(categories)
@@ -406,20 +406,20 @@ def plot_metrics_radar(metrics, output_dir):
     ax.fill(angles, holdout_plot, alpha=0.25, color='#3498db')
 
     ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(categories, size=12, fontweight='bold')
+    ax.set_xticklabels(categories, size=6, fontweight='bold')
     ax.set_ylim(0, 1)
     ax.set_title('Model Performance Radar Chart',
-                 size=16, fontweight='bold', pad=20)
-    ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=12)
+                 size=7, fontweight='bold', pad=10)
+    ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=6)
     ax.grid(True, linewidth=1.5, alpha=0.5)
 
     # Add concentric circles labels
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.set_yticklabels(['20%', '40%', '60%', '80%', '100%'], fontsize=10)
+    ax.set_yticklabels(['20%', '40%', '60%', '80%', '100%'], fontsize=5)
 
     plt.tight_layout()
     output_file = output_dir / "metrics_radar.png"
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
     print(f"✓ Saved: {output_file}")
     plt.close()
 
@@ -431,7 +431,7 @@ def plot_hyperparameters_summary(metrics, output_dir):
 
     hp_df = metrics['hyperparameters']
 
-    fig, ax = plt.subplots(figsize=(10, max(6, len(hp_df) * 0.5)))
+    fig, ax = plt.subplots(figsize=(4, max(2.5, len(hp_df) * 0.2)))  # Reduced by half for MLFlow
 
     # Create horizontal bar chart
     y_pos = np.arange(len(hp_df))
@@ -445,29 +445,110 @@ def plot_hyperparameters_summary(metrics, output_dir):
             edgecolor='black', linewidth=1.5)
 
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(hp_df['parameter'], fontsize=11, fontweight='bold')
+    ax.set_yticklabels(hp_df['parameter'], fontsize=6, fontweight='bold')
     ax.set_xlim([0, 1.5])
     ax.set_xticks([])  # Remove x-axis ticks
 
     # Add value labels
     for i, (_, row) in enumerate(hp_df.iterrows()):
         ax.text(0.5, i, f"  {row['display_value']}",
-               va='center', ha='center', fontsize=12,
+               va='center', ha='center', fontsize=6,
                fontweight='bold', color='white',
                bbox=dict(boxstyle='round,pad=0.5', facecolor='black', alpha=0.7))
 
     ax.set_title('Best Hyperparameters from Grid Search',
-                 fontsize=14, fontweight='bold', pad=15)
+                 fontsize=7, fontweight='bold', pad=5)
     ax.set_xlabel('')
 
     # Add note
     note = "These are the optimal hyperparameters found through grid search\nbased on cross-validation performance"
     ax.text(0.5, -0.15, note, transform=ax.transAxes,
-           fontsize=10, ha='center', style='italic', color='gray')
+           fontsize=5, ha='center', style='italic', color='gray')
 
     plt.tight_layout()
     output_file = output_dir / "best_hyperparameters.png"
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    print(f"✓ Saved: {output_file}")
+    plt.close()
+
+def plot_per_class_recall(metrics, output_dir):
+    """Plot RECd (Recall Delayed) and RECo (Recall On-time) comparison"""
+    if 'holdout' not in metrics:
+        print("✗ No hold-out data found for per-class recall")
+        return
+
+    holdout_df = metrics['holdout']
+
+    try:
+        # Extract recall values for both classes
+        recall_delayed = float(holdout_df[holdout_df['metric'] == 'recall_delayed']['value'].values[0])
+        recall_ontime = float(holdout_df[holdout_df['metric'] == 'recall_ontime']['value'].values[0])
+    except Exception as e:
+        print(f"✗ Could not extract per-class recall: {e}")
+        return
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3))
+
+    # Plot 1: Bar chart comparison
+    classes = ['Delayed\n(Class 1)', 'On-time\n(Class 0)']
+    recalls = [recall_delayed * 100, recall_ontime * 100]
+    colors = ['#e74c3c', '#2ecc71']
+
+    bars = ax1.bar(classes, recalls, color=colors, alpha=0.8, edgecolor='black', linewidth=2)
+
+    # Add value labels
+    for bar, recall in zip(bars, recalls):
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2., height + 1,
+                f'{recall:.2f}%',
+                ha='center', va='bottom', fontsize=7, fontweight='bold')
+
+    ax1.set_ylabel('Recall (%)', fontweight='bold', fontsize=7)
+    ax1.set_title('Per-Class Recall Comparison', fontsize=8, fontweight='bold')
+    ax1.set_ylim([0, 105])
+    ax1.grid(axis='y', alpha=0.3)
+    ax1.axhline(y=50, color='gray', linestyle='--', linewidth=1, alpha=0.5, label='50% baseline')
+    ax1.legend(fontsize=6)
+
+    # Add performance assessment
+    avg_recall = (recall_delayed + recall_ontime) / 2
+    if avg_recall >= 80:
+        performance = "Excellent"
+        color = '#2ecc71'
+    elif avg_recall >= 70:
+        performance = "Good"
+        color = '#f39c12'
+    else:
+        performance = "Needs Improvement"
+        color = '#e74c3c'
+
+    textstr = f'Average: {avg_recall:.2f}%\nBalance: {performance}'
+    props = dict(boxstyle='round', facecolor=color, alpha=0.3, edgecolor=color, linewidth=2)
+    ax1.text(0.98, 0.98, textstr, transform=ax1.transAxes, fontsize=6,
+            verticalalignment='top', horizontalalignment='right',
+            bbox=props, fontweight='bold')
+
+    # Plot 2: Donut chart for visual representation
+    recalls_data = [recall_delayed, recall_ontime]
+    recalls_labels = [f'RECd\n{recall_delayed*100:.1f}%', f'RECo\n{recall_ontime*100:.1f}%']
+
+    wedges, texts, autotexts = ax2.pie(recalls_data, labels=recalls_labels,
+                                         colors=colors, autopct='',
+                                         startangle=90, wedgeprops=dict(width=0.5, edgecolor='white', linewidth=2))
+
+    for text in texts:
+        text.set_fontsize(7)
+        text.set_fontweight('bold')
+
+    ax2.set_title('Recall Distribution by Class', fontsize=8, fontweight='bold')
+
+    # Add center text
+    ax2.text(0, 0, f'Balanced\nRecall', ha='center', va='center',
+            fontsize=7, fontweight='bold', color='#34495e')
+
+    plt.tight_layout()
+    output_file = output_dir / "per_class_recall.png"
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
     print(f"✓ Saved: {output_file}")
     plt.close()
 
@@ -497,7 +578,7 @@ def plot_roc_curve(metrics, output_dir):
     print(f"  - Number of thresholds: {len(thresholds)}")
 
     # Create figure
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(4, 3))  # Reduced by half for MLFlow
 
     # Plot ROC curve
     ax.plot(fpr, tpr, color='#3498db', lw=3,
@@ -510,10 +591,10 @@ def plot_roc_curve(metrics, output_dir):
     # Styling
     ax.set_xlim([0.0, 1.0])
     ax.set_ylim([0.0, 1.05])
-    ax.set_xlabel('False Positive Rate (FPR)', fontweight='bold', fontsize=12)
-    ax.set_ylabel('True Positive Rate (TPR / Recall)', fontweight='bold', fontsize=12)
-    ax.set_title('ROC Curve - Hold-out Test Set', fontsize=14, fontweight='bold', pad=15)
-    ax.legend(loc="lower right", fontsize=11, frameon=True, shadow=True)
+    ax.set_xlabel('False Positive Rate (FPR)', fontweight='bold', fontsize=6)
+    ax.set_ylabel('True Positive Rate (TPR / Recall)', fontweight='bold', fontsize=6)
+    ax.set_title('ROC Curve - Hold-out Test Set', fontsize=7, fontweight='bold', pad=5)
+    ax.legend(loc="lower right", fontsize=5, frameon=True, shadow=True)
     ax.grid(alpha=0.3, zorder=1)
 
     # Add performance zones
@@ -541,10 +622,10 @@ def plot_roc_curve(metrics, output_dir):
     ax.annotate(f'Optimal Point\n(FPR={optimal_fpr:.3f}, TPR={optimal_tpr:.3f})',
                xy=(optimal_fpr, optimal_tpr),
                xytext=(min(optimal_fpr + 0.2, 0.85), max(optimal_tpr - 0.2, 0.15)),
-               fontsize=10,
+               fontsize=5,
                bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.7),
                arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0.3',
-                             lw=2, color='red'),
+                             lw=1, color='red'),
                zorder=5)
 
     # Add AUC interpretation box
@@ -564,13 +645,13 @@ def plot_roc_curve(metrics, output_dir):
     textstr = f'AUC = {roc_auc:.4f}\nPerformance: {performance}'
     props = dict(boxstyle='round', facecolor=color, alpha=0.3,
                 edgecolor=color, linewidth=2)
-    ax.text(0.98, 0.02, textstr, transform=ax.transAxes, fontsize=12,
+    ax.text(0.98, 0.02, textstr, transform=ax.transAxes, fontsize=6,
             verticalalignment='bottom', horizontalalignment='right',
             bbox=props, fontweight='bold', zorder=6)
 
     plt.tight_layout()
     output_file = output_dir / "roc_curve_holdout.png"
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
     print(f"\n✓ Saved: {output_file}")
     plt.close()
 
@@ -638,8 +719,10 @@ def generate_comprehensive_report(metrics, output_dir):
         metric_rows = holdout_df[~holdout_df['metric'].str.contains('positive|negative')]
         for _, row in metric_rows.iterrows():
             value = float(row['value'])
-            if row['metric'] in ['accuracy', 'precision', 'recall', 'f1_score', 'auc_roc', 'auc_pr']:
-                report.append(f"  {row['metric']:20s}: {value*100:>8.2f}%")
+            if row['metric'] in ['accuracy', 'precision', 'recall', 'f1_score', 'auc_roc', 'auc_pr',
+                                  'recall_delayed', 'recall_ontime']:
+                metric_name = row['metric'].replace('recall_delayed', 'RECd (Delayed)').replace('recall_ontime', 'RECo (On-time)')
+                report.append(f"  {metric_name:20s}: {value*100:>8.2f}%")
             else:
                 report.append(f"  {row['metric']:20s}: {value:>8.4f}")
         report.append("")
@@ -776,6 +859,7 @@ def main():
     plot_box_plot_stability(metrics, output_dir)
     plot_confusion_matrix_holdout(metrics, output_dir)
     plot_metrics_radar(metrics, output_dir)
+    plot_per_class_recall(metrics, output_dir)
     plot_hyperparameters_summary(metrics, output_dir)
     plot_roc_curve(metrics, output_dir)
 
@@ -793,6 +877,7 @@ def main():
     print("  - cv_stability_boxplot.png       : Stability analysis (box plots)")
     print("  - confusion_matrix_holdout.png   : Confusion matrix (counts & normalized)")
     print("  - metrics_radar.png              : Performance radar chart")
+    print("  - per_class_recall.png           : Per-class recall (RECd & RECo)")
     print("  - roc_curve_holdout.png          : ROC curve with optimal threshold")
     print("  - best_hyperparameters.png       : Best hyperparameters (if available)")
     print("  - ml_pipeline_report.txt         : Comprehensive text report")

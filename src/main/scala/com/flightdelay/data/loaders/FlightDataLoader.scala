@@ -2,12 +2,11 @@ package com.flightdelay.data.loaders
 
 import com.flightdelay.config.AppConfiguration
 import com.flightdelay.data.models.Flight
-import io.netty.handler.codec.http2.Http2FrameWriter.Configuration
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.functions._
 
-import scala.util.{Failure, Success, Try}
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Data loader specifically designed for flight data
@@ -38,7 +37,8 @@ object FlightDataLoader extends DataLoader[Flight] {
     "diverted" -> "DIVERTED",
     "crsElapsedTime" -> "CRS_ELAPSED_TIME",
     "weatherDelay" -> "WEATHER_DELAY",
-    "nasDelay" -> "NAS_DELAY"
+    "nasDelay" -> "NAS_DELAY",
+    "unused" -> "UNUSED_COL"
   )
 
   // ===========================================================================================
@@ -57,7 +57,8 @@ object FlightDataLoader extends DataLoader[Flight] {
     StructField("DIVERTED", IntegerType, nullable = true),
     StructField("CRS_ELAPSED_TIME", DoubleType, nullable = true),
     StructField("WEATHER_DELAY", DoubleType, nullable = true),
-    StructField("NAS_DELAY", DoubleType, nullable = true)
+    StructField("NAS_DELAY", DoubleType, nullable = true),
+    StructField("UNUSED_COL", StringType, nullable = true)
   ))
 
   // ===========================================================================================
@@ -76,7 +77,6 @@ object FlightDataLoader extends DataLoader[Flight] {
     loadFromFilePath(filePath, validate, Some(outputPath))
   }
 
-
   /**
    * Load flight data with full preprocessing and transformation
    * @param filePath Path to CSV input file
@@ -85,70 +85,71 @@ object FlightDataLoader extends DataLoader[Flight] {
    * @param spark Implicit SparkSession
    * @return DataFrame containing processed flight data
    */
-  override def loadFromFilePath(filePath: String, validate: Boolean = false, outputPath: Option[String] = None)(implicit spark: SparkSession): DataFrame = {
-    println("\n" + "=" * 80)
-    println("[STEP 1][DataLoader] Flight Data Loading - Start")
-    println("=" * 80)
+  override def loadFromFilePath(filePath: String, validate: Boolean = false, outputPath: Option[String] = None)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    debug("=" * 80)
+    debug("[STEP 1][DataLoader] Flight Data Loading - Start")
+    debug("=" * 80)
 
-    // Check if Parquet file exists and load from it if available
-    val rawDf = outputPath match {
-      case Some(parquetPath) if parquetFileExists(parquetPath) =>
-        println(s"\nLoading from existing Parquet file:")
-        println(s"  - Path: $parquetPath")
-        val df = spark.read.parquet(parquetPath)
-        val count = df.count
-        println(s"  - Loaded $count records from Parquet (optimized)")
-        df
+    val rawDf = if (!configuration.common.loadDataFromCSV) {
+      // Load from existing Parquet file
+      val parquetPath = outputPath.get
+      info(s"Loading from existing Parquet file:")
+      info(s"  - Path: $parquetPath")
 
-      case _ =>
-        println(s"\nLoading from CSV file:")
-        println(s"  - Path: $filePath")
-        val df = spark.read.format("csv")
-          .option("header", "true")
-          .schema(expectedSchema)
-          .option("timestampFormat", DEFAULT_DATE_FORMAT)
-          .option("multiline", "true")
-          .option("escape", "\"")
-          .load(filePath)
-          .withColumn("FL_DATE", to_date(col("FL_DATE"), DEFAULT_DATE_FORMAT))
+      val df = spark.read.parquet(parquetPath)
 
-        val count = df.count
-        println(s"  - Loaded $count records from CSV")
+      whenDebug {
+        val count = df.count()
+        println(s"  - Loaded $count records from Parquet")
+      }
 
-        // Save as Parquet for future use
-        outputPath.foreach { path =>
-          println(s"\nSaving to Parquet format:")
-          println(s"  - Path: $path")
-          df.write
-            .mode("overwrite")
-            .option("compression", "snappy")
-            .parquet(path)
-          println(s"  - Saved $count records to Parquet")
-        }
+      df
+    } else {
+      // Load from CSV file
+      debug(s"Loading from CSV file:")
+      debug(s"  - Path: $filePath")
+      val columnsToKeep = expectedSchema.fieldNames
+                        .filter(_ != "UNUSED_COL")
+                        .map(col)
+      val df = spark.read.format("csv")
+        .option("header", "true")
+        .schema(expectedSchema)
+        .option("timestampFormat", DEFAULT_DATE_FORMAT)
+        .option("multiline", "true")
+        .option("escape", "\"")
+        .load(filePath)
+        .select(columnsToKeep: _*)
+        .withColumn("FL_DATE", to_date(col("FL_DATE"), DEFAULT_DATE_FORMAT))
 
-        df
+      df.cache() // Cache the DataFrame as it will be used multiple times
+      // whenDebug {
+      //   val count = df.count
+      //   println(s"  - Loaded $count records from CSV")
+      // }
+
+      // Save as Parquet for future use, c'est une action qui consomme plus
+      outputPath.foreach { path =>
+        info(s"Saving to Parquet format:")
+        info(s"  - Path: $path")
+        df.write
+          .mode("overwrite")
+          .option("compression", "snappy")
+          .parquet(path)
+        debug(s"  - Saved records to Parquet")
+      }
+
+      df
+    } 
+
+    whenDebug {
+      println("Schema:")
+      rawDf.printSchema
     }
-
-    println("\nSchema:")
-    rawDf.printSchema
 
     if (validate && (!validateSchema(rawDf)))
-      println("! Schema validation failed")
+      error("! Schema validation failed")
 
     rawDf
-  }
-
-  /**
-   * Check if Parquet file exists
-   */
-  private def parquetFileExists(path: String)(implicit spark: SparkSession): Boolean = {
-    try {
-      val fs = org.apache.hadoop.fs.FileSystem.get(spark.sparkContext.hadoopConfiguration)
-      val exists = fs.exists(new org.apache.hadoop.fs.Path(path))
-      exists
-    } catch {
-      case _: Exception => false
-    }
   }
 
   // ===========================================================================================
@@ -160,7 +161,7 @@ object FlightDataLoader extends DataLoader[Flight] {
    * @param df DataFrame to validate
    * @return Boolean indicating if schema is valid
    */
-  private def validateSchema(df: DataFrame): Boolean = {
+  private def validateSchema(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Boolean = {
     val requiredColumns = Set(
         "FL_DATE",
         "OP_CARRIER_AIRLINE_ID",
@@ -175,7 +176,7 @@ object FlightDataLoader extends DataLoader[Flight] {
 
     if (!hasRequiredColumns) {
       val missingColumns = requiredColumns -- availableColumns
-      println(s"Missing required columns: ${missingColumns.mkString(", ")}")
+      error(s"Missing required columns: ${missingColumns.mkString(", ")}")
     }
 
     hasRequiredColumns

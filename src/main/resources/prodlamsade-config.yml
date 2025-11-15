@@ -1,0 +1,221 @@
+# src/main/resources/local-config.yml
+environment: "prodlamsade"
+profile: "prodlamsade"
+
+# ============================================================================
+# COMMON CONFIGURATION - Shared across all experiments
+# ============================================================================
+common:
+  # Random seed for reproducibility across all experiments
+  seed: 42
+
+  data:
+    basePath: "/students/p6emiasd2025/hbalamou/data"
+    flight :
+      path: "/students/p6emiasd2025/hbalamou/data/Flights/201201.csv"
+    weather :
+      path : "/students/p6emiasd2025/hbalamou/data/Weather/201201hourly.txt"
+    airportMapping :
+      path : "/students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv"
+  output:
+    basePath: "/students/p6emiasd2025/hbalamou/output"
+
+  mlflow:
+    enabled: true
+    trackingUri: "http://localhost:5000"  # Utilise le nom du container et le port interne
+
+# ============================================================================
+# EXPERIMENTS - Each experiment has its own feature extraction and model config
+# ============================================================================
+experiments:
+
+  # =========================================================================
+  # Experiment 1:
+  # Model : RandomForest, feature_selection
+  # =========================================================================
+  - name: "Experience-local"
+    description: "Baseline Random Forest with hyperparameters tuning"
+    enabled: true
+    target: "is_delayed"
+
+    featureExtraction:
+      type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherOriginDepthHours: 0
+      weatherDestinationDepthHours: 0
+      maxCategoricalCardinality: 50
+
+      flightSelectedFeatures:
+        CRS_DEP_TIME:
+          transformation: "None"
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "StringIndexer"
+        ORIGIN_AIRPORT_ID:
+          transformation: "StringIndexer"
+        DEST_AIRPORT_ID:
+          transformation: "StringIndexer"
+        CRS_ELAPSED_TIME:
+          transformation: "None"
+        feature_departure_hour_rounded:
+          transformation: "StringIndexer"
+        feature_flight_week_of_year:
+          transformation: "StringIndexer"
+        feature_departure_time_period:
+          transformation: "StringIndexer"
+        feature_arrival_time_period:
+          transformation: "StringIndexer"
+        #feature_turnaround_buffer:
+        #  transformation: "None"
+
+      weatherSelectedFeatures:
+        feature_most_critical_sky:
+          transformation: "StringIndexer"
+        feature_num_cloud_layers:
+          transformation: "None"
+        feature_cloud_risk_score:
+          transformation: "None"
+        feature_has_overcast:
+          transformation: "None"
+        feature_has_broken:
+          transformation: "None"
+        feature_has_obscured:
+          transformation: "None"
+        feature_is_clear:
+          transformation: "None"
+        feature_lowest_cloud_height:
+          transformation: "None"
+        feature_ceiling:
+          transformation: "None"
+        feature_has_low_ceiling:
+          transformation: "None"
+        feature_visibility_miles:
+          transformation: "None"
+        feature_visibility_km:
+          transformation: "None"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_visibility_risk_score:
+          transformation: "None"
+        feature_is_low_visibility:
+          transformation: "None"
+        feature_is_very_low_visibility:
+          transformation: "None"
+        feature_visibility_normalized:
+          transformation: "None"
+        feature_visibility_inverse:
+          transformation: "None"
+        feature_weather_severity_index:
+          transformation: "None"
+        feature_is_vfr_conditions:
+          transformation: "None"
+        feature_is_ifr_conditions:
+          transformation: "None"
+        feature_requires_cat_ii:
+          transformation: "None"
+        feature_operations_risk_level:
+          transformation: "None"
+        feature_flight_category:
+          transformation: "StringIndexer"
+        feature_flight_category_ordinal:
+          transformation: "None"
+        intensity_heavy:
+          transformation: "None"
+        intensity_light:
+          transformation: "None"
+        weather_intensity:
+          transformation: "StringIndexer"
+        feature_precipitation_intensity:
+          transformation: "None"
+        has_thunderstorm:
+          transformation: "None"
+        has_freezing_precip:
+          transformation: "None"
+        has_freezing:
+          transformation: "None"
+        has_precipitation:
+          transformation: "None"
+        has_obscuration:
+          transformation: "None"
+        has_visible_moisture:
+          transformation: "None"
+        has_hazardous:
+          transformation: "None"
+        has_rain:
+          transformation: "None"
+        has_snow:
+          transformation: "None"
+        has_hail:
+          transformation: "None"
+        extracted_codes:
+          transformation: "StringIndexer"
+        weather_hazard_level:
+          transformation: "None"
+        Icing_Risk_Flag:
+          transformation: "None"
+        Icing_Risk_Level:
+          transformation: "None"
+
+        # Feature Non retravailler
+        DryBulbFarenheit:
+          transformation: "None"
+        DryBulbCelsius:
+          transformation: "None"
+        WetBulbFarenheit:
+          transformation: "None"
+        WetBulbCelsius:
+          transformation: "None"
+        DewPointFarenheit:
+          transformation: "None"
+        DewPointCelsius:
+          transformation: "None"
+        RelativeHumidity:
+          transformation: "None"
+        WindSpeed:
+          transformation: "None"
+        WindDirection:
+          transformation: "None"
+        ValueForWindCharacter:
+          transformation: "None"
+        StationPressure:
+          transformation: "None"
+        PressureTendency:
+          transformation: "None"
+        PressureChange:
+          transformation: "None"
+        SeaLevelPressure:
+          transformation: "None"
+        HourlyPrecip:
+          transformation: "None"
+        Altimeter:
+          transformation: "None"
+
+        feature_pressure_visibility_combo:
+          transformation: "StringIndexer"
+        feature_pressure_bucket:
+          transformation: "StringIndexer"
+        press_change_abs:
+          transformation: "None"
+
+    model:
+      modelType: "randomforest"
+      hyperparameters:
+        numTrees: [15]
+        maxDepth: [7]
+        maxBins: [280]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
+        impurity: "gini"
+
+    train:
+      trainRatio: 0.75
+
+      crossValidation:
+        numFolds: 5
+
+      gridSearch:
+        enabled: true
+        evaluationMetric: "f1"

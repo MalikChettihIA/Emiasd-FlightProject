@@ -281,7 +281,7 @@ class EnhancedDataFeatureExtractorPipeline(
     val preprocessed = preprocessDates(preprocessBooleans(data))
     val pipeline = buildPipeline(preprocessed)
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[Pipeline] Fitting transformation pipeline...")
     println("=" * 80)
 
@@ -308,7 +308,7 @@ class EnhancedDataFeatureExtractorPipeline(
         val categoryMaps = vim.categoryMaps
         val numFeatures = vim.numFeatures
 
-        println("\n" + "=" * 80)
+        println("=" * 80)
         println("[VectorIndexer] Feature Type Analysis")
         println("=" * 80)
         println(s"Total features in vector: $numFeatures")
@@ -324,7 +324,7 @@ class EnhancedDataFeatureExtractorPipeline(
                              getBooleanNumericCols ++
                              getDateNumericCols(data)
 
-          println("\n[Categorical Features] (treated as discrete values):")
+          println("[Categorical Features] (treated as discrete values):")
           println("-" * 80)
 
           val sortedCategorical = categoryMaps.toSeq.sortBy(_._1)
@@ -338,7 +338,7 @@ class EnhancedDataFeatureExtractorPipeline(
             println(f"  [$featureIdx%3d] $featureName%-50s → $numCategories%3d categories")
           }
 
-          println("\n[Numeric Features] (treated as continuous values):")
+          println("[Numeric Features] (treated as continuous values):")
           println("-" * 80)
 
           val categoricalIndices = categoryMaps.keySet
@@ -363,13 +363,13 @@ class EnhancedDataFeatureExtractorPipeline(
             }
           }
         } else {
-          println("\n⚠ No categorical features detected - all features treated as numeric")
+          println(" No categorical features detected - all features treated as numeric")
         }
 
-        println("\n" + "=" * 80)
+        println("=" * 80)
 
       case None =>
-        println("\n⚠ VectorIndexer not found in pipeline")
+        println(" VectorIndexer not found in pipeline")
     }
   }
 
@@ -423,7 +423,7 @@ class EnhancedDataFeatureExtractorPipeline(
     println("=" * 80)
 
     if (dateCols.nonEmpty) {
-      println("\nDate Feature Extraction:")
+      println("Date Feature Extraction:")
       println("  Each date column will generate the following features:")
       println("    - year, month, day, dayofweek, unix_timestamp")
       println("  Timestamp columns will additionally generate:")

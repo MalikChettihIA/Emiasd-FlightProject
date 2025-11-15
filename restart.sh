@@ -1,5 +1,5 @@
 #!/bin/bash
-sbt package
+sbt clean package
 echo "🛑 Arrêt du cluster Spark..."
 docker-compose -f ./docker/docker-compose.yml down
 echo "🛑 Démarrage du cluster Spark..."

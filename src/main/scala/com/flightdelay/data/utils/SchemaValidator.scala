@@ -27,7 +27,7 @@ object SchemaValidator {
     val messages = scala.collection.mutable.ArrayBuffer[String]()
     var isValid = true
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[SchemaValidator] Validating DataFrame schema")
     println("=" * 80)
 
@@ -43,7 +43,7 @@ object SchemaValidator {
       field.dataType match {
         case IntegerType | BooleanType =>
           // Valid: Integer (0/1) or Boolean
-          messages += s"  ✓ ${field.name}: ${field.dataType} (boolean naming → valid type)"
+          messages += s"   ${field.name}: ${field.dataType} (boolean naming → valid type)"
         case _ =>
           // Invalid: Boolean naming but wrong type
           isValid = false
@@ -56,13 +56,13 @@ object SchemaValidator {
     idCols.foreach { field =>
       field.dataType match {
         case IntegerType | LongType =>
-          messages += s"  ✓ ${field.name}: ${field.dataType} (ID naming → valid type)"
+          messages += s"   ${field.name}: ${field.dataType} (ID naming → valid type)"
         case StringType =>
           // Warning: String IDs are acceptable but not optimal
-          messages += s"  ⚠ ${field.name}: ${field.dataType} (ID as String - consider Integer/Long)"
+          messages += s"   ${field.name}: ${field.dataType} (ID as String - consider Integer/Long)"
         case _ =>
           isValid = false
-          messages += s"  ✗ ${field.name}: ${field.dataType} (expected Integer/Long/String for ID naming)"
+          messages += s"   ${field.name}: ${field.dataType} (expected Integer/Long/String for ID naming)"
       }
     }
 
@@ -71,10 +71,10 @@ object SchemaValidator {
     categoryCols.foreach { field =>
       field.dataType match {
         case StringType | IntegerType =>
-          messages += s"  ✓ ${field.name}: ${field.dataType} (category naming → valid type)"
+          messages += s"   ${field.name}: ${field.dataType} (category naming → valid type)"
         case _ =>
           isValid = false
-          messages += s"  ✗ ${field.name}: ${field.dataType} (expected String or Integer for category naming)"
+          messages += s"   ${field.name}: ${field.dataType} (expected String or Integer for category naming)"
       }
     }
 
@@ -86,16 +86,16 @@ object SchemaValidator {
     dateCols.foreach { field =>
       field.dataType match {
         case DateType | TimestampType =>
-          messages += s"  ✓ ${field.name}: ${field.dataType} (date naming → valid type)"
+          messages += s"   ${field.name}: ${field.dataType} (date naming → valid type)"
         case StringType =>
-          messages += s"  ⚠ ${field.name}: ${field.dataType} (date as String - consider parsing to DateType)"
+          messages += s"   ${field.name}: ${field.dataType} (date as String - consider parsing to DateType)"
         case _ =>
           isValid = false
-          messages += s"  ✗ ${field.name}: ${field.dataType} (expected DateType/TimestampType for date naming)"
+          messages += s"   ${field.name}: ${field.dataType} (expected DateType/TimestampType for date naming)"
       }
     }
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println(s"Schema Validation ${if (isValid) "PASSED" else "FAILED"}")
     println("=" * 80)
     println(s"Total columns validated: ${schema.fields.length}")
@@ -105,17 +105,17 @@ object SchemaValidator {
     println(s"Date columns: ${dateCols.length}")
 
     if (!isValid && strictMode) {
-      println("\n✗ Validation failed in strict mode!")
+      println(" Validation failed in strict mode!")
       messages.foreach(println)
       throw new IllegalStateException(s"Schema validation failed. See messages above.")
     }
 
     if (!isValid) {
-      println("\n⚠ Validation warnings:")
+      println(" Validation warnings:")
       messages.filter(_.contains("✗")).foreach(println)
     }
 
-    println("=" * 80 + "\n")
+    println("=" * 80)
 
     (isValid, messages.toSeq)
   }
@@ -131,7 +131,7 @@ object SchemaValidator {
    * @return Normalized DataFrame with consistent schema
    */
   def normalize(df: DataFrame): DataFrame = {
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[SchemaValidator] Normalizing DataFrame schema")
     println("=" * 80)
 
@@ -161,9 +161,9 @@ object SchemaValidator {
           transformCount += 1
         case IntegerType =>
           // Already Integer - validate it's 0/1 (optional, could add runtime check)
-          println(s"  ✓ ${field.name}: Already Integer (0/1)")
+          println(s"   ${field.name}: Already Integer (0/1)")
         case _ =>
-          println(s"  ⚠ ${field.name}: Unexpected type ${field.dataType} for boolean naming")
+          println(s"   ${field.name}: Unexpected type ${field.dataType} for boolean naming")
       }
     }
 
@@ -189,21 +189,21 @@ object SchemaValidator {
         val parseCheck = result.select(col(s"${field.name}_parsed")).filter(col(s"${field.name}_parsed").isNotNull).count()
         if (parseCheck > 0) {
           result = result.drop(field.name).withColumnRenamed(s"${field.name}_parsed", field.name)
-          println(s"    ✓ Converted ${field.name}: String → DateType (${parseCheck} records parsed)")
+          println(s"     Converted ${field.name}: String → DateType (${parseCheck} records parsed)")
           transformCount += 1
         } else {
           result = result.drop(s"${field.name}_parsed")
-          println(s"    ✗ Could not parse ${field.name} - keeping as String")
+          println(s"     Could not parse ${field.name} - keeping as String")
         }
       } catch {
         case e: Exception =>
-          println(s"    ✗ Failed to convert ${field.name}: ${e.getMessage}")
+          println(s"     Failed to convert ${field.name}: ${e.getMessage}")
       }
     }
 
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println(s"Schema Normalization Complete - ${transformCount} transformations applied")
-    println("=" * 80 + "\n")
+    println("=" * 80)
 
     result
   }
@@ -220,21 +220,22 @@ object SchemaValidator {
     val (isValid, _) = validate(df, strictMode = false)
 
     // Then normalize
-    val normalized = normalize(df)
+    //val normalized = normalize(df)
 
     // Validate again after normalization
-    if (strictMode) {
-      validate(normalized, strictMode = true)
-    }
+    //if (strictMode) {
+    //  validate(normalized, strictMode = true)
+    //}
 
-    normalized
+    //normalized
+    df
   }
 
   /**
    * Prints detailed schema report
    */
   def printSchemaReport(df: DataFrame): Unit = {
-    println("\n" + "=" * 80)
+    println("=" * 80)
     println("[SchemaValidator] Detailed Schema Report")
     println("=" * 80)
 
@@ -242,7 +243,7 @@ object SchemaValidator {
     val columnsByType = schema.fields.groupBy(_.dataType.typeName)
 
     columnsByType.foreach { case (typeName, fields) =>
-      println(s"\n${typeName.toUpperCase} columns (${fields.length}):")
+      println(s"${typeName.toUpperCase} columns (${fields.length}):")
       fields.take(10).foreach { field =>
         println(s"  - ${field.name}")
       }
@@ -251,6 +252,6 @@ object SchemaValidator {
       }
     }
 
-    println("\n" + "=" * 80 + "\n")
+    println("=" * 80)
   }
 }
