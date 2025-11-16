@@ -39,7 +39,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-lamsade-D2_60"
+  - name: "Experience-lamsade-7-7"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -50,8 +50,8 @@ experiments:
       delayThresholdMin: 60
       storeJoinData: false
       storeExplodeJoinData: false
-      weatherOriginDepthHours: 1
-      weatherDestinationDepthHours: 1
+      weatherOriginDepthHours: 7
+      weatherDestinationDepthHours: 7
       maxCategoricalCardinality: 50
 
       flightSelectedFeatures:
@@ -97,14 +97,13 @@ experiments:
           transformation: "StringIndexer"
         feature_visibility_category:
           transformation: "StringIndexer"
-        feature_flight_category:
-          transformation: "StringIndexer"
         feature_most_critical_sky:
           transformation: "StringIndexer"
-        feature_pressure_visibility_combo:
+        feature_pressure_vis_combo_bin:
           transformation: "StringIndexer"
         feature_pressure_bucket:
           transformation: "StringIndexer"
+
 
     model:
       modelType: "randomforest"
