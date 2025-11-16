@@ -5,7 +5,7 @@ import com.flightdelay.features.FeatureExtractor
 import com.flightdelay.features.balancer.DelayBalancedDatasetBuilder
 import com.flightdelay.ml.evaluation.ModelEvaluator
 import com.flightdelay.ml.evaluation.ModelEvaluator.EvaluationMetrics
-import com.flightdelay.ml.tracking.MLFlowTracker
+import com.flightdelay.ml.tracking.WandbTracker
 import com.flightdelay.ml.training.{CrossValidator, Trainer}
 import org.apache.spark.ml.{PipelineModel, Transformer}
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -103,15 +103,15 @@ object MLPipeline {
     val startTime = System.currentTimeMillis()
 
     // ========================================================================
-    // MLFlow Tracking Initialization
+    // W&B Tracking Initialization
     // ========================================================================
-    MLFlowTracker.initialize(configuration.common.mlflow.trackingUri, configuration.common.mlflow.enabled)
-    val experimentId = MLFlowTracker.getOrCreateExperiment()
-    val runId = experimentId.flatMap(expId => MLFlowTracker.startRun(expId, experiment.name, Some(experiment.description)))
+    WandbTracker.initialize(configuration.common.mlflow.trackingUri, configuration.common.mlflow.enabled)
+    val experimentId = WandbTracker.getOrCreateExperiment()
+    val runId = experimentId.flatMap(expId => WandbTracker.startRun(expId, experiment.name, Some(experiment.description)))
 
     // Log experiment configuration
     runId.foreach { rid =>
-      MLFlowTracker.logParams(rid, Map(
+      WandbTracker.logParams(rid, Map(
         "experiment_name" -> experiment.name,
         "target" -> experiment.target,
         "model_type" -> experiment.model.modelType,
@@ -124,10 +124,10 @@ object MLPipeline {
         "pca_variance_threshold" -> experiment.featureExtraction.pcaVarianceThreshold,
         "random_seed" -> configuration.common.seed
       ))
-      MLFlowTracker.setTag(rid, "experiment_description", experiment.description)
-      MLFlowTracker.setTag(rid, "environment", configuration.environment)
+      WandbTracker.setTag(rid, "experiment_description", experiment.description)
+      WandbTracker.setTag(rid, "environment", configuration.environment)
 
-      MLFlowTracker.logDatasetsFromConfig(rid, configuration)
+      WandbTracker.logDatasetsFromConfig(rid, configuration)
     }
 
     // ========================================================================
@@ -185,22 +185,22 @@ object MLPipeline {
     info(f"    F1-Score:  ${cvResult.avgMetrics.f1Score * 100}%6.2f%% ± ${cvResult.stdMetrics.f1Score * 100}%.2f%%")
     info(f"    AUC-ROC:   ${cvResult.avgMetrics.areaUnderROC}%6.4f ± ${cvResult.stdMetrics.areaUnderROC}%.4f")
 
-    // Log CV metrics to MLFlow
+    // Log CV metrics to W&B
     runId.foreach { rid =>
       // Log best hyperparameters
-      MLFlowTracker.logParams(rid, cvResult.bestHyperparameters)
+      WandbTracker.logParams(rid, cvResult.bestHyperparameters)
 
       // Log per-fold metrics
       cvResult.foldMetrics.zipWithIndex.foreach { case (metrics, fold) =>
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_accuracy", metrics.accuracy, step = fold)
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_precision", metrics.precision, step = fold)
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_recall", metrics.recall, step = fold)
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_f1", metrics.f1Score, step = fold)
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_auc", metrics.areaUnderROC, step = fold)
+        WandbTracker.logMetric(rid, s"cv_fold${fold}_accuracy", metrics.accuracy, step = fold)
+        WandbTracker.logMetric(rid, s"cv_fold${fold}_precision", metrics.precision, step = fold)
+        WandbTracker.logMetric(rid, s"cv_fold${fold}_recall", metrics.recall, step = fold)
+        WandbTracker.logMetric(rid, s"cv_fold${fold}_f1", metrics.f1Score, step = fold)
+        WandbTracker.logMetric(rid, s"cv_fold${fold}_auc", metrics.areaUnderROC, step = fold)
       }
 
       // Log aggregated CV metrics
-      MLFlowTracker.logMetrics(rid, Map(
+      WandbTracker.logMetrics(rid, Map(
         "cv_mean_accuracy" -> cvResult.avgMetrics.accuracy,
         "cv_std_accuracy" -> cvResult.stdMetrics.accuracy,
         "cv_mean_precision" -> cvResult.avgMetrics.precision,
@@ -254,9 +254,9 @@ object MLPipeline {
     info(f"    F1-Score:  ${holdOutMetrics.f1Score * 100}%6.2f%%")
     info(f"    AUC-ROC:   ${holdOutMetrics.areaUnderROC}%6.4f")
 
-    // Log hold-out metrics to MLFlow
+    // Log hold-out metrics to W&B
     runId.foreach { rid =>
-      MLFlowTracker.logMetrics(rid, Map(
+      WandbTracker.logMetrics(rid, Map(
         "test_accuracy" -> holdOutMetrics.accuracy,
         "test_precision" -> holdOutMetrics.precision,
         "test_recall" -> holdOutMetrics.recall,
@@ -289,16 +289,16 @@ object MLPipeline {
 
     info(f"   Total pipeline time: $totalTime%.2f seconds")
 
-    // Log training time and artifacts to MLFlow
+    // Log training time and artifacts to W&B
     runId.foreach { rid =>
-      MLFlowTracker.logMetric(rid, "training_time_seconds", totalTime)
+      WandbTracker.logMetric(rid, "training_time_seconds", totalTime)
 
       // Log artifacts organized in subdirectories
       // 1. Log metrics CSVs to "metrics/" subdirectory
-      MLFlowTracker.logArtifactWithPath(rid, metricsPath, "metrics")
+      WandbTracker.logArtifactWithPath(rid, metricsPath, "metrics")
 
       // 2. Log model to "models/" subdirectory
-      MLFlowTracker.logArtifactWithPath(rid, modelPath, "models")
+      WandbTracker.logArtifactWithPath(rid, modelPath, "models")
 
       // 3. Log YAML configuration to "configuration/" subdirectory
       val configPath = s"${configuration.environment}-config.yml"
@@ -327,25 +327,25 @@ object MLPipeline {
           writer.close()
         }
 
-        // Log configuration directory to MLFlow
-        MLFlowTracker.logArtifactWithPath(rid, configDestPath, "configuration")
-        info(s"   Configuration saved to MLFlow: configuration/${configuration.environment}-config.yml")
+        // Log configuration directory to W&B
+        WandbTracker.logArtifactWithPath(rid, configDestPath, "configuration")
+        info(s"   Configuration saved to W&B: configuration/${configuration.environment}-config.yml")
       }
 
       // 4. Log feature files to "features/" subdirectory
       val featuresPath = s"$experimentOutputPath/features"
       val featuresDir = new java.io.File(featuresPath)
       if (featuresDir.exists() && featuresDir.isDirectory) {
-        MLFlowTracker.logArtifactWithPath(rid, featuresPath, "features")
-        info(s"   Feature files saved to MLFlow: features/")
+        WandbTracker.logArtifactWithPath(rid, featuresPath, "features")
+        info(s"   Feature files saved to W&B: features/")
       }
 
       // 5. Log visualization plots to "plots/" subdirectory
       val plotsPath = s"$metricsPath/plots-ml-pipeline"
       val plotsDir = new java.io.File(plotsPath)
       if (plotsDir.exists() && plotsDir.isDirectory) {
-        MLFlowTracker.logArtifactWithPath(rid, plotsPath, "plots")
-        info(s"   Visualization plots saved to MLFlow: plots/")
+        WandbTracker.logArtifactWithPath(rid, plotsPath, "plots")
+        info(s"   Visualization plots saved to W&B: plots/")
       }
     }
 
@@ -358,9 +358,9 @@ object MLPipeline {
     info(s"[ML PIPELINE] Completed for experiment: ${experiment.name}")
     info("=" * 100)
 
-    // End MLFlow run
+    // End W&B run
     runId.foreach { rid =>
-      MLFlowTracker.endRun(rid)
+      WandbTracker.endRun(rid)
     }
 
     // Prepare CV metrics
