@@ -22,8 +22,7 @@ object FlightAvgDelayFeatureGenerator {
    * Version OPTIMISÉE pour éviter OOM
    */
   def enrichFlightsWithAvgDelay(
-                                 flightData: DataFrame,
-                                 enableCheckpoint: Boolean = true
+                                 flightData: DataFrame
                                )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     info("- Calling com.flightdelay.data.preprocessing.flights.FlightAvgDelayFeatureGenerator.enrichFlightsWithAvgDelay")
@@ -61,19 +60,11 @@ object FlightAvgDelayFeatureGenerator {
         .withColumn("ts_long", col("feature_utc_departure_timestamp").cast("long"))
         .repartition(200, col("ORIGIN_AIRPORT_ID"))
 
-      // OPTIMISATION 2 : Checkpoint pour matérialiser
-      val checkpointed = if (enableCheckpoint) {
-        debug("   Checkpointing intermediate data...")
-        flightWithTimestamps.checkpoint()
-      } else {
-        flightWithTimestamps
-      }
 
-      val rowCount = checkpointed.count()
-      debug(s"   Processing $rowCount flights")
 
       whenDebug{
-        logMemoryUsage("After checkpoint")
+        val rowCount = flightWithTimestamps.count()
+        debug(s"   Processing $rowCount flights")
       }
 
       // Étape 2 : Window spec optimisée
@@ -106,7 +97,7 @@ object FlightAvgDelayFeatureGenerator {
       val allNewColumns = baseStatsColumns ++ proportionColumns
 
       // Appliquer toutes les transformations en une seule fois
-      val enrichedFlights = checkpointed.select(
+      val enrichedFlights = flightWithTimestamps.select(
         col("*") +: allNewColumns: _*
       )
 
@@ -123,18 +114,6 @@ object FlightAvgDelayFeatureGenerator {
         .na.fill(0, Seq("feature_num_previous_flights"))
         .drop("ts_long", "feature_utc_departure_timestamp")
 
-      // OPTIMISATION 4 : Checkpoint final avant retour
-      val finalResult = if (enableCheckpoint) {
-        debug("[Step 5] Checkpointing final result...")
-        val result = cleanedFlights.checkpoint()
-        result.count()
-        result
-      } else {
-        cleanedFlights
-      }
-
-      // Cleanup
-      checkpointed.unpersist()
 
       whenDebug{
         logMemoryUsage("After completion")
@@ -143,7 +122,7 @@ object FlightAvgDelayFeatureGenerator {
       debug("[AvgDelayFeatureGenerator] Completed successfully")
       debug("=" * 80)
 
-      finalResult
+      cleanedFlights
     }
   }
 
@@ -179,7 +158,6 @@ object FlightAvgDelayFeatureGenerator {
         )
         .withColumn("ts_long", col("utc_ts").cast("long"))
         .withColumn("ts_hour_bucket", (col("ts_long") / 3600).cast("long"))
-        .checkpoint()
 
       debug(s"  Processing ${flightWithTimestamps.count()} flights")
 
@@ -202,7 +180,6 @@ object FlightAvgDelayFeatureGenerator {
       val aggregatedStats = flightWithTimestamps
         .groupBy("ORIGIN_AIRPORT_ID", "ts_hour_bucket")
         .agg(allAggColumns.head, allAggColumns.tail: _*)
-        .checkpoint()
 
       debug(s"  Aggregated to ${aggregatedStats.count()} buckets")
 

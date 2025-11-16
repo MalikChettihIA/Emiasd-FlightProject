@@ -4,6 +4,7 @@ import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import com.flightdelay.ml.models.ModelFactory
 import org.apache.spark.ml.Transformer
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Trainer - Handles final model training on full development set
@@ -87,6 +88,15 @@ object Trainer {
         val subsamplingRate = hyperparameters("subsamplingRate").asInstanceOf[Double]
         val featureSubsetStrategy = hyperparameters("featureSubsetStrategy").asInstanceOf[String]
         val impurity = hyperparameters("impurity").asInstanceOf[String]
+
+        info("[train][RandomForestClassifier] Model Definition and parameters")
+        info(s"[Param][numTrees] ${numTrees}")
+        info(s"[Param][maxDepth] ${maxDepth}")
+        info(s"[Param][maxBins] ${maxBins}")
+        info(s"[Param][minInstancesPerNode] ${minInstancesPerNode}")
+        info(s"[Param][subsamplingRate] ${subsamplingRate}")
+        info(s"[Param][featureSubsetStrategy] ${featureSubsetStrategy}")
+        info(s"[Param][impurity] ${impurity}")
 
         // Create RandomForest with specific hyperparameters
         new RandomForestClassifier()

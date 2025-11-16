@@ -150,7 +150,7 @@ object FlightWeatherDataJoiner {
     val columnsToKeep = currentColumns.diff(columnsToRemove)
 
     if (columnsToRemove.nonEmpty) {
-      info(s"[Anti-Leakage] Colonnes supprimées : ${columnsToRemove.toSeq.sorted.mkString(", ")}")
+      info(s"[Anti-Leakage] Colonnes supprimees : ${columnsToRemove.toSeq.sorted.mkString(", ")}")
     }
 
     val dfCleaned = df.select(columnsToKeep.toSeq.sorted.map(col): _*)
@@ -213,8 +213,8 @@ object FlightWeatherDataJoiner {
               """)
           )
         }
-        info(s"[Anti-Leakage] Time transformé en hours_before_flight (index relatif)")
-        info(s"[Anti-Leakage] Champs conservés dans observations météo : ${weatherColsToKeep.mkString(", ")}, hours_before_flight")
+        info(s"[Anti-Leakage] Time transforme en hours_before_flight (index relatif)")
+        info(s"[Anti-Leakage] Champs conserves dans observations meteo : ${weatherColsToKeep.mkString(", ")}, hours_before_flight")
 
       } else if (structFields.nonEmpty) {
         // Supprimer complètement Time et Date

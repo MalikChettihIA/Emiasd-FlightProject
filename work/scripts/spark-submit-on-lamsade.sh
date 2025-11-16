@@ -1,10 +1,13 @@
 #!/bin/bash
 
+# Clean directories
+hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/Experience*
+#hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/common
+hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/spark-checkpoints/*
+#hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/spark-events/*
+
 # Tasks to execute (comma-separated): load,preprocess,feature-extraction,train
 # Default: all tasks
-
-#TASKS="${1:-data-pipeline}"
-#TASKS="${1:-data-pipeline,feature-extraction}"
 #TASKS="${1:-data-pipeline,feature-extraction,train}"
 
 TASKS="${1:-data-pipeline,feature-extraction,train}"
@@ -30,4 +33,4 @@ spark-submit \
   --conf spark.memory.storageFraction=0.3 \
   --jars ./workspace/mlflow-client-3.4.0.jar,./workspace/mlflow-spark_2.13-3.4.0.jar \
   ./workspace/Emiasd-Flight-Data-Analysis.jar \
-  lamsade "$TASKS"
+  lamsade $TASKS

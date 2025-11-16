@@ -154,10 +154,10 @@ object WeatherDataLoader extends DataLoader[Nothing] {
         .load(filePath)
 
       df.cache() 
-      // whenDebug {
-      //   val count = df.count
-      //   println(s"  - Loaded $count records from TXT")
-      // }
+      whenDebug {
+         val count = df.count
+         println(s"  - Loaded $count records from CSV")
+      }
 
       // Save as Parquet for future use
       outputPath.foreach { path =>

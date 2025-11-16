@@ -26,7 +26,7 @@ object FlightLabelGenerator extends DataPreprocessor {
    * @param spark Session Spark
    * @return DataFrame avec tous les labels de classification
    */
-  override def preprocess(enrichedFlightData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  override def preprocess(flightData: DataFrame, weatherData: DataFrame, wBANAirportTimezoneData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     info("- Calling com.flightdelay.data.preprocessing.flights.FlightLabelGenerator.preprocess")
 
@@ -37,10 +37,10 @@ object FlightLabelGenerator extends DataPreprocessor {
     debug("=" * 80)
 
     // Vérifier que les colonnes de retard nécessaires sont présentes
-    validateRequiredColumns(enrichedFlightData)
+    validateRequiredColumns(flightData)
 
     // Étape 1: Gestion des valeurs manquantes pour les retards
-    val withFilledDelays = handleDelayMissingValues(enrichedFlightData)
+    val withFilledDelays = handleDelayMissingValues(flightData)
 
     // Étape 2: Création des labels de base pour différents seuils
     val withBasicLabels = addBasicDelayLabels(withFilledDelays)

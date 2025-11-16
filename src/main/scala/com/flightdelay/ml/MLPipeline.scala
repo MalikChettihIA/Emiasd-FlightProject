@@ -65,23 +65,25 @@ object MLPipeline {
   )
 
   /**
-   * Train and evaluate a model using Option B strategy
+   * Train and evaluate a model using pre-split balanced datasets
    *
    * Pipeline:
-   * 1. Initial split: 80% dev / 20% test
+   * 1. Receive pre-split train/test datasets (already balanced from FeaturePipeline)
    * 2. K-fold CV + optional Grid Search on dev set
    * 3. Train final model on full dev set with best params
    * 4. Evaluate on hold-out test set
    * 5. Save model and metrics per experiment
    *
-   * @param data Input DataFrame with "features" and "label" columns
+   * @param devDataRaw Pre-split training dataset (balanced, exploded, but features not extracted yet)
+   * @param testDataRaw Pre-split test dataset (balanced, exploded, but features not extracted yet)
    * @param experiment Experiment configuration
    * @param spark Implicit SparkSession
    * @param config Implicit AppConfiguration
    * @return MLResult with trained model and comprehensive metrics
    */
   def train(
-             rawData: DataFrame,
+             devDataRaw: DataFrame,
+             testDataRaw: DataFrame,
              experiment: ExperimentConfig
   )(implicit spark: SparkSession, configuration: AppConfiguration): MLResult = {
 
@@ -128,21 +130,20 @@ object MLPipeline {
     }
 
     // ========================================================================
-    // STEP 1: Initial split (dev/test) BEFORE feature extraction
+    // STEP 1: Verify pre-split datasets (already balanced from FeaturePipeline)
     // ========================================================================
-    info("[ML PIPELINE][STEP 1] Initial Hold-out Split (before feature extraction)")
+    info("[ML PIPELINE][STEP 1] Received pre-split balanced datasets from FeaturePipeline")
     info("=" * 80)
-    info("Note: Splitting BEFORE feature extraction to avoid data leakage")
+    info("Note: Train/test split was done in FeaturePipeline BEFORE join/explosion")
+    info("      This ensures balanced datasets and avoids manipulating huge datasets")
 
-    val testRatio = 1.0 - experiment.train.trainRatio
-    val (devDataRaw, testDataRaw) = DelayBalancedDatasetBuilder.buildBalancedTrainTest(
-      labeledDf = rawData,
-      trainRatio = experiment.train.trainRatio
-    )
-
-    info(f"  - Development set: ${devDataRaw.count()}%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
-    info(f"  - Hold-out test:   ${testDataRaw.count()}%,d samples (${testRatio * 100}%.0f%%)")
-
+    //whenDebug{
+      val devCount = devDataRaw.count()
+      val testCount = testDataRaw.count()
+      val testRatio = 1.0 - experiment.train.trainRatio
+      info(f"  - Development set: $devCount%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
+      info(f"  - Hold-out test:   $testCount%,d samples (${testRatio * 100}%.0f%%)")
+    //}
     // ========================================================================
     // STEP 2,3: Feature extraction (fit on TRAIN only, transform both)
     // ========================================================================
@@ -154,7 +155,7 @@ object MLPipeline {
     // Extract features from dev set (fit + transform)
     // Returns both transformed data AND fitted models for reuse on test set
     val (devData, featureModels) = FeatureExtractor.extract(devDataRaw, experiment)
-    info(f"   Dev features extracted: ${devData.count()}%,d records")
+    debug(f"   Dev features extracted: ${devData.count()}%,d records")
 
     // Transform test set using pre-fitted models from dev set (NO REFITTING)
     info("=" * 80)
@@ -163,9 +164,9 @@ object MLPipeline {
     info(" Using pre-fitted models from dev set - NO DATA LEAKAGE")
     info("  - StringIndexer: uses categories learned from dev set only")
     info("  - Scaler: uses statistics (mean/std) from dev set only")
-    info("  - PCA: uses components fitted on dev set only\n")
+    info("  - PCA: uses components fitted on dev set only")
     val testData = FeatureExtractor.transform(testDataRaw, featureModels, experiment)
-    info(f"   Test features extracted: ${testData.count()}%,d records")
+    debug(f"   Test features extracted: ${testData.count()}%,d records")
 
     // ========================================================================
     // STEP 4: K-fold CV + Grid Search on dev set
@@ -394,10 +395,10 @@ object MLPipeline {
     info(s"\n Experiment: ${experiment.name}")
     info(s"   ${experiment.description}")
 
-    info(s"\n🤖 Model Type: ${experiment.model.modelType.toUpperCase}")
+    info(s"\n Model Type: ${experiment.model.modelType.toUpperCase}")
 
     // Display best hyperparameters
-    info(s"\n⚙️  Best Hyperparameters:")
+    info(s"\n  Best Hyperparameters:")
     if (cvResult.bestHyperparameters.nonEmpty) {
       cvResult.bestHyperparameters.toSeq.sortBy(_._1).foreach { case (param, value) =>
         info(s"   - ${param.padTo(25, ' ')} : $value")
@@ -415,7 +416,7 @@ object MLPipeline {
     }
 
     // Display performance metrics
-    info(s"\n Performance Metrics:")
+    info(s" Performance Metrics:")
     info(s"   Cross-Validation (${cvResult.numFolds}-fold):")
     info(f"     Accuracy  : ${cvResult.avgMetrics.accuracy * 100}%6.2f%% ± ${cvResult.stdMetrics.accuracy * 100}%5.2f%%")
     info(f"     Precision : ${cvResult.avgMetrics.precision * 100}%6.2f%% ± ${cvResult.stdMetrics.precision * 100}%5.2f%%")
@@ -439,7 +440,7 @@ object MLPipeline {
     info(f"     False Positives : ${holdOutMetrics.falsePositives}%,d")
     info(f"     False Negatives : ${holdOutMetrics.falseNegatives}%,d")
 
-    info(f"\n⏱️  Total Training Time: $totalTime%.2f seconds")
+    info(f"\n  Total Training Time: $totalTime%.2f seconds")
 
     info("\n" + "=" * 100)
   }
@@ -616,7 +617,7 @@ object MLPipeline {
     summary.append("\n")
 
     // Confusion Matrix
-    summary.append("CONFUSION MATRIX (Test Set)\n")
+    summary.append("CONFUSION MATRIX (Test Set)")
     summary.append("-" * 100 + "\n")
     summary.append(f"  True Positives:   ${holdOutMetrics.truePositives}%,10d\n")
     summary.append(f"  True Negatives:   ${holdOutMetrics.trueNegatives}%,10d\n")

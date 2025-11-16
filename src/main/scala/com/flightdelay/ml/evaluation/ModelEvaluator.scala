@@ -1,9 +1,12 @@
 package com.flightdelay.ml.evaluation
 
+import com.flightdelay.config.AppConfiguration
 import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, MulticlassClassificationEvaluator}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+import com.flightdelay.utils.MetricsUtils
+import com.flightdelay.utils.DebugUtils._
 
 /**
  * Model evaluator for flight delay prediction.
@@ -51,19 +54,13 @@ object ModelEvaluator {
    * @param metricsOutputPath Optional path to save metrics to CSV
    * @return EvaluationMetrics object with all computed metrics
    */
-  def evaluate(predictions: DataFrame, metricsOutputPath: Option[String] = None): EvaluationMetrics = {
-    println("=" * 80)
-    println("[STEP 4] Model Evaluation")
-    println("=" * 80)
+  def evaluate(predictions: DataFrame, metricsOutputPath: Option[String] = None)(implicit spark: SparkSession, configuration: AppConfiguration): EvaluationMetrics = {
+    info("=" * 80)
+    info("[STEP 4] Model Evaluation")
+    info("=" * 80)
 
     // Check if already cached to avoid double caching
-    val cachedPredictions = if (predictions.storageLevel.useMemory) {
-      predictions
-    } else {
-      val cached = predictions.cache()
-      cached.count() // Force materialization
-      cached
-    }
+    val cachedPredictions = predictions.cache()
 
     // Compute confusion matrix
     val confusionMatrix = cachedPredictions
@@ -83,8 +80,11 @@ object ModelEvaluator {
       .setLabelCol("label")
       .setPredictionCol("prediction")
 
-    println("Cached Predictions Schema : ...")
-    cachedPredictions.printSchema
+    whenDebug {
+      debug("Cached Predictions Schema : ...")
+      cachedPredictions.printSchema
+    }
+
     val accuracy = multiclassEval.setMetricName("accuracy").evaluate(cachedPredictions)
     val precision = multiclassEval.setMetricName("weightedPrecision").evaluate(cachedPredictions)
     val recall = multiclassEval.setMetricName("weightedRecall").evaluate(cachedPredictions)
@@ -130,30 +130,30 @@ object ModelEvaluator {
   /**
    * Display evaluation metrics in a formatted table
    */
-  private def displayMetrics(metrics: EvaluationMetrics): Unit = {
-    println("--- Classification Metrics ---")
-    println(f"Accuracy:            ${metrics.accuracy * 100}%6.2f%%")
-    println(f"Precision:           ${metrics.precision * 100}%6.2f%%")
-    println(f"Recall (Weighted):   ${metrics.recall * 100}%6.2f%%")
-    println(f"F1-Score:            ${metrics.f1Score * 100}%6.2f%%")
-    println(f"AUC-ROC:             ${metrics.areaUnderROC}%6.4f")
-    println(f"AUC-PR:              ${metrics.areaUnderPR}%6.4f")
+  private def displayMetrics(metrics: EvaluationMetrics)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
+    info("--- Classification Metrics ---")
+    info(f"Accuracy:            ${metrics.accuracy * 100}%6.2f%%")
+    info(f"Precision:           ${metrics.precision * 100}%6.2f%%")
+    info(f"Recall (Weighted):   ${metrics.recall * 100}%6.2f%%")
+    info(f"F1-Score:            ${metrics.f1Score * 100}%6.2f%%")
+    info(f"AUC-ROC:             ${metrics.areaUnderROC}%6.4f")
+    info(f"AUC-PR:              ${metrics.areaUnderPR}%6.4f")
 
-    println("--- Per-Class Recall ---")
-    println(f"RECd (Delayed):      ${metrics.recallDelayed * 100}%6.2f%%  [TP/(TP+FN)]")
-    println(f"RECo (On-time):      ${metrics.recallOnTime * 100}%6.2f%%  [TN/(TN+FP)]")
+    info("--- Per-Class Recall ---")
+    info(f"RECd (Delayed):      ${metrics.recallDelayed * 100}%6.2f%%  [TP/(TP+FN)]")
+    info(f"RECo (On-time):      ${metrics.recallOnTime * 100}%6.2f%%  [TN/(TN+FP)]")
 
-    println("--- Confusion Matrix ---")
-    println(f"True Positives:      ${metrics.truePositives}%,10d")
-    println(f"True Negatives:      ${metrics.trueNegatives}%,10d")
-    println(f"False Positives:     ${metrics.falsePositives}%,10d")
-    println(f"False Negatives:     ${metrics.falseNegatives}%,10d")
+    info("--- Confusion Matrix ---")
+    info(f"True Positives:      ${metrics.truePositives}%,10d")
+    info(f"True Negatives:      ${metrics.trueNegatives}%,10d")
+    info(f"False Positives:     ${metrics.falsePositives}%,10d")
+    info(f"False Negatives:     ${metrics.falseNegatives}%,10d")
 
     val total = metrics.truePositives + metrics.trueNegatives +
                 metrics.falsePositives + metrics.falseNegatives
-    println(f"Total Predictions:   ${total}%,10d")
+    info(f"Total Predictions:   ${total}%,10d")
 
-    println("=" * 80)
+    info("=" * 80)
   }
 
   /**
@@ -167,35 +167,35 @@ object ModelEvaluator {
     trainPredictions: DataFrame,
     testPredictions: DataFrame,
     metricsOutputPath: Option[String] = None
-  ): (EvaluationMetrics, EvaluationMetrics) = {
+  )(implicit spark: SparkSession, configuration: AppConfiguration): (EvaluationMetrics, EvaluationMetrics) = {
 
-    println("=" * 80)
-    println("[STEP 4] Train/Test Evaluation")
-    println("=" * 80)
+    info("=" * 80)
+    info("[STEP 4] Train/Test Evaluation")
+    info("=" * 80)
 
-    println("[Training Set Evaluation]")
+    info("[Training Set Evaluation]")
     val trainMetrics = evaluate(trainPredictions)
 
-    println("[Test Set Evaluation]")
+    info("[Test Set Evaluation]")
     val testMetrics = evaluate(testPredictions)
 
     // Compute overfitting indicator
     val accuracyGap = trainMetrics.accuracy - testMetrics.accuracy
     val f1Gap = trainMetrics.f1Score - testMetrics.f1Score
 
-    println("--- Overfitting Analysis ---")
-    println(f"Accuracy Gap (Train - Test): ${accuracyGap * 100}%6.2f%%")
-    println(f"F1-Score Gap (Train - Test): ${f1Gap * 100}%6.2f%%")
+    info("--- Overfitting Analysis ---")
+    info(f"Accuracy Gap (Train - Test): ${accuracyGap * 100}%6.2f%%")
+    info(f"F1-Score Gap (Train - Test): ${f1Gap * 100}%6.2f%%")
 
     if (accuracyGap > 0.10 || f1Gap > 0.10) {
-      println("⚠ WARNING: Significant overfitting detected (gap > 10%)")
+      info(" WARNING: Significant overfitting detected (gap > 10%)")
     } else if (accuracyGap > 0.05 || f1Gap > 0.05) {
-      println("⚠ Moderate overfitting detected (gap > 5%)")
+      info(" Moderate overfitting detected (gap > 5%)")
     } else {
-      println("- Model generalizes well")
+      info("- Model generalizes well")
     }
 
-    println("=" * 80)
+    info("=" * 80)
 
     // Save train/test comparison if path provided
     metricsOutputPath.foreach { basePath =>
@@ -241,7 +241,7 @@ object ModelEvaluator {
   /**
    * Save predictions with probabilities for ROC curve generation
    */
-  private def savePredictionsForROC(predictions: DataFrame, basePath: String, split: String): Unit = {
+  private def savePredictionsForROC(predictions: DataFrame, basePath: String, split: String)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     import predictions.sparkSession.implicits._
 
     // Cache predictions if not already cached to avoid multiple broadcasts
@@ -284,11 +284,11 @@ object ModelEvaluator {
         val destPath = new org.apache.hadoop.fs.Path(s"$basePath/roc_data_${split}.csv")
         fs.rename(partFile, destPath)
         fs.delete(srcPath, true)
-        println(s"  - ROC data saved to: $basePath/roc_data_${split}.csv")
+        info(s"  - ROC data saved to: $basePath/roc_data_${split}.csv")
       }
     } catch {
       case ex: Exception =>
-        println(s"  ⚠ Could not rename ROC data file: ${ex.getMessage}")
+        error(s"   Could not rename ROC data file: ${ex.getMessage}")
     }
   }
 
@@ -349,8 +349,8 @@ object ModelEvaluator {
     trainPredictions: DataFrame,
     testPredictions: DataFrame,
     basePath: String
-  ): Unit = {
-    println("Saving ROC curve data...")
+  )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
+    info("Saving ROC curve data...")
     savePredictionsForROC(trainPredictions, basePath, "train")
     savePredictionsForROC(testPredictions, basePath, "test")
   }

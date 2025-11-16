@@ -67,8 +67,8 @@ object WBANAirportTimezoneLoader extends DataLoader[Nothing] {
       df
     } else {
       // Load from CSV file
-      debug(s"Loading from CSV file:")
-      debug(s"  - Path: $filePath")
+      info(s"Loading from CSV file:")
+      info(s"  - Path: $filePath")
       val df = spark.read.format("csv")
         .option("header", "true")
         .schema(expectedSchema)

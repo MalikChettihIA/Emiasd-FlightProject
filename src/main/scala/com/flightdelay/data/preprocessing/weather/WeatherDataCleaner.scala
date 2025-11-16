@@ -182,19 +182,22 @@ object WeatherDataCleaner extends BiDataPreprocessor {
     )
 
     // 3.4 — Codes entiers stockés en string -> null-safe cast en Int
-    //       on traite ici les colonnes sujettes à l’erreur VectorAssembler
+    //       on traite ici les colonnes sujettes à l'erreur VectorAssembler
+    //       Gère les valeurs missing: 'M', ' ', '', 'NULL', et tout texte non-numérique
     val codeIntCols = Seq(
       "PressureTendency",
       "ValueForWindCharacter"
     ).filter(withCleanedPressure.columns.contains)
 
     val withCodesAsInt = codeIntCols.foldLeft(withCleanedPressure){ (acc, c) =>
-      debug(s"  - Normalizing code column '$c': 'NULL'/empty -> null, cast to Int")
+      debug(s"  - Cleaning code column '$c': 'M'/' '/''/NULL' -> null, cast to Int (strict=False behavior)")
       acc.withColumn(
         c,
-        when(trim(col(c)).isin("", "NULL"), lit(null).cast(StringType))
-          .otherwise(regexp_replace(col(c), "[^0-9-]", "")) // garde chiffres/signe
-          .cast(IntegerType)
+        when(trim(col(c)).isin("", "NULL", "M") || length(trim(col(c))) === 0, lit(null).cast(IntegerType))
+          .otherwise(
+            when(regexp_replace(col(c), "[^0-9-]", "").cast(StringType) === "", lit(null).cast(IntegerType))
+              .otherwise(regexp_replace(col(c), "[^0-9-]", "").cast(IntegerType))
+          )
       )
     }
 

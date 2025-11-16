@@ -7,7 +7,9 @@ import com.flightdelay.ml.models.ModelFactory
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.ml.{PipelineModel, Model}  // ✅ AJOUTÉ
+import org.apache.spark.ml.{PipelineModel, Model}
+import com.flightdelay.utils.MetricsUtils
+import com.flightdelay.utils.DebugUtils._
 
 object CrossValidator {
 
@@ -26,9 +28,9 @@ object CrossValidator {
 
     val numFolds = experiment.train.crossValidation.numFolds
 
-    println(s"[CrossValidator] Starting K-Fold Cross-Validation")
-    println(s"  - Number of folds: $numFolds")
-    println(s"  - Grid Search: ${if (experiment.train.gridSearch.enabled) "ENABLED" else "DISABLED"}")
+    info(s"[CrossValidator] Starting K-Fold Cross-Validation")
+    info(s"  - Number of folds: $numFolds")
+    info(s"  - Grid Search: ${if (experiment.train.gridSearch.enabled) "ENABLED" else "DISABLED"}")
 
     if (experiment.train.gridSearch.enabled) {
       validateWithGridSearch(devData, experiment, numFolds)
@@ -47,22 +49,24 @@ object CrossValidator {
                               numFolds: Int
                             )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
 
-    println(s"[K-Fold CV] Performing $numFolds-fold cross-validation...")
+    info(s"[K-Fold CV] Performing $numFolds-fold cross-validation...")
 
     // Add fold index column
     val dataWithFold = devData.withColumn("fold", (rand(config.common.seed) * numFolds).cast("int"))
 
     // Perform K-fold CV
     val foldMetrics = (0 until numFolds).map { foldIdx =>
-      println(s"  --- Fold ${foldIdx + 1}/$numFolds ---")
+      info(s"  --- Fold ${foldIdx + 1}/$numFolds ---")
 
       // Split data
       val trainFold = dataWithFold.filter(col("fold") =!= foldIdx).drop("fold")
       val valFold = dataWithFold.filter(col("fold") === foldIdx).drop("fold")
 
-      val trainCount = trainFold.count()
-      val valCount = valFold.count()
-      println(f"    Train: $trainCount%,d | Validation: $valCount%,d")
+      whenDebug{
+        val trainCount = trainFold.count()
+        val valCount = valFold.count()
+        info(f"    Train: $trainCount%,d | Validation: $valCount%,d")
+      }
 
       // Create and train model
       val model = ModelFactory.create(experiment)
@@ -72,31 +76,31 @@ object CrossValidator {
       val tempModelPath = s"${config.common.output.basePath}/${experiment.name}/model/temp_cv_fold_${foldIdx}_${System.currentTimeMillis()}"
 
       val metrics = try {
-        println(s"    💾 Saving model to avoid broadcast...")
+        info(s"    Saving model to avoid broadcast...")
 
         // ✅ Cast en PipelineModel pour accéder à write
         trainedModel match {
           case pm: PipelineModel =>
             pm.write.overwrite().save(tempModelPath)
-            println(s"    📂 Reloading model from disk...")
+            info(s"     Reloading model from disk...")
             val reloadedModel = PipelineModel.load(tempModelPath)
 
             // Evaluate on validation fold with reloaded model
-            println(s"    🔍 Evaluating on validation fold...")
+            info(s"     Evaluating on validation fold...")
             val valPredictions = reloadedModel.transform(valFold)
             val evaluationMetrics = ModelEvaluator.evaluate(valPredictions)
 
-            println(f"    ✅ Val Metrics: Acc=${evaluationMetrics.accuracy * 100}%.2f%% | F1=${evaluationMetrics.f1Score * 100}%.2f%% | AUC=${evaluationMetrics.areaUnderROC}%.4f")
+            info(f"     Val Metrics: Acc=${evaluationMetrics.accuracy * 100}%.2f%% | F1=${evaluationMetrics.f1Score * 100}%.2f%% | AUC=${evaluationMetrics.areaUnderROC}%.4f")
 
             evaluationMetrics
 
           case _ =>
             // Si ce n'est pas un PipelineModel, évaluer directement (risque de broadcast)
-            println(s"    ⚠️  Model is not PipelineModel, evaluating directly (may cause broadcast issues)")
+            info(s"      Model is not PipelineModel, evaluating directly (may cause broadcast issues)")
             val valPredictions = trainedModel.transform(valFold)
             val evaluationMetrics = ModelEvaluator.evaluate(valPredictions)
 
-            println(f"    ✅ Val Metrics: Acc=${evaluationMetrics.accuracy * 100}%.2f%% | F1=${evaluationMetrics.f1Score * 100}%.2f%% | AUC=${evaluationMetrics.areaUnderROC}%.4f")
+            info(f"     Val Metrics: Acc=${evaluationMetrics.accuracy * 100}%.2f%% | F1=${evaluationMetrics.f1Score * 100}%.2f%% | AUC=${evaluationMetrics.areaUnderROC}%.4f")
 
             evaluationMetrics
         }
@@ -134,21 +138,24 @@ object CrossValidator {
 
     // Add fold index column
     val dataWithFold = devData.withColumn("fold", (rand(config.common.seed) * numFolds).cast("int"))
-
+    info(s"[CrossValidator][numFolds] ${numFolds}")
     // Perform K-fold CV
     val foldMetrics = (0 until numFolds).map { foldIdx =>
+      info(s"[CrossValidator][foldIdx] ${foldIdx}")
       // Split data
       val trainFold = dataWithFold.filter(col("fold") =!= foldIdx).drop("fold")
       val valFold = dataWithFold.filter(col("fold") === foldIdx).drop("fold")
+      debug(s"[CrossValidator][trainFold] ${trainFold.count()}")
+      debug(s"[CrossValidator][valFold] ${valFold.count()}")
 
       // Train with specific params
       val trainedModel = Trainer.trainWithParams(trainFold, experiment, params)
 
-      // ✅ SOLUTION : Sauvegarder et recharger le modèle pour éviter le broadcast
+      // SOLUTION : Sauvegarder et recharger le modèle pour éviter le broadcast
       val tempModelPath = s"${config.common.output.basePath}/${experiment.name}/model/temp_cv_fold_${foldIdx}_${System.currentTimeMillis()}"
 
       val metrics = try {
-        // ✅ Cast en PipelineModel pour accéder à write
+        // Cast en PipelineModel pour accéder à write
         trainedModel match {
           case pm: PipelineModel =>
             pm.write.overwrite().save(tempModelPath)
@@ -186,17 +193,17 @@ object CrossValidator {
   /**
    * Fonction helper pour nettoyer les modèles temporaires
    */
-  private def cleanupTempModel(modelPath: String)(implicit spark: SparkSession): Unit = {
+  private def cleanupTempModel(modelPath: String)(implicit spark: SparkSession, config: AppConfiguration): Unit = {
     try {
       val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
       val path = new Path(modelPath)
       if (fs.exists(path)) {
         fs.delete(path, true)
-        println(s"    🧹 Cleaned up temp model: $modelPath")
+        info(s"    Cleaned up temp model: $modelPath")
       }
     } catch {
       case e: Exception =>
-        println(s"    ⚠️  Warning: Could not delete temp model $modelPath: ${e.getMessage}")
+        info(s"      Warning: Could not delete temp model $modelPath: ${e.getMessage}")
     }
   }
 
@@ -206,35 +213,35 @@ object CrossValidator {
                                       numFolds: Int
                                     )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
 
-    println(s"[Grid Search] Building parameter grid...")
+    info(s"[Grid Search] Building parameter grid...")
 
     val paramGrid = buildParameterGrid(experiment)
 
-    println(s"  - Total combinations: ${paramGrid.size}")
-    println(s"  - Evaluation metric: ${experiment.train.gridSearch.evaluationMetric}")
+    info(s"  - Total combinations: ${paramGrid.size}")
+    info(s"  - Evaluation metric: ${experiment.train.gridSearch.evaluationMetric}")
 
     val gridResults = paramGrid.zipWithIndex.map { case (params, idx) =>
-      println(s"[Grid Search] Testing combination ${idx + 1}/${paramGrid.size}")
-      params.foreach { case (k, v) => println(s"    $k: $v") }
+      info(s"[Grid Search] Testing combination ${idx + 1}/${paramGrid.size}")
+      params.foreach { case (k, v) => info(s"    $k: $v") }
 
       val cvResult = validateWithParams(devData, experiment, params, numFolds)
       val metricValue = getMetricValue(cvResult.avgMetrics, experiment.train.gridSearch.evaluationMetric)
 
-      println(f"    → Avg ${experiment.train.gridSearch.evaluationMetric}: $metricValue%.4f")
+      info(f"    → Avg ${experiment.train.gridSearch.evaluationMetric}: $metricValue%.4f")
 
       (params, cvResult, metricValue)
     }
 
     val (bestParams, bestCVResult, bestMetricValue) = gridResults.maxBy(_._3)
 
-    println(s"=" * 80)
-    println("[Grid Search] BEST COMBINATION FOUND")
-    println("=" * 80)
+    info(s"=" * 80)
+    info("[Grid Search] BEST COMBINATION FOUND")
+    info("=" * 80)
     bestParams.toSeq.sortBy(_._1).foreach { case (k, v) =>
-      println(f"  $k%-25s : $v")
+      info(f"  $k%-25s : $v")
     }
-    println(f"  Best ${experiment.train.gridSearch.evaluationMetric}%-25s : $bestMetricValue%.6f")
-    println("=" * 80)
+    info(f"  Best ${experiment.train.gridSearch.evaluationMetric}%-25s : $bestMetricValue%.6f")
+    info("=" * 80)
 
     bestCVResult.copy(bestHyperparameters = bestParams)
   }

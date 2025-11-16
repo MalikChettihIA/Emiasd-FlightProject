@@ -21,7 +21,7 @@ object FlightDataGenerator extends DataPreprocessor {
    * @param spark Session Spark
    * @return DataFrame enrichi avec des nouvelles colonnes
    */
-  override def preprocess(cleanedFlightData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  override def preprocess(flightData: DataFrame, weatherData: DataFrame, wBANAirportTimezoneData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
     info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataGenerator.preprocess")
 
     debug("")
@@ -29,11 +29,11 @@ object FlightDataGenerator extends DataPreprocessor {
     debug("[STEP 2][FlightDataGenerator] Flight Data Generator - Start ...")
     debug("=" * 80)
 
-    val originalColumns = cleanedFlightData.columns.length
+    val originalColumns = flightData.columns.length
     debug(s"Original Column Counts: $originalColumns")
 
     // Étape 1: Ajout des caractéristiques temporelles
-    val withTemporalFeatures = addTemporalFeatures(cleanedFlightData)
+    val withTemporalFeatures = addTemporalFeatures(flightData)
 
     // Étape 2: Ajout des caractéristiques de vol
     val withFlightFeatures = addFlightCharacteristics(withTemporalFeatures)
@@ -46,9 +46,6 @@ object FlightDataGenerator extends DataPreprocessor {
 
     // Étape 5: Ajout des features agrégées
     val withAggregatedFeatures = addAggregatedFeatures(withGeographicFeatures)
-
-    // Résumé de l'enrichissement
-    logEnrichmentSummary(cleanedFlightData, withAggregatedFeatures)
 
     withAggregatedFeatures
 
@@ -205,13 +202,6 @@ object FlightDataGenerator extends DataPreprocessor {
     debug("")
     debug("Phase 2: Add Flight Characteristics")
 
-    /**println("- Add feature_flight_unique_id ")
-    println("- Add feature_distance_category (short, medium, long, very_long) ")
-    println("- Add feature_distance_score ")
-    println("- Add feature_is_likely_domestic ")
-    println("- Add feature_carrier_hash ")
-    println("- Add feature_route_id ")
-    println("- Add feature_is_roundtrip_candidate ")**/
 
     val columnExpressions = Map(
       // Identifiant unique du vol
@@ -264,17 +254,6 @@ object FlightDataGenerator extends DataPreprocessor {
     debug("")
     debug("Phase 3: Add Period <indicator")
 
-   /**println("- Add feature_is_weekend, feature_is_friday, feature_is_monday")
-    println("- Add feature_is_summer, feature_is_winter, feature_is_spring, feature_is_fall ")
-    println("- Add feature_is_holiday_season (approximative)")
-    println("- Add feature_is_early_morning ")
-    println("- Add feature_is_morning_rush ")
-    println("- Add feature_is_business_hours ")
-    println("- Add feature_is_evening_rush ")
-    println("- Add feature_is_night_flight ")
-    println("- Add feature_is_month_start ")
-    println("- Add feature_is_month_end ")
-    println("- Add feature_is_extended_weekend ")**/
 
     val columnExpressions = Map(
       // Indicateurs de fin de semaine
@@ -330,17 +309,6 @@ object FlightDataGenerator extends DataPreprocessor {
     debug("")
     debug("Phase 4: Add Geographical Features")
 
-    /**println("- Add feature_origin_is_major_hub (10397, 11298, 12266, 13930, 14107, 14771, 15016  // Principaux hubs US)")
-    println("- Add feature_dest_is_major_hub  (10397, 11298, 12266, 13930, 14107, 14771, 15016  // Principaux hubs US)")
-    println("- Add feature_is_hub_to_hub")
-    println("- Add feature_flight_quarter") // NOUVEAU
-    println("- Add feature_origin_complexity_score")
-    println("- Add feature_dest_complexity_score")
-    println("- Add feature_timezone_diff_proxy")
-    println("- Add feature_flight_week_of_year")
-    println("- Add feature_is_eastbound")
-    println("- Add feature_is_westbound")**/
-
 
     val columnExpressions1 = Map(
       // Indicateurs de hub (aéroports avec beaucoup de trafic)
@@ -392,12 +360,6 @@ object FlightDataGenerator extends DataPreprocessor {
     debug("")
     debug("Phase 5 : Add Aggregated Features")
 
-    /**println("- Add feature_flights_on_route")
-    println("- Add feature_carrier_flight_count")
-    println("- Add feature_origin_airport_traffic")
-    println("- Add feature_route_popularity_score")
-    println("- Add feature_carrier_size_category")**/
-
     import org.apache.spark.sql.expressions.Window
 
     // Window pour calculer des statistiques par route
@@ -426,22 +388,4 @@ object FlightDataGenerator extends DataPreprocessor {
     result
   }
 
-  /**
-   * Résumé détaillé du processus d'enrichissement
-   */
-  private def logEnrichmentSummary(originalDf: DataFrame, enrichedDf: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
-    val originalColumns = originalDf.columns.length
-    val enrichedColumns = enrichedDf.columns.length
-    val addedColumns = enrichedColumns - originalColumns
-
-    debug("")
-    debug("=== Enrichment Summary ===")
-    debug("")
-    debug(s"Original Columns: $originalColumns")
-    debug(s"Columns after enrichment: $enrichedColumns")
-    debug(s"Enriched Columns: $addedColumns")
-    debug(s"Dataset size: ${enrichedDf.count()}")
-    debug("")
-
-  }
 }

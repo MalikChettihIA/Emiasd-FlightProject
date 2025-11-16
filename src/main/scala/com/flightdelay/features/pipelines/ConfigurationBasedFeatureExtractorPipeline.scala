@@ -1,11 +1,14 @@
 package com.flightdelay.features.pipelines
 
-import com.flightdelay.config.{FeatureExtractionConfig, FeatureTransformationConfig}
+import com.flightdelay.config.{AppConfiguration, FeatureExtractionConfig, FeatureTransformationConfig}
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.feature._
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.{col, when}
 import org.apache.spark.sql.types.{BooleanType, DoubleType}
+import com.flightdelay.utils.DebugUtils._
+import com.flightdelay.utils.MetricsUtils
+
 
 /**
  * Configuration-based feature pipeline that reads transformations from config
@@ -22,7 +25,7 @@ import org.apache.spark.sql.types.{BooleanType, DoubleType}
 class ConfigurationBasedFeatureExtractorPipeline(
   featureConfig: FeatureExtractionConfig,
   target: String,
-  handleInvalid: String = "skip"
+  handleInvalid: String = "keep"
 ) {
 
   // Column naming constants
@@ -78,10 +81,10 @@ class ConfigurationBasedFeatureExtractorPipeline(
       val safeDestDepth   = math.max(0, weatherDestinationDepthHours)
 
       val originPatterns =
-        (0 until safeOriginDepth).map(i => s"origin_weather_${featureName}-$i")
+        (0 to safeOriginDepth).map(i => s"origin_weather_${featureName}-$i")
 
       val destPatterns =
-        (0 until safeDestDepth).map(i => s"destination_weather_${featureName}-$i")
+        (0 to safeDestDepth).map(i => s"destination_weather_${featureName}-$i")
 
       val candidates = originPatterns ++ destPatterns
       val matching   = candidates.filter(availableFeatures.contains).sorted
@@ -140,43 +143,47 @@ class ConfigurationBasedFeatureExtractorPipeline(
   /**
    * Build pipeline stages based on configuration
    */
-  private def buildPipelineStages(data: DataFrame): Array[PipelineStage] = {
+  private def buildPipelineStages(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Array[PipelineStage] = {
     val (stringIndexerCols, oneHotEncoderCols, numericCols) = groupFeaturesByTransformation(data)
 
-    println(s"[ConfigurationBasedPipeline] Feature Distribution:")
-    println(s"  - StringIndexer features: ${stringIndexerCols.length}")
+    info(s"[ConfigurationBasedFeatureExtractorPipeline] Feature Distribution:")
+    info(s"  - StringIndexer features: ${stringIndexerCols.length}")
     if (stringIndexerCols.length > 0 && stringIndexerCols.length <= 5) {
-      println(s"    ${stringIndexerCols.mkString(", ")}")
+      info(s"    ${stringIndexerCols.mkString(", ")}")
     } else if (stringIndexerCols.length > 5) {
-      println(s"    ${stringIndexerCols.take(5).mkString(", ")}, ... (${stringIndexerCols.length - 5} more)")
+      info(s"    ${stringIndexerCols.take(5).mkString(", ")}, ... (${stringIndexerCols.length - 5} more)")
     }
 
-    // DIAGNOSTIC: Print distinct value counts for categorical features
-    println(s"[ConfigurationBasedPipeline] Categorical Features Cardinality:")
-    stringIndexerCols.zipWithIndex.foreach { case (colName, idx) =>
-      val distinctCount = data.select(colName).distinct().count()
-      println(f"  [$idx%2d] $colName%-50s : $distinctCount%,6d distinct values")
-    }
-    println(s"  - OneHotEncoder features: ${oneHotEncoderCols.length}")
-    if (oneHotEncoderCols.length > 0 && oneHotEncoderCols.length <= 5) {
-      println(s"    ${oneHotEncoderCols.mkString(", ")}")
-    } else if (oneHotEncoderCols.length > 5) {
-      println(s"    ${oneHotEncoderCols.take(5).mkString(", ")}, ... (${oneHotEncoderCols.length - 5} more)")
-    }
-    println(s"  - Numeric features: ${numericCols.length}")
-    if (numericCols.length > 0 && numericCols.length <= 5) {
-      println(s"    ${numericCols.mkString(", ")}")
-    } else if (numericCols.length > 5) {
-      println(s"    ${numericCols.take(5).mkString(", ")}, ... (${numericCols.length - 5} more)")
+    whenDebug{
+      // DIAGNOSTIC: Print distinct value counts for categorical features
+      debug(s"[ConfigurationBasedFeatureExtractorPipeline] Categorical Features Cardinality:")
+      stringIndexerCols.zipWithIndex.foreach { case (colName, idx) =>
+        val distinctCount = data.select(colName).distinct().count()
+        debug(f"  [$idx%2d] $colName%-50s : $distinctCount%,6d distinct values")
+      }
+      debug(s"  - OneHotEncoder features: ${oneHotEncoderCols.length}")
+      if (oneHotEncoderCols.length > 0 && oneHotEncoderCols.length <= 5) {
+        debug(s"    ${oneHotEncoderCols.mkString(", ")}")
+      } else if (oneHotEncoderCols.length > 5) {
+        debug(s"    ${oneHotEncoderCols.take(5).mkString(", ")}, ... (${oneHotEncoderCols.length - 5} more)")
+      }
+      debug(s"  - Numeric features: ${numericCols.length}")
+      if (numericCols.length > 0 && numericCols.length <= 5) {
+        debug(s"    ${numericCols.mkString(", ")}")
+      } else if (numericCols.length > 5) {
+        debug(s"    ${numericCols.take(5).mkString(", ")}, ... (${numericCols.length - 5} more)")
+      }
     }
 
     var stages = Array.empty[PipelineStage]
 
     // Stage 1: StringIndexer for label
+    // CRITICAL: Always use "skip" for label to ensure binary classification (2 classes only)
+    // Using "keep" would create a 3rd class for unknowns, causing evaluation errors
     val labelIndexer = new StringIndexer()
       .setInputCol(target)
       .setOutputCol(_label)
-      .setHandleInvalid(handleInvalid)
+      .setHandleInvalid("skip")  // Always skip for label, regardless of handleInvalid parameter
     stages = stages :+ labelIndexer
 
     // Stage 2: StringIndexer for categorical features
@@ -209,10 +216,24 @@ class ConfigurationBasedFeatureExtractorPipeline(
       stages = stages :+ oneHotEncoder
     }
 
-    // Stage 4: VectorAssembler to combine all features
+    // Stage 4: Imputer to replace NaN/null values in numeric columns
+    // This is critical because VectorAssembler and ML models cannot handle NaN
+    if (numericCols.nonEmpty) {
+      val imputer = new Imputer()
+        .setInputCols(numericCols)
+        .setOutputCols(numericCols.map("imputed_" + _))
+        .setStrategy("mean")  // Replace NaN with mean (alternatives: "median", "mode")
+        .setMissingValue(Double.NaN)
+      stages = stages :+ imputer
+
+      info(s"  - Added Imputer for ${numericCols.length} numeric columns (strategy: mean)")
+    }
+
+    // Stage 5: VectorAssembler to combine all features
+    val imputedNumericCols = if (numericCols.nonEmpty) numericCols.map("imputed_" + _) else Array.empty[String]
     val allInputCols = stringIndexerCols.map(_prefix + _) ++
                        oneHotOutputCols ++
-                       numericCols
+                       imputedNumericCols
 
     val vectorAssembler = new VectorAssembler()
       .setInputCols(allInputCols)
@@ -220,7 +241,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
       .setHandleInvalid(handleInvalid)
     stages = stages :+ vectorAssembler
 
-    // Stage 5: Apply scalers if configured for numeric features
+    // Stage 6: Apply scalers if configured for numeric features
     val scalerConfig = numericCols.flatMap { colName =>
       featureTransformations.get(colName).map(config => (colName, config.transformation))
     }.groupBy(_._2)
@@ -248,24 +269,24 @@ class ConfigurationBasedFeatureExtractorPipeline(
   /**
    * Fit the pipeline on training data
    */
-  def fit(data: DataFrame): PipelineModel = {
+  def fit(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): PipelineModel = {
     val preprocessed = preprocessBooleans(data)
     val stages = buildPipelineStages(preprocessed)
     val pipeline = new Pipeline().setStages(stages)
 
-    println("[ConfigurationBasedPipeline] Fitting transformation pipeline...")
+    info("[ConfigurationBasedFeatureExtractorPipeline] Fitting transformation pipeline...")
     pipeline.fit(preprocessed)
   }
 
   /**
    * Fit and transform training data
    */
-  def fitTransform(data: DataFrame): (PipelineModel, DataFrame) = {
+  def fitTransform(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): (PipelineModel, DataFrame) = {
     val preprocessed = preprocessBooleans(data)
     val stages = buildPipelineStages(preprocessed)
     val pipeline = new Pipeline().setStages(stages)
 
-    println("[ConfigurationBasedPipeline] Fitting transformation pipeline...")
+    info("[ConfigurationBasedFeatureExtractorPipeline] Fitting transformation pipeline...")
     val model = pipeline.fit(preprocessed)
 
     val transformed = postProcess(model.transform(preprocessed))
@@ -283,9 +304,10 @@ class ConfigurationBasedFeatureExtractorPipeline(
     val (stringIndexerCols, oneHotEncoderCols, numericCols) = groupFeaturesByTransformation(data)
 
     // Build the same order as VectorAssembler uses
+    val imputedNumericCols = if (numericCols.nonEmpty) numericCols.map("imputed_" + _) else Array.empty[String]
     val allInputCols = stringIndexerCols.map(_prefix + _) ++
                        oneHotEncoderCols.map(_ohe_prefix + _) ++
-                       numericCols
+                       imputedNumericCols
 
     allInputCols
   }
@@ -317,24 +339,19 @@ class ConfigurationBasedFeatureExtractorPipeline(
   /**
    * Print summary of the pipeline configuration
    */
-  def printSummary(): Unit = {
-    println("=" * 80)
-    println("[ConfigurationBasedPipeline] Pipeline Configuration")
-    println("=" * 80)
-    println(s"Target: $target")
-    println(s"Total features configured: ${featureTransformations.size}")
-    println(s"Handle invalid: $handleInvalid")
+  def printSummary()(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
+    info("=" * 80)
+    info("[ConfigurationBasedFeatureExtractorPipeline] Pipeline Configuration")
+    info("=" * 80)
+    info(s"Target: $target")
+    info(s"Total features configured: ${featureTransformations.size}")
+    info(s"Handle invalid: $handleInvalid")
 
     // Group by transformation type
     val byTransformation = featureTransformations.groupBy(_._2.transformation)
     byTransformation.foreach { case (transformation, features) =>
-      println(s"${transformation}: ${features.size} features")
-      if (features.size <= 10) {
-        features.keys.foreach(name => println(s"  - $name"))
-      } else {
-        features.keys.take(10).foreach(name => println(s"  - $name"))
-        println(s"  ... and ${features.size - 10} more")
-      }
+      info(s"${transformation}: ${features.size} features")
+      features.keys.foreach(name => info(s"  - $name"))
     }
     println("=" * 80)
   }
@@ -348,7 +365,7 @@ object ConfigurationBasedFeatureExtractorPipeline {
   def apply(
     featureConfig: FeatureExtractionConfig,
     target: String,
-    handleInvalid: String = "skip"
+    handleInvalid: String = "keep"
   ): ConfigurationBasedFeatureExtractorPipeline = {
     new ConfigurationBasedFeatureExtractorPipeline(featureConfig, target, handleInvalid)
   }

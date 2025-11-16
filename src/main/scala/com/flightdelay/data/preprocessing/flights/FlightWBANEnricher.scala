@@ -22,7 +22,7 @@ object FlightWBANEnricher {
    * @param configuration Configuration de l'application
    * @return DataFrame enrichi avec WBAN IDs pour origine et destination
    */
-  def preprocess(flightDf: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  def preprocess(flightDf: DataFrame, originalWBANAirportTimezoneData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     info("- Calling com.flightdelay.data.preprocessing.flights.FlightWBANEnricher.preprocess")
 
@@ -37,22 +37,8 @@ object FlightWBANEnricher {
       debug("[Preprocessing] Flight WBAN Enrichment - Start")
       debug("=" * 80)
 
-      // Load WBAN-Airport-Timezone mapping with automatic fallback to CSV if parquet doesn't exist
-      val wbanParquetPath = s"${configuration.common.output.basePath}/common/data/raw_wban_airport_timezone.parquet"
-      debug(s"Loading WBAN-Airport-Timezone mapping:")
-      debug(s"  - Parquet path: $wbanParquetPath")
-
-      val wbanMappingRawDf = if (parquetFileExists(wbanParquetPath)) {
-        debug(s"   Loading from existing Parquet")
-        spark.read.parquet(wbanParquetPath)
-      } else {
-        debug(s"   Parquet not found - loading from CSV and creating Parquet")
-        // WBANAirportTimezoneLoader will automatically load CSV and save to Parquet
-        WBANAirportTimezoneLoader.loadFromConfiguration()
-      }
-
       debug(s"  - WBAN padding to 5 characters")
-      val wbanMappingDf = wbanMappingRawDf
+      val wbanMappingDf = originalWBANAirportTimezoneData
         .withColumn("WBAN", lpad(col("WBAN"), 5, "0"))
 
       debug(s"  - Loaded ${wbanMappingDf.count()} airport-WBAN mappings")

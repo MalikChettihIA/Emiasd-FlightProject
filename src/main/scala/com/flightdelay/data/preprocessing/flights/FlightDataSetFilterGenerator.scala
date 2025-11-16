@@ -20,7 +20,7 @@ import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 object FlightDataSetFilterGenerator extends DataPreprocessor {
 
   private val D2_THRESHOLDS_MINUTES: Seq[Int] = Seq(15, 30, 45, 60, 90)
-  private val EPSILON_EQUALITY_MIN = 0.5
+  private val EPSILON_EQUALITY_MIN = 0.05
 
   private def nzDouble(colName: String): Column =
     coalesce(col(colName).cast("double"), lit(0.0))
@@ -46,7 +46,11 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
 
     val d4 = when(arr > 0, 1).otherwise(0)
     val d3 = when((wthr > 0) or (nas > 0), 1).otherwise(0)
-    val d1 = when((arr > 0) && (abs(arr - (wthr + nas)) <= epsilon), 1).otherwise(0)
+    val d1 = when((arr > 0) && (
+      (abs(arr - (wthr + nas)) <= epsilon) or
+        (abs(arr - wthr) <= epsilon) or
+        (abs(arr - nas) <= epsilon)
+      ), 1).otherwise(0)
 
     // Appliquer les colonnes de base
     val baseDf = df
@@ -57,7 +61,7 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
     // Ajouter D2_<seuil>
     val dfWithD2 = D2_THRESHOLDS_MINUTES.foldLeft(baseDf) { (acc, thr) =>
       val colName = s"D2_$thr"
-      val d2col = when((wthr > 0) && (nas >= thr) && (abs(arr - (wthr + nas)) <= epsilon), 1).otherwise(0)
+      val d2col = when((wthr > 0) && (nas >= thr) , 1).otherwise(0)
       acc.withColumn(colName, d2col)
     }
 
@@ -67,20 +71,22 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
   /**
    * Méthode exécutable pour test (facultative)
    */
-  def preprocess(rawData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame  = {
+  def preprocess(flightData: DataFrame, weatherData: DataFrame, wBANAirportTimezoneData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame  = {
 
     info("- Calling com.flightdelay.data.preprocessing.flights.FlightDataSetFilterGenerator.preprocess")
 
-    val enriched = withDelayFilters(rawData)
+    val enriched = withDelayFilters(flightData)
 
-    val total = enriched.count()
-    debug(s"[FlightDataSetFilterGenerator] Total vols: $total")
+    whenDebug{
+      val total = enriched.count()
+      info(s"[FlightDataSetFilterGenerator] Total vols: $total")
 
-    val colsToLog = Seq("D1", "D3", "D4") ++ D2_THRESHOLDS_MINUTES.map(t => s"D2_$t")
-    colsToLog.foreach { c =>
-      val n = enriched.filter(col(c) === 1).count()
-      val pct = if (total > 0) (n.toDouble / total * 100) else 0.0
-      debug(f" - $c%-6s : $n%8d vols (${pct}%.2f%%)")
+      val colsToLog = Seq("D1", "D3", "D4") ++ D2_THRESHOLDS_MINUTES.map(t => s"D2_$t")
+      colsToLog.foreach { c =>
+        val n = enriched.filter(col(c) === 1).count()
+        val pct = if (total > 0) (n.toDouble / total * 100) else 0.0
+        debug(f" - $c%-6s : $n%8d vols (${pct}%.2f%%)")
+      }
     }
 
     enriched

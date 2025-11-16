@@ -13,9 +13,11 @@ spark-submit \
   --master "$SPARK_MASTER_URL" \
   --deploy-mode client \
   --class com.flightdelay.app.FlightDelayPredictionApp \
-  --driver-memory 40G \
-  --driver-cores 10 \
-  --conf spark.driver.maxResultSize=8g \
+  --driver-memory 28G \
+  --driver-cores 8 \
+  --executor-memory 8G \
+  --executor-cores 2 \
+  --conf spark.driver.maxResultSize=4g \
   --conf spark.sql.shuffle.partitions=400 \
   --conf spark.default.parallelism=400 \
   --conf spark.kryoserializer.buffer.max=1024m \
@@ -26,7 +28,7 @@ spark-submit \
   --conf spark.network.timeout=800s \
   --conf spark.executor.heartbeatInterval=60s \
   --conf spark.memory.offHeap.enabled=true \
-  --conf spark.memory.offHeap.size=10g \
+  --conf spark.memory.offHeap.size=2g \
   --conf spark.memory.fraction=0.8 \
   --conf spark.memory.storageFraction=0.3 \
   --conf spark.eventLog.enabled=true \

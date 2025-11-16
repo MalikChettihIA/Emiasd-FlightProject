@@ -160,25 +160,31 @@ object FlightDelayPredictionApp {
     weatherData: DataFrame
   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
+    if (!(tasks.contains("feature-extraction")) && !(tasks.contains("train"))){
+      return
+    }
     // =====================================================================================
     // STEP 2: Feature Pipeline (Join + Explode + Extract Features)
     // =====================================================================================
-    val mlData = if (tasks.contains("feature-extraction")) {
+    val (trainData, testData) = if (tasks.contains("feature-extraction")) {
       info(s"[STEP 2] Feature Pipeline for ${experiment.name}")
       info("=" * 80)
       info(s"Feature Type: ${experiment.featureExtraction.featureType}")
 
-      val mlData = FeaturePipeline.execute(flightData, weatherData, experiment)
+      val (trainData, testData) = FeaturePipeline.execute(flightData, weatherData, experiment)
       info("=" * 80)
-      mlData
+      (trainData, testData)
     } else {
       warn(s"[STEP 2] Feature pipeline for ${experiment.name}... SKIPPED")
-      val mlDataPath = s"${configuration.common.output.basePath}/${experiment.name}/data/joined_exploded_data.parquet"
+      val trainPath = s"${configuration.common.output.basePath}/${experiment.name}/data/join_exploded_train_prepared.parquet"
+      val testPath = s"${configuration.common.output.basePath}/${experiment.name}/data/join_exploded_test_prepared.parquet"
 
       warn(s"Loading prepared data:")
-      warn(s"  - Path: $mlDataPath")
-      val mlData = spark.read.parquet(mlDataPath)
-      mlData
+      warn(s"  - Train: $trainPath")
+      warn(s"  - Test:  $testPath")
+      val trainData = spark.read.parquet(trainPath).cache()
+      val testData = spark.read.parquet(testPath).cache()
+      (trainData, testData)
     }
 
     // =====================================================================================
@@ -189,8 +195,8 @@ object FlightDelayPredictionApp {
       info(s"[FlightDelayPredictionApp][STEP 3] Model Training for ${experiment.name}")
       info("-" * 80)
 
-      // Train model using new MLPipeline (Option B: K-fold + Hold-out)
-      val mlResult = MLPipeline.train(mlData, experiment)
+      // Train model using new MLPipeline (pre-split balanced datasets)
+      val mlResult = MLPipeline.train(trainData, testData, experiment)
 
       // Display summary
       info("-" * 80)

@@ -47,7 +47,7 @@ case class FeatureExtractionModels(
  */
 object FeatureExtractor {
 
-  private val handleInvalid = "skip"
+  private val handleInvalid = "keep"
   private val defaultVarianceThreshold = 0.70 // 70% minimum variance
 
   private val _featuresVec = "featuresVec"
@@ -322,7 +322,7 @@ object FeatureExtractor {
     }
 
     val totalDuration = (System.currentTimeMillis() - transformStartTime) / 1000.0
-    info(s"   Transform completed in ${totalDuration}s\n")
+    info(s"   Transform completed in ${totalDuration}s")
 
     finalTransformed
   }

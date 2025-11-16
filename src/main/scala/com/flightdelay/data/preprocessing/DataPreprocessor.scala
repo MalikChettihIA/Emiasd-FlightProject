@@ -19,7 +19,7 @@ abstract class DataPreprocessor {
    * @param rawData DataFrame contenant les données brutes
    * @return DataFrame préprocessé
    */
-  def preprocess(rawData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration = null): DataFrame
+  def preprocess(rawFlightData: DataFrame, rawWeatherData: DataFrame, rawWBANAirportTimezoneData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration = null): DataFrame
 
   /**
    * Supprime les lignes dupliquées basées sur des colonnes spécifiques

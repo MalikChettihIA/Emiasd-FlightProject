@@ -96,7 +96,7 @@ object FlightDataLoader extends DataLoader[Flight] {
       info(s"Loading from existing Parquet file:")
       info(s"  - Path: $parquetPath")
 
-      val df = spark.read.parquet(parquetPath)
+      val df = spark.read.parquet(parquetPath).cache()
 
       whenDebug {
         val count = df.count()
@@ -106,8 +106,8 @@ object FlightDataLoader extends DataLoader[Flight] {
       df
     } else {
       // Load from CSV file
-      debug(s"Loading from CSV file:")
-      debug(s"  - Path: $filePath")
+      info(s"Loading from CSV file:")
+      info(s"  - Path: $filePath")
       val columnsToKeep = expectedSchema.fieldNames
                         .filter(_ != "UNUSED_COL")
                         .map(col)
@@ -121,11 +121,11 @@ object FlightDataLoader extends DataLoader[Flight] {
         .select(columnsToKeep: _*)
         .withColumn("FL_DATE", to_date(col("FL_DATE"), DEFAULT_DATE_FORMAT))
 
-      df.cache() // Cache the DataFrame as it will be used multiple times
-      // whenDebug {
-      //   val count = df.count
-      //   println(s"  - Loaded $count records from CSV")
-      // }
+      df.cache()
+      whenDebug {
+        val count = df.count
+        println(s"  - Loaded $count records from CSV")
+      }
 
       // Save as Parquet for future use, c'est une action qui consomme plus
       outputPath.foreach { path =>

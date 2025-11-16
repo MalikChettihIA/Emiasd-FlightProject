@@ -287,8 +287,8 @@ services:
     container_name: spark-history-server
     hostname: spark-history-server
     environment:
-      - SPARK_MODE=master  # Use master mode but override command
-      - SPARK_HISTORY_OPTS=-Dspark.history.fs.logDirectory=file:///spark-events
+      - SPARK_MODE=master
+      - "SPARK_HISTORY_OPTS=-Dspark.history.server.jsonStreamReadConstraints.maxStringLength=100000000 -Dspark.history.fs.logDirectory=file:///spark-events"
     command: bash -c "/opt/bitnami/spark/sbin/start-history-server.sh && tail -f /dev/null"
     ports:
       - "18080:18080"

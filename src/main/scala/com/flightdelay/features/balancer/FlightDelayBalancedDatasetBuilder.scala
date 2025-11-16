@@ -38,24 +38,17 @@ object DelayBalancedDatasetBuilder {
    *
    * @param df                Original DataFrame (must contain ARR_DELAY_NEW and dxCol)
    * @param dxCol             Binary column (e.g., "D1", "D2_60", "D3", "D4")
-   * @param delayThresholdMin Threshold (in minutes) for labeling delayed flights
-   * @param filterOnDxEquals1 If true, only keep rows where dxCol == 1
    * @return DataFrame with a new column "is_delayed" (1 or 0)
    */
   def prepareLabeledDataset(
                              df: DataFrame,
-                             dxCol: String,
-                             delayThresholdMin: Int,
-                             filterOnDxEquals1: Boolean = true
+                             dxCol: String
                            ): DataFrame = {
-    validate(df, Seq("ARR_DELAY_NEW", dxCol))
+    validate(df, Seq(dxCol))
 
-    val base = if (filterOnDxEquals1) df.filter(col(dxCol) === 1) else df
-
-    base.withColumn(
+    df.withColumn(
       "is_delayed",
-      when(coalesce(col("ARR_DELAY_NEW").cast("double"), lit(0.0)) >= delayThresholdMin, 1)
-        .otherwise(0)
+      when(col(dxCol) === 1, 1).otherwise(0)
     )
   }
 
@@ -83,52 +76,45 @@ object DelayBalancedDatasetBuilder {
       tags    = "sampling,split,balance"
     ) {
 
+      validate(labeledDf, Seq("is_delayed"))
+
       val delayed = labeledDf.filter(col("is_delayed") === 1)
       val onTime  = labeledDf.filter(col("is_delayed") === 0)
 
-      // 1) Split des 'delayed' (narrow, pas de shuffle)
+      // Split delayed data into train/test
       val Array(trainDelayed, testDelayed) =
         delayed.randomSplit(Array(trainRatio, 1.0 - trainRatio), seed)
 
       val nTrainDelayed = trainDelayed.count()
       val nTestDelayed  = testDelayed.count()
 
-      // 2) Tirage "on-time" disjoint sans except/orderBy :
-      val nOnTime  = onTime.count()
-      val needTrainOn = nTrainDelayed
-      val needTestOn  = nTestDelayed
+      // Undersample on-time data to match delayed counts
+      val trainOnTime = sampleN(onTime, nTrainDelayed, seed + 1)
+      val testOnTime  = sampleN(onTime.except(trainOnTime), nTestDelayed, seed + 2)
 
-      val pTrain = math.min(1.0, needTrainOn.toDouble / math.max(1, nOnTime))
-      val pTest  = math.min(1.0 - pTrain, needTestOn.toDouble / math.max(1, nOnTime))
+      // Combine and shuffle
+      val devDataRaw = trainDelayed.unionByName(trainOnTime)
+        .withColumn("__rnd", rand(seed + 3))
+        .orderBy(col("__rnd"))
+        .drop("__rnd")
 
-      val onTimeWithR = onTime.withColumn("__r", rand(seed + 100)) // stable, reproductible
-      val trainOnTimeApprox = onTimeWithR.filter(col("__r") < pTrain)
-      val testOnTimeApprox  = onTimeWithR.filter(col("__r") >= pTrain && col("__r") < (pTrain + pTest))
+      val testDataRaw = testDelayed.unionByName(testOnTime)
+        .withColumn("__rnd", rand(seed + 4))
+        .orderBy(col("__rnd"))
+        .drop("__rnd")
 
-      // 3) Ajustement EXACT (limit)
-      val trainOnTime = trainOnTimeApprox.limit(needTrainOn.toInt).drop("__r")
-      val testOnTime  = testOnTimeApprox .limit(needTestOn .toInt).drop("__r")
+      // Quick logging
+      whenDebug{
+        def logSplit(name: String, d: DataFrame): Unit = {
+          val total = d.count()
+          val nDel  = d.filter(col("is_delayed") === 1).count()
+          val nOn   = d.filter(col("is_delayed") === 0).count()
+          info(f"[$name] total=$total%8d | delayed=$nDel%8d | on-time=$nOn%8d")
+        }
 
-      // 4) Union et légère randomisation locale sans tri global
-      def lightlyShuffle(df: DataFrame, seed: Long): DataFrame =
-        df.withColumn("__k", (rand(seed)*10).cast("int"))
-          .repartition(col("__k"))
-          .sortWithinPartitions(col("__k"))
-          .drop("__k")
-
-      val devDataRaw  = lightlyShuffle(trainDelayed.unionByName(trainOnTime), seed + 200)
-      val testDataRaw = lightlyShuffle(testDelayed .unionByName(testOnTime ), seed + 201)
-
-      // 5) Logs de contrôle
-      def logSplit(name: String, d: DataFrame): Unit = {
-        val total = d.count()
-        val nDel  = d.filter(col("is_delayed") === 1).count()
-        val nOn   = d.filter(col("is_delayed") === 0).count()
-        info(f"[$name] total=$total%8d | delayed=$nDel%8d | on-time=$nOn%8d | balanced=${nDel==nOn}")
+        logSplit("DEV  (trainBalanced)", devDataRaw)
+        logSplit("TEST (testBalanced)", testDataRaw)
       }
-      logSplit("TRAIN (balanced)", devDataRaw)
-      logSplit("TEST  (balanced)", testDataRaw)
-
       (devDataRaw, testDataRaw)
     }
   }

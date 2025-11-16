@@ -15,7 +15,7 @@ object FlightPreprocessingPipeline {
    * @param spark Session Spark
    * @return DataFrame complètement préprocessé avec labels
    */
-  def execute()(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  def execute(rawFlightData: DataFrame, rawWeatherData: DataFrame, rawWBANAirportTimezoneData: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     info("=" * 80)
     info("[DataPipeline][Step 4/7] Flight Data Preprocessing Pipeline - Start")
@@ -23,35 +23,25 @@ object FlightPreprocessingPipeline {
 
     val processedParquetPath = s"${configuration.common.output.basePath}/common/data/processed_flights.parquet"
 
-    // Load raw data from parquet
-    val rawParquetPath = s"${configuration.common.output.basePath}/common/data/raw_flights.parquet"
-    debug(s"Loading raw data from parquet:")
-    debug(s"  - Path: $rawParquetPath")
-    val originalDf = spark.read.parquet(rawParquetPath)
-    debug(s"  - Loaded ${originalDf.count()} raw records")
-
     debug("[Pipeline Step 1/9] Enriching with WBAN...")
-    val enrichedWithWBAN = FlightWBANEnricher.preprocess(originalDf)
-
-    val enrichedWithWBANPath = s"${configuration.common.output.basePath}/common/data/wban_enriched_flights.parquet"
-    debug(f"[Pipeline Step 1/9] Wrinting Enriched parquer file... {enrichedWithWBANPath}")
+    val enrichedWithWBAN = FlightWBANEnricher.preprocess(rawFlightData, rawWBANAirportTimezoneData)
 
     // Execute preprocessing pipeline (each step creates a new DataFrame)
     debug("[Pipeline Step 2/9] Cleaning flight data...")
-    val cleanedFlightData = FlightDataCleaner.preprocess(enrichedWithWBAN)
+    val cleanedFlightData = FlightDataCleaner.preprocess(enrichedWithWBAN, rawWeatherData, rawWBANAirportTimezoneData)
 
     debug("[Pipeline Step 3/9] Enriching with Datasets ...")
-    val enrichedWithDataset = FlightDataSetFilterGenerator.preprocess(cleanedFlightData)
+    val enrichedWithDataset = FlightDataSetFilterGenerator.preprocess(cleanedFlightData, rawWeatherData, rawWBANAirportTimezoneData)
 
     debug("[Pipeline Step 4/9] Generating arrival data...")
     val enrichedWithArrival = FlightArrivalDataGenerator.preprocess(enrichedWithDataset)
 
     debug("[Pipeline Step 5/9] Generating flight features...")
-    val generatedFlightData = FlightDataGenerator.preprocess(enrichedWithArrival)
+    val generatedFlightData = FlightDataGenerator.preprocess(enrichedWithArrival, rawWeatherData, rawWBANAirportTimezoneData)
 
 
     debug("[Pipeline Step 6/9] Generating labels...")
-    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFlightData)
+    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFlightData,rawWeatherData, rawWBANAirportTimezoneData)
 
 
 

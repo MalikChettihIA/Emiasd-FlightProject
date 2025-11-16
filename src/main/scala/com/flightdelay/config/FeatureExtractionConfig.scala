@@ -11,6 +11,10 @@ case class FeatureTransformationConfig(
 /**
  * Feature extraction configuration
  * @param featureType Type of feature extraction: "pca", "feature_selection", "none"
+ * @param dxCol Column name for delay classification (e.g., "D2_60")
+ * @param delayThresholdMin Delay threshold in minutes for classification
+ * @param nDelayed Number of delayed samples to use for training
+ * @param nOnTime Number of on-time samples to use for training
  * @param pcaVarianceThreshold Variance threshold for PCA (0.0 to 1.0)
  * @param maxCategoricalCardinality Maximum distinct values for a column to be treated as categorical (default: 50)
  * @param flightSelectedFeatures Map of feature names to their transformation config (for feature_selection type)

@@ -13,58 +13,127 @@ object FeaturePipeline {
     flightData: DataFrame,
     weatherData: DataFrame,
     experiment: ExperimentConfig,
-  )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  )(implicit spark: SparkSession, configuration: AppConfiguration): (DataFrame, DataFrame) = {
 
     val pipelineStartTime = System.currentTimeMillis()
 
     info("=" * 80)
     info("[FeaturePipeline] Data Preparation Pipeline - Start")
     info("=" * 80)
-    info("Note: Feature extraction will be done after train/test split to avoid data leakage")
+    info("STRATEGY: Split train/test BEFORE join/explosion for:")
+    info("  1. Guaranteed balanced train/test (50/50 each)")
+    info("  2. Smaller datasets during join/explosion")
+    info("  3. No data leakage (split happens early)")
     info("=" * 80)
 
-    // Balance Flight Dataset
+    // Step 1: Label flights (add is_delayed column)
+    info("[FeaturePipeline][Step 1/5] Labeling flights with is_delayed")
     val labeledFlightData =  DelayBalancedDatasetBuilder.prepareLabeledDataset(
       df = flightData,
-      dxCol = experiment.featureExtraction.dxCol,
-      delayThresholdMin = experiment.featureExtraction.delayThresholdMin,
-      filterOnDxEquals1 = false  // Keep both delayed and on-time flights
+      dxCol = experiment.featureExtraction.dxCol
     )
 
-    // Conditional: Join and explode only if weather data is needed
+    // Step 2: Sample flights according to nDelayed/nOnTime from configuration
+    info("=" * 80)
+    info("[FeaturePipeline][Step 2/5] Sampling flights based on configuration")
+    info("=" * 80)
+    val (balancedFlightTrainData, balancedFlightTestData) = DelayBalancedDatasetBuilder.buildBalancedTrainTest(
+      labeledDf = labeledFlightData,
+      seed = configuration.common.seed
+    )
+
+
+    // Step 4 & 5: Process train and test separately (join + explode)
+    info("=" * 80)
+    info("[FeaturePipeline][Step 4/5] Processing TRAIN flights (join + explode)")
+    info("=" * 80)
+    val trainData = processFlightDataset(balancedFlightTrainData, weatherData, experiment, "TRAIN")
+    debug("[FeaturePipeline][Step 4/5] Processing TRAIN flights (count)"+ trainData.count())
+
+    info("=" * 80)
+    info("[FeaturePipeline][Step 5/5] Processing TEST flights (join + explode)")
+    info("=" * 80)
+    val testData = processFlightDataset(balancedFlightTestData, weatherData, experiment, "TEST")
+    debug("[FeaturePipeline][Step 5/5] Processing TEST flights (count)"+ testData.count())
+
+    // Optional: Save processed data
+    if (configuration.common.storeIntoParquet) {
+
+      if (experiment.featureExtraction.storeJoinData) {
+        val trainPath = s"${configuration.common.output.basePath}/${experiment.name}/data/join_exploded_train_prepared.parquet"
+        info(s"Saving joined flight weather data to parquet:")
+        info(s"  - Path: $trainPath")
+
+        // Coalesce to reduce number of output files (improves write performance)
+        trainData.coalesce(100)
+          .write
+          .mode("overwrite")
+          .option("compression", "zstd")  // Better compression than snappy
+          .parquet(trainPath)
+
+        val testPath = s"${configuration.common.output.basePath}/${experiment.name}/data/join_exploded_test_prepared.parquet"
+        info(s"Saving joined flight weather data to parquet:")
+        info(s"  - Path: $testPath")
+
+        // Coalesce to reduce number of output files (improves write performance)
+        testData.coalesce(100)
+          .write
+          .mode("overwrite")
+          .option("compression", "zstd")  // Better compression than snappy
+          .parquet(testPath)
+
+        info(s"  - Saved successfully")
+      }
+
+
+    }
+
+    val totalDuration = (System.currentTimeMillis() - pipelineStartTime) / 1000.0
+    info("=" * 80)
+    info(s"[FeaturePipeline] Data Preparation Pipeline - End (Total: ${totalDuration}s)")
+    info("=" * 80)
+
+    (trainData, testData)
+  }
+
+  /**
+   * Process a single flight dataset (join + explode or select features)
+   * Used for both train and test to avoid code duplication
+   */
+  private def processFlightDataset(
+    flightData: DataFrame,
+    weatherData: DataFrame,
+    experiment: ExperimentConfig,
+    datasetName: String
+  )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+
     val weatherOriginDepthHours = experiment.featureExtraction.weatherOriginDepthHours
     val weatherDestinationDepthHours = experiment.featureExtraction.weatherDestinationDepthHours
-
-    // Weather join is enabled if at least one depth is >= 0
-    // Negative values explicitly disable weather join for that airport
     val weatherJoinEnabled = weatherOriginDepthHours >= 0 || weatherDestinationDepthHours >= 0
 
-    val dataForML = if (weatherJoinEnabled) {
-
-      info("[Mode] Weather features enabled - performing join and explode")
+    if (weatherJoinEnabled) {
+      info(s"[$datasetName] Weather features enabled - performing join and explode")
       info(s"  - Origin depth: $weatherOriginDepthHours hours ${if (weatherOriginDepthHours < 0) "(DISABLED)" else ""}")
       info(s"  - Destination depth: $weatherDestinationDepthHours hours ${if (weatherDestinationDepthHours < 0) "(DISABLED)" else ""}")
 
-      // Jointure des données
-      info("[FeaturePipeline][Step 1/2] Join flight & Weather data...")
+      // Join
       var stepStartTime = System.currentTimeMillis()
-      val joinedData = join(labeledFlightData, weatherData, experiment)
+      val joinedData = join(flightData, weatherData, experiment).cache()
       var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-      info(s"[FeaturePipeline][Step 1/2] Join Completed in ${stepDuration}s")
+      info(s"[$datasetName] Join completed in ${stepDuration}s")
 
-      // Explosion de la jointure en données exploitable par ML
-      info("[FeaturePipeline][Step 2/2] Exploding Joined flight & Weather data...")
+      // Explode
       stepStartTime = System.currentTimeMillis()
-      val explodedData = explose(joinedData, experiment)
+      val explodedData = explose(joinedData, experiment).cache()
       stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-      info(s"[FeaturePipeline][Step 2/2] Exploding Completed in ${stepDuration}s")
+      info(s"[$datasetName] Explode completed in ${stepDuration}s")
 
       explodedData
 
     } else {
-      info("  Weather features disabled - using flight data only (no join, no explode)")
+      info(s"[$datasetName] Weather features disabled - using flight data only")
 
-      // Just select flight features + target
+      // Select flight features + target
       val flightFeaturesWithTarget = experiment.featureExtraction.flightSelectedFeatures.map { features =>
         val featureNames = features.keys.toSeq
         if (featureNames.contains(experiment.target)) {
@@ -74,14 +143,12 @@ object FeaturePipeline {
           featureNames :+ experiment.target
         }
       }.getOrElse {
-        // If no flight features specified, use all columns
-        labeledFlightData.columns.toSeq
+        flightData.columns.toSeq
       }
 
-      val selectedFlightData = labeledFlightData.select(flightFeaturesWithTarget.map(labeledFlightData(_)): _*)
+      val selectedFlightData = flightData.select(flightFeaturesWithTarget.map(flightData(_)): _*)
       info(s"  - Selected ${flightFeaturesWithTarget.length} flight features")
 
-      // Cache the data
       val cachedFlightData = selectedFlightData.cache()
       whenDebug {
         val count = cachedFlightData.count()
@@ -90,31 +157,6 @@ object FeaturePipeline {
 
       cachedFlightData
     }
-
-    // Save prepared data (feature extraction will be done in MLPipeline after split)
-    val explodedDataPath = s"${configuration.common.output.basePath}/${experiment.name}/data/joined_exploded_data.parquet"
-
-    whenDebug {
-      println(s"[Saving] Prepared data for ML Pipeline:")
-      println(s"  - Path: $explodedDataPath")
-      println(s"  - Records: ${dataForML.count()}")
-    }
-
-    if (configuration.common.storeIntoParquet){
-      dataForML.coalesce(100)
-        .write
-        .mode("overwrite")
-        .option("compression", "zstd")
-        .parquet(explodedDataPath)
-      info(s"  - Saved successfully")
-    }
-
-    val totalDuration = (System.currentTimeMillis() - pipelineStartTime) / 1000.0
-    info("=" * 80)
-    info(s"[FeaturePipeline] Data Preparation Pipeline - End (Total: ${totalDuration}s)")
-    info("=" * 80)
-
-    dataForML
   }
 
   def join(
@@ -170,20 +212,7 @@ object FeaturePipeline {
       // Force materialization with a single count
       whenDebug{
         val joinedCount = cachedJoinedData.count()
-        println(f"  - Joined records: ${joinedCount}%,d with ${cachedJoinedData.columns.length}%3d columns")
-      }
-
-      if (experimentConfig.featureExtraction.storeJoinData) {
-        val joinedParquetPath = s"${configuration.common.output.basePath}/${experimentConfig.name}/data/joined_flights_weather.parquet"
-        info(s"Saving joined flight weather data to parquet:")
-        info(s"  - Path: $joinedParquetPath")
-
-        // Coalesce to reduce number of output files (improves write performance)
-        cachedJoinedData.coalesce(100)
-          .write
-          .mode("overwrite")
-          .option("compression", "zstd")  // Better compression than snappy
-          .parquet(joinedParquetPath)
+        debug(f"  - Joined records: ${joinedCount}%,d with ${cachedJoinedData.columns.length}%3d columns")
       }
 
       cachedJoinedData
@@ -326,13 +355,7 @@ object FeaturePipeline {
           .option("compression", "zstd")  // Better compression
           .parquet(explodedParquetPath)
 
-      } else {
-        // Force materialization even if we don't save
-        // This ensures the cache is populated before feature extraction
-        val explodedCount = cachedResult.count()
-        info(s"  - Exploded records: ${explodedCount}")
       }
-
       cachedResult
     }
   }
