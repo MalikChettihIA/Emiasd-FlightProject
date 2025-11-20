@@ -48,13 +48,13 @@ object FeaturePipeline {
     info("[FeaturePipeline][Step 4/5] Processing TRAIN flights (join + explode)")
     info("=" * 80)
     val trainData = processFlightDataset(balancedFlightTrainData, weatherData, experiment, "TRAIN")
-    debug("[FeaturePipeline][Step 4/5] Processing TRAIN flights (count)"+ trainData.count())
+    info("[FeaturePipeline][Step 4/5] Processing TRAIN flights (count)"+ trainData.count())
 
     info("=" * 80)
     info("[FeaturePipeline][Step 5/5] Processing TEST flights (join + explode)")
     info("=" * 80)
     val testData = processFlightDataset(balancedFlightTestData, weatherData, experiment, "TEST")
-    debug("[FeaturePipeline][Step 5/5] Processing TEST flights (count)"+ testData.count())
+    info("[FeaturePipeline][Step 5/5] Processing TEST flights (count)"+ testData.count())
 
     // Optional: Save processed data
     if (configuration.common.storeIntoParquet) {
@@ -120,13 +120,13 @@ object FeaturePipeline {
       var stepStartTime = System.currentTimeMillis()
       val joinedData = join(flightData, weatherData, experiment).cache()
       var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-      info(s"[$datasetName] Join completed in ${stepDuration}s")
+      info(s"[$datasetName] Join completed in ${stepDuration}s - ${joinedData.count()} lines")
 
       // Explode
       stepStartTime = System.currentTimeMillis()
       val explodedData = explose(joinedData, experiment).cache()
       stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-      info(s"[$datasetName] Explode completed in ${stepDuration}s")
+      info(s"[$datasetName] Explode completed in ${stepDuration}s - ${explodedData.count()} lines")
 
       explodedData
 
@@ -220,142 +220,123 @@ object FeaturePipeline {
 
   }
 
-  def explose(data: DataFrame, experimentConfig: ExperimentConfig)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+  def explose(
+                data: DataFrame,
+                experimentConfig: ExperimentConfig
+              )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     MetricsUtils.withUiLabels(
       groupId = "FeaturePipeline.explose",
-      desc    = "",
-      tags    = "sampling,split,balance"
+      desc    = "flatten weather structs",
+      tags    = "weather,flatten,features"
     ) {
       import org.apache.spark.sql.functions._
+      import org.apache.spark.sql.types._
 
-      val weatherOriginDepthHours = experimentConfig.featureExtraction.weatherOriginDepthHours
-      val weatherDestinationDepthHours = experimentConfig.featureExtraction.weatherDestinationDepthHours
+      // 1) Colonnes struct météo à aplatir : Wo_h*, Wd_h*
+      val weatherStructCols: Seq[StructField] =
+        data.schema.fields.collect {
+          case f @ StructField(name, st: StructType, _, _)
+            if name.matches("(Wo_h\\d+|Wd_h\\d+)") =>
+            f
+        }
 
-      // Check if both are negative (no weather data at all)
-      if (weatherOriginDepthHours < 0 && weatherDestinationDepthHours < 0) {
-        info("  Both weather depth values are negative - NO weather explosion needed")
+      if (weatherStructCols.isEmpty) {
+        info("No weather struct columns found (Wo_h*, Wd_h*). Nothing to explode.")
         return data
       }
 
-      // Get weather feature names from config, or auto-detect from schema
-      val weatherFeatures: Seq[String] = experimentConfig.featureExtraction.weatherSelectedFeatures match {
-        case Some(featuresMap) =>
-          // Extract keys from the Map[String, FeatureTransformationConfig]
-          featuresMap.keys.toSeq
-        case None =>
-          // Auto-detect: extract all field names from origin_weather_observations array struct
-          if (data.columns.contains("origin_weather_observations")) {
-            import org.apache.spark.sql.types.{ArrayType, StructType}
-            val arraySchema = data.schema("origin_weather_observations").dataType
-            arraySchema match {
-              case ArrayType(elementType: StructType, _) =>
-                val fields = elementType.fieldNames.toSeq
-                info(s"[Auto-detect] No weatherSelectedFeatures defined, using all ${fields.length} fields from schema:")
-                info(s"  ${fields.mkString(", ")}")
-                fields
-              case _ =>
-                throw new IllegalArgumentException(
-                  "weatherSelectedFeatures not defined and cannot auto-detect from origin_weather_observations schema"
-                )
-            }
-          } else {
-            throw new IllegalArgumentException(
-              "weatherSelectedFeatures must be defined in configuration when origin_weather_observations column is missing"
-            )
+      // 2) Features météo à extraire : config → sinon auto-détection sur le premier struct
+      val weatherFeatures: Seq[String] =
+        experimentConfig.featureExtraction.weatherSelectedFeatures
+          .map(_.keys.toSeq)
+          .getOrElse {
+            val firstStructType = weatherStructCols.head.dataType.asInstanceOf[StructType]
+            val dropMeta = Set("hour", "WBAN", "WDATE", "WTIME_HHMM")
+            val fields = firstStructType.fieldNames.filterNot(dropMeta.contains).toSeq
+            info(s"[Auto-detect] Using ${fields.length} weather fields from struct schema:")
+            info(s"  ${fields.mkString(", ")}")
+            fields
           }
-      }
 
-      info(s"Exploding weather observation arrays:")
+      info(s"Flattening weather structs:")
+      info(s"  - Struct columns: ${weatherStructCols.map(_.name).mkString(", ")}")
       info(s"  - Weather features: ${weatherFeatures.mkString(", ")}")
-      info(s"  - Depth Origin hours: $weatherOriginDepthHours observations ${if (weatherOriginDepthHours < 0) "(DISABLED)" else ""}")
-      info(s"  - Depth Destination hours: $weatherDestinationDepthHours observations ${if (weatherDestinationDepthHours < 0) "(DISABLED)" else ""}")
       info(s"  - Input columns: ${data.columns.length}")
 
       var result = data
       var totalAddedColumns = 0
 
-      // Explode origin_weather_observations (only if depth >= 0 and column exists)
-      // Pattern: origin_weather_SkyCondition-3, origin_weather_Visibility-3, ..., origin_weather_SkyCondition-0, origin_weather_Visibility-0
-      // Mapping: array[0] (oldest) → suffix -N, array[N] (most recent) → suffix -0
-      // Example: depth=3 → 4 observations [0, 1, 2, 3] = heure départ, départ-1, départ-2, départ-3
-      if (weatherOriginDepthHours >= 0 && data.columns.contains("origin_weather_observations")) {
-        (0 to weatherOriginDepthHours).foreach { arrayIdx =>
-          val suffixIdx = weatherOriginDepthHours - arrayIdx  // Reverse: array[0]→-N, array[N]→-0
-          weatherFeatures.foreach { feature =>
-            result = result.withColumn(
-              s"origin_weather_${feature}-${suffixIdx}",
-              col("origin_weather_observations").getItem(arrayIdx).getField(feature)
-            )
+      // 3) Aplatissement de chaque struct Wo_h*, Wd_h*
+      weatherStructCols.foreach { sf =>
+        val structName = sf.name              // ex: "Wd_h1"
+        val structType = sf.dataType.asInstanceOf[StructType]
+
+        val isOrigin = structName.startsWith("Wo_")
+        val prefix   = if (isOrigin) "origin_weather" else "destination_weather"
+
+        // Récupère "h1", "h2", ...
+        val hSuffix: String = "_h(\\d+)".r
+          .findFirstMatchIn(structName)
+          .map(m => s"h${m.group(1)}")
+          .getOrElse("h0")
+
+        // On peut aussi remonter les méta-infos si besoin
+        val metaFields = Seq("hour", "WBAN", "WDATE", "WTIME_HHMM")
+
+        metaFields.foreach { fName =>
+          if (structType.fieldNames.contains(fName)) {
+            val outName = s"${prefix}_${fName}_${hSuffix}"
+            result = result.withColumn(outName, col(structName).getField(fName))
             totalAddedColumns += 1
           }
         }
-        result = result.drop("origin_weather_observations")
-        val numObs = weatherOriginDepthHours + 1
-        info(s"  - Exploded origin_weather_observations into ${numObs * weatherFeatures.length} columns ($numObs observations)")
-      } else if (weatherOriginDepthHours < 0) {
-        info(s"  - Skipped origin_weather_observations explosion (disabled)")
-      }
 
-      // Explode destination_weather_observations (only if depth >= 0 and column exists)
-      // Pattern: destination_weather_SkyCondition-3, destination_weather_Visibility-3, ..., destination_weather_SkyCondition-0, destination_weather_Visibility-0
-      // Mapping: array[0] (oldest) → suffix -N, array[N] (most recent) → suffix -0
-      // Example: depth=3 → 4 observations [0, 1, 2, 3] = heure arrivée, arrivée-1, arrivée-2, arrivée-3
-      if (weatherDestinationDepthHours >= 0 && data.columns.contains("destination_weather_observations")) {
-        (0 to weatherDestinationDepthHours).foreach { arrayIdx =>
-          val suffixIdx = weatherDestinationDepthHours - arrayIdx  // Reverse: array[0]→-N, array[N]→-0
-          weatherFeatures.foreach { feature =>
-            result = result.withColumn(
-              s"destination_weather_${feature}-${suffixIdx}",
-              col("destination_weather_observations").getItem(arrayIdx).getField(feature)
-            )
+        // Les vraies features météo
+        weatherFeatures.foreach { feature =>
+          if (structType.fieldNames.contains(feature)) {
+            val outName = s"${prefix}_${feature}_${hSuffix}"
+            result = result.withColumn(outName, col(structName).getField(feature))
             totalAddedColumns += 1
+          } else {
+            // optionnel : log en debug si la feature n'existe pas dans le struct
+            whenDebug {
+              info(s"[explose2] Feature '$feature' not found in struct '$structName'")
+            }
           }
         }
-        result = result.drop("destination_weather_observations")
-        val numObs = weatherDestinationDepthHours + 1
-        info(s"  - Exploded destination_weather_observations into ${numObs * weatherFeatures.length} columns ($numObs observations)")
-      } else if (weatherDestinationDepthHours < 0) {
-        info(s"  - Skipped destination_weather_observations explosion (disabled)")
+
+        // On supprime le struct une fois aplati
+        result = result.drop(structName)
       }
 
-      // Cleanup: supprimer les colonnes weather_observations restantes si les valeurs sont négatives
-      if (weatherOriginDepthHours < 0 && result.columns.contains("origin_weather_observations")) {
-        info(s"  - Removing origin_weather_observations (depth=$weatherOriginDepthHours)")
-        result = result.drop("origin_weather_observations")
-      }
-
-      if (weatherDestinationDepthHours < 0 && result.columns.contains("destination_weather_observations")) {
-        info(s"  - Removing destination_weather_observations (depth=$weatherDestinationDepthHours)")
-        result = result.drop("destination_weather_observations")
-      }
-
-      info(s"  - Total added columns: ${totalAddedColumns}")
+      info(s"  - Total added columns: $totalAddedColumns")
       info(s"  - Output columns: ${result.columns.length}")
-
-      // OPTIMIZATION: Cache exploded data before any action (count or save)
       info("  - Caching exploded data...")
+
       val cachedResult = result.cache()
 
-      // Optionally save exploded data
+      // Optionnel : sauvegarde comme avant
       if (experimentConfig.featureExtraction.storeExplodeJoinData) {
-        val explodedParquetPath = s"${configuration.common.output.basePath}/${experimentConfig.name}/data/joined_exploded_data.parquet"
+        val explodedParquetPath =
+          s"${configuration.common.output.basePath}/${experimentConfig.name}/data/joined_exploded_data.parquet"
+
         info(s"Saving exploded data to parquet:")
         info(s"  - Path: $explodedParquetPath")
 
-        // Force materialization with count before save
-        whenDebug{
+        whenDebug {
           val explodedCount = cachedResult.count()
-          info(s"  - Exploded records: ${explodedCount}")
+          info(s"  - Exploded records: $explodedCount")
         }
-        // Coalesce to reduce number of output files
-        cachedResult.coalesce(100)
+
+        cachedResult
+          .coalesce(100)
           .write
           .mode("overwrite")
-          .option("compression", "zstd")  // Better compression
+          .option("compression", "zstd")
           .parquet(explodedParquetPath)
-
       }
+
       cachedResult
     }
   }

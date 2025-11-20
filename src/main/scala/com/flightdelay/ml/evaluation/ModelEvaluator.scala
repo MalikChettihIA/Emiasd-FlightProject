@@ -54,9 +54,9 @@ object ModelEvaluator {
    * @param metricsOutputPath Optional path to save metrics to CSV
    * @return EvaluationMetrics object with all computed metrics
    */
-  def evaluate(predictions: DataFrame, metricsOutputPath: Option[String] = None)(implicit spark: SparkSession, configuration: AppConfiguration): EvaluationMetrics = {
+  def evaluate(predictions: DataFrame, metricsOutputPath: Option[String] = None, datasetType: String)(implicit spark: SparkSession, configuration: AppConfiguration): EvaluationMetrics = {
     info("=" * 80)
-    info("[STEP 4] Model Evaluation")
+    info(s"[STEP 4] ${datasetType} -- Model Evaluation")
     info("=" * 80)
 
     // Check if already cached to avoid double caching
@@ -174,10 +174,10 @@ object ModelEvaluator {
     info("=" * 80)
 
     info("[Training Set Evaluation]")
-    val trainMetrics = evaluate(trainPredictions)
+    val trainMetrics = evaluate(predictions = trainPredictions, datasetType = s"[K-Fold CV] [Training Set Evaluation]")
 
     info("[Test Set Evaluation]")
-    val testMetrics = evaluate(testPredictions)
+    val testMetrics = evaluate(predictions = testPredictions, datasetType = s"[K-Fold CV] [Training Set Evaluation]")
 
     // Compute overfitting indicator
     val accuracyGap = trainMetrics.accuracy - testMetrics.accuracy

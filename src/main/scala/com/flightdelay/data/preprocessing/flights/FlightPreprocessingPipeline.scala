@@ -39,18 +39,19 @@ object FlightPreprocessingPipeline {
     debug("[Pipeline Step 5/9] Generating flight features...")
     val generatedFlightData = FlightDataGenerator.preprocess(enrichedWithArrival, rawWeatherData, rawWBANAirportTimezoneData)
 
+    generatedFlightData
 
-    debug("[Pipeline Step 6/9] Generating labels...")
-    val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFlightData,rawWeatherData, rawWBANAirportTimezoneData)
+    //debug("[Pipeline Step 6/9] Generating labels...")
+    //val generatedFightDataWithLabels = FlightLabelGenerator.preprocess(generatedFlightData,rawWeatherData, rawWBANAirportTimezoneData)
 
 
 
     // Validate schema
-    debug("[Pipeline Step 9/9] Validating schema...")
-    validatePreprocessedSchema(generatedFightDataWithLabels)
+    //debug("[Pipeline Step 9/9] Validating schema...")
+    //validatePreprocessedSchema(generatedFightDataWithLabels)
 
     // Relire depuis le disque pour retourner un DataFrame propre
-    generatedFightDataWithLabels
+    //generatedFightDataWithLabels
   }
 
 
@@ -91,17 +92,6 @@ object FlightPreprocessingPipeline {
       "DEST_TIMEZONE"
     )
 
-    // Required label columns
-    val requiredLabelColumns = Seq(
-      "label_arr_delay_filled",
-      "label_weather_delay_filled",
-      "label_nas_delay_filled",
-      "label_is_delayed_15min",
-      "label_is_delayed_30min",
-      "label_is_delayed_60min",
-      "label_is_delayed_90min"
-    )
-
     val schema = df.schema
     val availableColumns = df.columns.toSet
     var validationPassed = true
@@ -126,17 +116,6 @@ object FlightPreprocessingPipeline {
     // Validate generated columns
     debug("Validating generated columns:")
     requiredGeneratedColumns.foreach { colName =>
-      if (!availableColumns.contains(colName)) {
-        debug(s"  ✗ Missing column: $colName")
-        validationPassed = false
-      } else {
-        debug(s"   $colName")
-      }
-    }
-
-    // Validate label columns
-    debug("Validating label columns:")
-    requiredLabelColumns.foreach { colName =>
       if (!availableColumns.contains(colName)) {
         debug(s"  ✗ Missing column: $colName")
         validationPassed = false

@@ -659,7 +659,7 @@ def generate_comprehensive_report(metrics, output_dir):
     """Generate comprehensive text summary report"""
     report = []
     report.append("=" * 80)
-    report.append("ML PIPELINE COMPREHENSIVE PERFORMANCE REPORT")
+    report.append("FINAL -- ML PIPELINE COMPREHENSIVE PERFORMANCE REPORT")
     report.append("=" * 80)
     report.append("")
 
@@ -827,7 +827,7 @@ def main():
         sys.exit(1)
 
     print("=" * 80)
-    print("ML Pipeline - Comprehensive Metrics Visualization")
+    print("FINAL -- ML Pipeline - Comprehensive Metrics Visualization")
     print("=" * 80)
     print(f"\nMetrics directory: {metrics_dir}\n")
 

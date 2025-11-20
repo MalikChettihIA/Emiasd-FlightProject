@@ -121,8 +121,8 @@ object DataPipeline {
   private def filterFlightColumns(df: DataFrame)(implicit configuration: AppConfiguration): DataFrame = {
     //Extra columns needed for feature engineering
     val extraColumns = Seq("ARR_DELAY_NEW", "D1", "D2_15", "D2_30", "D2_45", "D2_60", "D2_90", "D3", "D4", "UTC_FL_DATE",
-      "feature_utc_departure_hour_rounded", "UTC_ARR_DATE", "feature_utc_arrival_hour_rounded", "feature_flight_unique_id",
-      "feature_flight_unique_id","ORIGIN_WBAN","DEST_WBAN","UTC_FL_DATE","UTC_ARR_DATE","UTC_CRS_DEP_TIME","UTC_ARR_TIME",
+      "feature_utc_departure_hour_rounded", "feature_utc_arrival_hour_rounded", "feature_flight_unique_id",
+      "ORIGIN_WBAN","DEST_WBAN","UTC_FL_DATE","UTC_ARR_DATE","UTC_CRS_DEP_TIME","UTC_ARR_TIME",
       "WEATHER_DELAY","NAS_DELAY")
 
     // Collecter toutes les colonnes nécessaires de toutes les expériences activées

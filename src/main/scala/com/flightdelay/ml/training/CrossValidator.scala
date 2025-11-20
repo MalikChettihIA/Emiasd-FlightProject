@@ -41,7 +41,6 @@ object CrossValidator {
 
   /**
    * Simple K-fold CV without grid search
-   * ✅ MODIFIÉ : Sauvegarde/rechargement du modèle pour éviter le broadcast
    */
   private def validateSimple(
                               devData: DataFrame,
@@ -88,7 +87,7 @@ object CrossValidator {
             // Evaluate on validation fold with reloaded model
             info(s"     Evaluating on validation fold...")
             val valPredictions = reloadedModel.transform(valFold)
-            val evaluationMetrics = ModelEvaluator.evaluate(valPredictions)
+            val evaluationMetrics = ModelEvaluator.evaluate(predictions = valPredictions, datasetType = "[No K-Fold CV]")
 
             info(f"     Val Metrics: Acc=${evaluationMetrics.accuracy * 100}%.2f%% | F1=${evaluationMetrics.f1Score * 100}%.2f%% | AUC=${evaluationMetrics.areaUnderROC}%.4f")
 
@@ -98,7 +97,7 @@ object CrossValidator {
             // Si ce n'est pas un PipelineModel, évaluer directement (risque de broadcast)
             info(s"      Model is not PipelineModel, evaluating directly (may cause broadcast issues)")
             val valPredictions = trainedModel.transform(valFold)
-            val evaluationMetrics = ModelEvaluator.evaluate(valPredictions)
+            val evaluationMetrics = ModelEvaluator.evaluate(predictions = valPredictions, datasetType = "[No K-Fold CV]")
 
             info(f"     Val Metrics: Acc=${evaluationMetrics.accuracy * 100}%.2f%% | F1=${evaluationMetrics.f1Score * 100}%.2f%% | AUC=${evaluationMetrics.areaUnderROC}%.4f")
 
@@ -145,8 +144,8 @@ object CrossValidator {
       // Split data
       val trainFold = dataWithFold.filter(col("fold") =!= foldIdx).drop("fold")
       val valFold = dataWithFold.filter(col("fold") === foldIdx).drop("fold")
-      debug(s"[CrossValidator][trainFold] ${trainFold.count()}")
-      debug(s"[CrossValidator][valFold] ${valFold.count()}")
+      info(s"[CrossValidator][trainFold] ${trainFold.count()}")
+      info(s"[CrossValidator][valFold] ${valFold.count()}")
 
       // Train with specific params
       val trainedModel = Trainer.trainWithParams(trainFold, experiment, params)
@@ -163,12 +162,12 @@ object CrossValidator {
 
             // Evaluate
             val valPredictions = reloadedModel.transform(valFold)
-            ModelEvaluator.evaluate(valPredictions)
+            ModelEvaluator.evaluate(predictions = valPredictions, datasetType = s"[K-Fold CV] [FoldIndex ${foldIdx}]")
 
           case _ =>
             // Fallback : évaluer directement
             val valPredictions = trainedModel.transform(valFold)
-            ModelEvaluator.evaluate(valPredictions)
+            ModelEvaluator.evaluate(predictions = valPredictions, datasetType = s"[K-Fold CV] [FoldIndex ${foldIdx}]")
         }
 
       } finally {

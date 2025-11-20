@@ -140,13 +140,14 @@ object MLPipeline {
     info("Note: Train/test split was done in FeaturePipeline BEFORE join/explosion")
     info("      This ensures balanced datasets and avoids manipulating huge datasets")
 
-    //whenDebug{
+    whenDebug{
       val devCount = devDataRaw.count()
       val testCount = testDataRaw.count()
       val testRatio = 1.0 - experiment.train.trainRatio
-      info(f"  - Development set: $devCount%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
-      info(f"  - Hold-out test:   $testCount%,d samples (${testRatio * 100}%.0f%%)")
-    //}
+      debug(f"  - Development set: $devCount%,d samples (${experiment.train.trainRatio * 100}%.0f%%)")
+      debug(f"  - Hold-out test:   $testCount%,d samples (${testRatio * 100}%.0f%%)")
+    }
+
     // ========================================================================
     // STEP 2,3: Feature extraction (fit on TRAIN only, transform both)
     // ========================================================================
@@ -158,7 +159,7 @@ object MLPipeline {
     // Extract features from dev set (fit + transform)
     // Returns both transformed data AND fitted models for reuse on test set
     val (devData, featureModels) = FeatureExtractor.extract(devDataRaw, experiment)
-    debug(f"   Dev features extracted: ${devData.count()}%,d records")
+    info(f"   Dev features extracted: ${devData.count()}%,d records")
 
     // Transform test set using pre-fitted models from dev set (NO REFITTING)
     info("=" * 80)
@@ -169,7 +170,7 @@ object MLPipeline {
     info("  - Scaler: uses statistics (mean/std) from dev set only")
     info("  - PCA: uses components fitted on dev set only")
     val testData = FeatureExtractor.transform(testDataRaw, featureModels, experiment)
-    debug(f"   Test features extracted: ${testData.count()}%,d records")
+    info(f"   Test features extracted: ${testData.count()}%,d records")
 
     // ========================================================================
     // STEP 4: K-fold CV + Grid Search on dev set
@@ -246,7 +247,7 @@ object MLPipeline {
 
     info(s"   Evaluating on hold-out test set...")
     val testPredictions = reloadedModel.transform(testData)
-    val holdOutMetrics = ModelEvaluator.evaluate(testPredictions)
+    val holdOutMetrics = ModelEvaluator.evaluate(predictions=testPredictions, datasetType="[Hold-out Test] ")
 
     info(f"  Hold-out Test Metrics:")
     info(f"    Accuracy:  ${holdOutMetrics.accuracy * 100}%6.2f%%")

@@ -61,7 +61,7 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
     // Ajouter D2_<seuil>
     val dfWithD2 = D2_THRESHOLDS_MINUTES.foldLeft(baseDf) { (acc, thr) =>
       val colName = s"D2_$thr"
-      val d2col = when((wthr > 0) && (nas >= thr) , 1).otherwise(0)
+      val d2col = when((wthr > 0) or (nas >= thr) , 1).otherwise(0)
       acc.withColumn(colName, d2col)
     }
 
@@ -85,7 +85,7 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
       colsToLog.foreach { c =>
         val n = enriched.filter(col(c) === 1).count()
         val pct = if (total > 0) (n.toDouble / total * 100) else 0.0
-        debug(f" - $c%-6s : $n%8d vols (${pct}%.2f%%)")
+        info(f" - $c%-6s : $n%8d vols (${pct}%.2f%%)")
       }
     }
 

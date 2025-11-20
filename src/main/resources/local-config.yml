@@ -12,7 +12,7 @@ common:
   log: true                   # Enable/disable all logging
   logLevel: "info"            # Minimum log level: debug, info, warn, error
   loadDataFromCSV: false       # If true: load from csv; if false: load from raw parquet
-  storeIntoParquet: false     # If true: save loaded data to parquet; if false: skip parquet saving
+  storeIntoParquet: true     # If true: save loaded data to parquet; if false: skip parquet saving
 
   data:
     basePath: "/data"
@@ -39,7 +39,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-local-7-7"
+  - name: "Experience-local-3-3"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -48,10 +48,10 @@ experiments:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: false
-      storeExplodeJoinData: false
-      weatherOriginDepthHours: 7
-      weatherDestinationDepthHours: 7
+      storeJoinData: true
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: 3
+      weatherDestinationDepthHours: 3
       maxCategoricalCardinality: 50
 
       flightSelectedFeatures:
@@ -108,19 +108,19 @@ experiments:
     model:
       modelType: "randomforest"
       hyperparameters:
-        numTrees: [50, 100]              # plus d’arbres, mais raisonnable
-        maxDepth: [4, 6, 8]              # tester plus shallow que 7
-        maxBins: [280]                   # on ne touche pas (contrainte catégories)
-        minInstancesPerNode: [5, 10, 20] # plus élevé = arbres plus lisses
-        subsamplingRate: [0.7, 1.0]      # 0.7 = un peu de bagging en plus
-        featureSubsetStrategy: ["sqrt", "log2", "all"]
+        numTrees: [15]
+        maxDepth: [7]
+        maxBins: [280]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
         impurity: "gini"
 
     train:
       trainRatio: 0.75
 
       crossValidation:
-        numFolds: 2
+        numFolds: 4
 
       gridSearch:
         enabled: true

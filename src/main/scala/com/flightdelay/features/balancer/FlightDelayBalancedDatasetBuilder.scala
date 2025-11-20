@@ -104,7 +104,7 @@ object DelayBalancedDatasetBuilder {
         .drop("__rnd")
 
       // Quick logging
-      whenDebug{
+     //whenDebug{
         def logSplit(name: String, d: DataFrame): Unit = {
           val total = d.count()
           val nDel  = d.filter(col("is_delayed") === 1).count()
@@ -114,7 +114,7 @@ object DelayBalancedDatasetBuilder {
 
         logSplit("DEV  (trainBalanced)", devDataRaw)
         logSplit("TEST (testBalanced)", testDataRaw)
-      }
+      //}
       (devDataRaw, testDataRaw)
     }
   }

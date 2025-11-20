@@ -171,7 +171,12 @@ object FlightDelayPredictionApp {
       info("=" * 80)
       info(s"Feature Type: ${experiment.featureExtraction.featureType}")
 
-      val (trainData, testData) = FeaturePipeline.execute(flightData, weatherData, experiment)
+      val (train, test) = FeaturePipeline.execute(flightData, weatherData, experiment)
+
+      info("Checkpointing prepared data to cut lineage and optimize performance...")
+      val trainData = train.checkpoint()
+      val testData = test.checkpoint()
+      info("Checkpoint completed!")
       info("=" * 80)
       (trainData, testData)
     } else {
