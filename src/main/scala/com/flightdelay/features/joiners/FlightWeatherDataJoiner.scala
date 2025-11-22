@@ -176,7 +176,7 @@ object FlightWeatherDataJoiner {
         .drop("wmap")
 
       val wdCols = (0 until weatherDestinationDepthHours).map(i => col("Wd").getItem(i).as(s"Wd_h${i+1}"))
-      
+
       val baseCols: Seq[org.apache.spark.sql.Column] =
         withOriginWeather.columns.map(col).toSeq
 

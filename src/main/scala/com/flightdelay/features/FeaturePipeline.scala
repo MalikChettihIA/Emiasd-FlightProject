@@ -120,13 +120,13 @@ object FeaturePipeline {
       var stepStartTime = System.currentTimeMillis()
       val joinedData = join(flightData, weatherData, experiment).cache()
       var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-      info(s"[$datasetName] Join completed in ${stepDuration}s - ${joinedData.count()} lines")
+      debug(s"[$datasetName] Join completed in ${stepDuration}s - ${joinedData.count()} lines")
 
       // Explode
       stepStartTime = System.currentTimeMillis()
       val explodedData = explose(joinedData, experiment).cache()
       stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
-      info(s"[$datasetName] Explode completed in ${stepDuration}s - ${explodedData.count()} lines")
+      debug(s"[$datasetName] Explode completed in ${stepDuration}s - ${explodedData.count()} lines")
 
       explodedData
 
@@ -314,30 +314,7 @@ object FeaturePipeline {
       info(s"  - Output columns: ${result.columns.length}")
       info("  - Caching exploded data...")
 
-      val cachedResult = result.cache()
-
-      // Optionnel : sauvegarde comme avant
-      if (experimentConfig.featureExtraction.storeExplodeJoinData) {
-        val explodedParquetPath =
-          s"${configuration.common.output.basePath}/${experimentConfig.name}/data/joined_exploded_data.parquet"
-
-        info(s"Saving exploded data to parquet:")
-        info(s"  - Path: $explodedParquetPath")
-
-        whenDebug {
-          val explodedCount = cachedResult.count()
-          info(s"  - Exploded records: $explodedCount")
-        }
-
-        cachedResult
-          .coalesce(100)
-          .write
-          .mode("overwrite")
-          .option("compression", "zstd")
-          .parquet(explodedParquetPath)
-      }
-
-      cachedResult
+      result.cache()
     }
   }
 }

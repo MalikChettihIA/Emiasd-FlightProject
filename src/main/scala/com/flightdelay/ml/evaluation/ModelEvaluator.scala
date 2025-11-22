@@ -85,10 +85,18 @@ object ModelEvaluator {
       cachedPredictions.printSchema
     }
 
+    //val accuracy = multiclassEval.setMetricName("accuracy").evaluate(cachedPredictions)
+    //val precision = multiclassEval.setMetricName("weightedPrecision").evaluate(cachedPredictions)
+    //val recall = multiclassEval.setMetricName("weightedRecall").evaluate(cachedPredictions)
+    //val f1 = multiclassEval.setMetricName("f1").evaluate(cachedPredictions)
+
     val accuracy = multiclassEval.setMetricName("accuracy").evaluate(cachedPredictions)
-    val precision = multiclassEval.setMetricName("weightedPrecision").evaluate(cachedPredictions)
-    val recall = multiclassEval.setMetricName("weightedRecall").evaluate(cachedPredictions)
-    val f1 = multiclassEval.setMetricName("f1").evaluate(cachedPredictions)
+
+    // Calculate precision, recall, and F1 manually from confusion matrix for class 1 (delayed)
+    // This avoids issues with weighted metrics producing identical values
+    val precision = if (tp + fp > 0) tp.toDouble / (tp + fp) else 0.0
+    val recall = if (tp + fn > 0) tp.toDouble / (tp + fn) else 0.0
+    val f1 = if (precision + recall > 0) 2.0 * (precision * recall) / (precision + recall) else 0.0
 
     // Binary classification metrics evaluator
     val binaryEval = new BinaryClassificationEvaluator()

@@ -176,8 +176,24 @@ object DataPipeline {
     }.distinct
 
     if (selectedColumns.isEmpty) {
-      info("[DataPipeline] No weather feature selection configured - keeping all columns")
-      df
+      info("[DataPipeline] No weather feature selection configured - keeping only essential WBAN, Date, Time")
+
+      // Colonnes essentielles à toujours garder (pour le join et le traitement)
+      val essentialColumns = Seq(
+        "WBAN", "Date", "Time"
+      )
+
+      // Union des colonnes sélectionnées et essentielles
+      val allRequiredColumns = (essentialColumns).distinct
+        .filter(df.columns.contains) // Ne garder que les colonnes qui existent
+
+      info(s"[DataPipeline] Filtering weather columns: keeping ${allRequiredColumns.length} / ${df.columns.length} columns")
+      whenDebug {
+        debug(s"  - Selected columns: ${allRequiredColumns.sorted.mkString(", ")}")
+      }
+
+      df.select(allRequiredColumns.head, allRequiredColumns.tail: _*)
+
     } else {
       // Colonnes essentielles à toujours garder (pour le join et le traitement)
       val essentialColumns = Seq(

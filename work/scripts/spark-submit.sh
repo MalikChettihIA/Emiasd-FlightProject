@@ -7,7 +7,7 @@
 #TASKS="${1:-data-pipeline,feature-extraction}"
 #TASKS="${1:-data-pipeline,feature-extraction,train}"
 
-TASKS="${1:-train}"
+TASKS="${1:-data-pipeline,feature-extraction,train}"
 
 spark-submit \
   --master "$SPARK_MASTER_URL" \
@@ -15,6 +15,7 @@ spark-submit \
   --class com.flightdelay.app.FlightDelayPredictionApp \
   --driver-memory 40G \
   --driver-cores 10 \
+  --executor-memory 4g \
   --conf spark.driver.maxResultSize=8g \
   --conf spark.sql.shuffle.partitions=400 \
   --conf spark.default.parallelism=400 \

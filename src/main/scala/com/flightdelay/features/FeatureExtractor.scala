@@ -50,7 +50,6 @@ case class FeatureExtractionModels(
  */
 object FeatureExtractor {
 
-  private val handleInvalid = "keep"
   private val defaultVarianceThreshold = 0.70 // 70% minimum variance
 
   private val _featuresVec = "featuresVec"
@@ -91,21 +90,20 @@ object FeatureExtractor {
         val configPipeline = ConfigurationBasedFeatureExtractorPipeline(
           featureConfig = experiment.featureExtraction,
           target = target,
-          handleInvalid = handleInvalid
+          handleInvalid = experiment.featureExtraction.handleInvalid
         )
 
         // Print pipeline configuration summary
         configPipeline.printSummary()
 
-        val (model, transformed) = configPipeline.fitTransform(cleaData)
+        val (model, transformed) = configPipeline.fitTransform(cleaData, experiment)
 
         // OPTIMIZATION: Cache transformed features before any further operations
         info("  - Caching transformed features...")
         val cachedTransformed = transformed.cache()
 
         // Force materialization with a single count
-        val transformedCount = cachedTransformed.count()
-        info(s"  - Transformed ${transformedCount} records")
+        debug(s"  - Transformed ${cachedTransformed.count()} records")
 
         //  Get transformed feature names (after StringIndexer, OneHotEncoder, explosion)
         // These names correspond to the actual indices in the feature vector
@@ -156,7 +154,7 @@ object FeatureExtractor {
           dateCols = allDateCols,
           target = target,
           maxCat = experiment.featureExtraction.maxCategoricalCardinality,
-          handleInvalid = handleInvalid,
+          handleInvalid = experiment.featureExtraction.handleInvalid,
           scalerType = scalerType
         )
 

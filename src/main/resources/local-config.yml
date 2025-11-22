@@ -12,7 +12,7 @@ common:
   log: true                   # Enable/disable all logging
   logLevel: "info"            # Minimum log level: debug, info, warn, error
   loadDataFromCSV: false       # If true: load from csv; if false: load from raw parquet
-  storeIntoParquet: true     # If true: save loaded data to parquet; if false: skip parquet saving
+  storeIntoParquet: false     # If true: save loaded data to parquet; if false: skip parquet saving
 
   data:
     basePath: "/data"
@@ -39,7 +39,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-local-3-3"
+  - name: "Experience-local-base"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -48,11 +48,12 @@ experiments:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: true
-      storeExplodeJoinData: true
-      weatherOriginDepthHours: 3
-      weatherDestinationDepthHours: 3
-      maxCategoricalCardinality: 50
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherOriginDepthHours: -1
+      weatherDestinationDepthHours: -1
+      maxCategoricalCardinality: 80
+      handleInvalid: "keep"
 
       flightSelectedFeatures:
         CRS_DEP_TIME:
@@ -103,7 +104,16 @@ experiments:
           transformation: "StringIndexer"
         feature_pressure_bucket:
           transformation: "StringIndexer"
-
+        feature_weather_type:
+          transformation: "StringIndexer"
+        feature_weather_intensity:
+          transformation: "StringIndexer"
+        feature_temp_dewpoint_spread:
+          transformation: "None"
+        feature_icing_risk_level:
+          transformation: "None"
+        feature_icing_risk_flag:
+          transformation: "None"
 
     model:
       modelType: "randomforest"

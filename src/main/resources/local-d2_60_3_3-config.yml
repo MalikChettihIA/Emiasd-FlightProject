@@ -8,12 +8,18 @@ common:
   # Random seed for reproducibility across all experiments
   seed: 42
 
+  # Logging configuration
+  log: true                   # Enable/disable all logging
+  logLevel: "info"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: false       # If true: load from csv; if false: load from raw parquet
+  storeIntoParquet: true     # If true: save loaded data to parquet; if false: skip parquet saving
+
   data:
     basePath: "/data"
     flight:
-      path: "/data/FLIGHT-3Y/Flights/201201*.csv"
+      path: "/data/FLIGHT-3Y/Flights/*.csv"
     weather:
-      path: "/data/FLIGHT-3Y/Weather/201201*.txt"
+      path: "/data/FLIGHT-3Y/Weather/*.txt"
     airportMapping:
       path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
@@ -30,10 +36,10 @@ common:
 experiments:
 
   # =========================================================================
-  # Experiment 20:
+  # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-20-D2_60-weatherDepthHours_3-3"
+  - name: "Experience-local-3-3"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -42,7 +48,7 @@ experiments:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: false
+      storeJoinData: true
       storeExplodeJoinData: true
       weatherOriginDepthHours: 3
       weatherDestinationDepthHours: 3
@@ -59,10 +65,6 @@ experiments:
           transformation: "StringIndexer"
         CRS_ELAPSED_TIME:
           transformation: "None"
-        PREV_AIRCRAFT_ARR_DELAY:
-          transformation: "None"
-        feature_avg_delay:
-          transformation: "None"
         feature_departure_hour_rounded:
           transformation: "StringIndexer"
         feature_flight_week_of_year:
@@ -71,63 +73,45 @@ experiments:
           transformation: "StringIndexer"
         feature_arrival_time_period:
           transformation: "StringIndexer"
-        feature_turnaround_buffer:
-          transformation: "None"
 
       weatherSelectedFeatures:
-        feature_flight_category:
-          transformation: "StringIndexer"
-        feature_precipitation_intensity:
+        RelativeHumidity:
           transformation: "None"
         feature_weather_severity_index:
           transformation: "None"
-        feature_is_vfr_conditions:
+        weather_hazard_level:
           transformation: "None"
-        feature_is_ifr_conditions:
-          transformation: "None"
-        feature_requires_cat_ii:
+        feature_visibility_risk_score:
           transformation: "None"
         feature_operations_risk_level:
           transformation: "None"
+        feature_requires_cat_ii:
+          transformation: "None"
+        feature_is_very_low_visibility:
+          transformation: "None"
+        feature_flight_category_ordinal:
+          transformation: "None"
+        press_change_abs:
+          transformation: "None"
+        extracted_codes:
+          transformation: "StringIndexer"
         feature_visibility_category:
           transformation: "StringIndexer"
         feature_most_critical_sky:
           transformation: "StringIndexer"
-        feature_lowest_cloud_height:
-          transformation: "None"
-        feature_visibility_risk_score:
-          transformation: "None"
-        weather_intensity:
+        feature_pressure_vis_combo_bin:
           transformation: "StringIndexer"
-        has_thunderstorm:
+        feature_pressure_bucket:
+          transformation: "StringIndexer"
+        feature_weather_type:
+          transformation: "StringIndexer"
+        feature_weather_intensity:
+          transformation: "StringIndexer"
+        feature_temp_dewpoint_spread:
           transformation: "None"
-        has_freezing_precip:
+        feature_icing_risk_level:
           transformation: "None"
-        has_freezing:
-          transformation: "None"
-        has_precipitation:
-          transformation: "None"
-        has_obscuration:
-          transformation: "None"
-        has_visible_moisture:
-          transformation: "None"
-        has_hazardous:
-          transformation: "None"
-        has_rain:
-          transformation: "None"
-        has_snow:
-          transformation: "None"
-        has_hail:
-          transformation: "None"
-        weather_hazard_level:
-          transformation: "None"
-        Icing_Risk_Flag:
-          transformation: "None"
-        Icing_Risk_Level:
-          transformation: "None"
-        WindSpeed:
-          transformation: "None"
-        WindDirection:
+        feature_icing_risk_flag:
           transformation: "None"
 
     model:
@@ -145,7 +129,7 @@ experiments:
       trainRatio: 0.75
 
       crossValidation:
-        numFolds: 5
+        numFolds: 4
 
       gridSearch:
         enabled: true

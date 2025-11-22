@@ -300,8 +300,18 @@ object FlightDataCleaner extends DataPreprocessor {
     debug("  - Filtering invalid flight dates")
     val validDates = convertedData.filter(col("FL_DATE").isNotNull)
 
-    debug(s"  - Current count: ${validDates.count()} records")
-    validDates
+    // Filter rows where CRS_DEP_TIME or CRS_ELAPSED_TIME is null
+    debug("  - Filtering rows with null CRS_DEP_TIME or CRS_ELAPSED_TIME")
+    val validTimes = validDates.filter(
+      col("CRS_DEP_TIME").isNotNull && col("CRS_ELAPSED_TIME").isNotNull
+    )
+
+    // Fill null delay columns with 0 (no delay)
+    debug("  - Filling null ARR_DELAY_NEW, WEATHER_DELAY, NAS_DELAY values with 0.0")
+    val withFilledDelay = validTimes.na.fill(0.0, Seq("ARR_DELAY_NEW", "WEATHER_DELAY", "NAS_DELAY"))
+
+    debug(s"  - Current count: ${withFilledDelay.count()} records")
+    withFilledDelay
   }
 
   /**

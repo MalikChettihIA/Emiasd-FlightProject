@@ -1,6 +1,6 @@
 package com.flightdelay.features.pipelines
 
-import com.flightdelay.config.{AppConfiguration, FeatureExtractionConfig, FeatureTransformationConfig}
+import com.flightdelay.config.{AppConfiguration, ExperimentConfig, FeatureExtractionConfig, FeatureTransformationConfig}
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.feature._
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -36,7 +36,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
   private val _features = "features"
 
   // Extract feature configurations from config
-  private val featureTransformations: Map[String, FeatureTransformationConfig] = {
+  val featureTransformations: Map[String, FeatureTransformationConfig] = {
     val flight = featureConfig.flightSelectedFeatures.getOrElse(Map.empty)
     val weather = featureConfig.weatherSelectedFeatures.getOrElse(Map.empty)
     flight ++ weather
@@ -44,9 +44,9 @@ class ConfigurationBasedFeatureExtractorPipeline(
 
   /**
    * Group features by their transformation type
-   * ✅ Enhanced to match exploded weather features (e.g., origin_weather_feature_*-2)
+   * Enhanced to match exploded weather features (e.g., origin_weather_feature_*-2)
    */
-  private def groupFeaturesByTransformation(data: DataFrame): (Array[String], Array[String], Array[String]) = {
+  def groupFeaturesByTransformation(data: DataFrame): (Array[String], Array[String], Array[String]) = {
     val availableFeatures = data.columns.toSet - target
 
     // Separate depth configurations for origin and destination weather features
@@ -81,10 +81,10 @@ class ConfigurationBasedFeatureExtractorPipeline(
       val safeDestDepth   = math.max(0, weatherDestinationDepthHours)
 
       val originPatterns =
-        (0 to safeOriginDepth).map(i => s"origin_weather_${featureName}-$i")
+        (0 to safeOriginDepth).map(i => s"origin_weather_${featureName}_h$i")
 
       val destPatterns =
-        (0 to safeDestDepth).map(i => s"destination_weather_${featureName}-$i")
+        (0 to safeDestDepth).map(i => s"destination_weather_${featureName}_h$i")
 
       val candidates = originPatterns ++ destPatterns
       val matching   = candidates.filter(availableFeatures.contains).sorted
@@ -117,7 +117,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
   /**
    * Preprocessing: Convert boolean columns to numeric (0.0/1.0)
    */
-  private def preprocessBooleans(df: DataFrame): DataFrame = {
+  def preprocessBooleans(df: DataFrame): DataFrame = {
     val booleanCols = df.schema.fields
       .filter(_.dataType == BooleanType)
       .map(_.name)
@@ -143,7 +143,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
   /**
    * Build pipeline stages based on configuration
    */
-  private def buildPipelineStages(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Array[PipelineStage] = {
+  def buildPipelineStages(data: DataFrame, experiment:ExperimentConfig)(implicit spark: SparkSession, configuration: AppConfiguration): Array[PipelineStage] = {
     val (stringIndexerCols, oneHotEncoderCols, numericCols) = groupFeaturesByTransformation(data)
 
     info(s"[ConfigurationBasedFeatureExtractorPipeline] Feature Distribution:")
@@ -154,25 +154,24 @@ class ConfigurationBasedFeatureExtractorPipeline(
       info(s"    ${stringIndexerCols.take(5).mkString(", ")}, ... (${stringIndexerCols.length - 5} more)")
     }
 
-    whenDebug{
-      // DIAGNOSTIC: Print distinct value counts for categorical features
-      debug(s"[ConfigurationBasedFeatureExtractorPipeline] Categorical Features Cardinality:")
-      stringIndexerCols.zipWithIndex.foreach { case (colName, idx) =>
-        val distinctCount = data.select(colName).distinct().count()
-        debug(f"  [$idx%2d] $colName%-50s : $distinctCount%,6d distinct values")
-      }
-      debug(s"  - OneHotEncoder features: ${oneHotEncoderCols.length}")
-      if (oneHotEncoderCols.length > 0 && oneHotEncoderCols.length <= 5) {
-        debug(s"    ${oneHotEncoderCols.mkString(", ")}")
-      } else if (oneHotEncoderCols.length > 5) {
-        debug(s"    ${oneHotEncoderCols.take(5).mkString(", ")}, ... (${oneHotEncoderCols.length - 5} more)")
-      }
-      debug(s"  - Numeric features: ${numericCols.length}")
-      if (numericCols.length > 0 && numericCols.length <= 5) {
-        debug(s"    ${numericCols.mkString(", ")}")
-      } else if (numericCols.length > 5) {
-        debug(s"    ${numericCols.take(5).mkString(", ")}, ... (${numericCols.length - 5} more)")
-      }
+
+    // DIAGNOSTIC: Print distinct value counts for categorical features
+    debug(s"[ConfigurationBasedFeatureExtractorPipeline] Categorical Features Cardinality:")
+    stringIndexerCols.zipWithIndex.foreach { case (colName, idx) =>
+      val distinctCount = data.select(colName).distinct().count()
+      debug(f"  [$idx%2d] $colName%-50s : $distinctCount%,6d distinct values")
+    }
+    debug(s"  - OneHotEncoder features: ${oneHotEncoderCols.length}")
+    if (oneHotEncoderCols.length > 0 && oneHotEncoderCols.length <= 5) {
+      debug(s"    ${oneHotEncoderCols.mkString(", ")}")
+    } else if (oneHotEncoderCols.length > 5) {
+      debug(s"    ${oneHotEncoderCols.take(5).mkString(", ")}, ... (${oneHotEncoderCols.length - 5} more)")
+    }
+    debug(s"  - Numeric features: ${numericCols.length}")
+    if (numericCols.length > 0 && numericCols.length <= 5) {
+      debug(s"    ${numericCols.mkString(", ")}")
+    } else if (numericCols.length > 5) {
+      debug(s"    ${numericCols.take(5).mkString(", ")}, ... (${numericCols.length - 5} more)")
     }
 
     var stages = Array.empty[PipelineStage]
@@ -263,15 +262,24 @@ class ConfigurationBasedFeatureExtractorPipeline(
       // We'll handle this in postProcess
     }
 
+    // Stage 6: VectorIndexer pour RandomForest (remplace StandardScaler)
+    val vectorIndexer = new VectorIndexer()
+      .setInputCol(_featuresVec)
+      .setOutputCol(_features)          // "features" final pour le modèle
+      .setMaxCategories(experiment.featureExtraction.maxCategoricalCardinality)            // à ajuster selon ton cas
+    stages = stages :+ vectorIndexer
+
+    //Log Statges
+    logStages(stages)
     stages
   }
 
   /**
    * Fit the pipeline on training data
    */
-  def fit(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): PipelineModel = {
+  def fit(data: DataFrame, experimentConfig: ExperimentConfig)(implicit spark: SparkSession, configuration: AppConfiguration): PipelineModel = {
     val preprocessed = preprocessBooleans(data)
-    val stages = buildPipelineStages(preprocessed)
+    val stages = buildPipelineStages(preprocessed, experimentConfig)
     val pipeline = new Pipeline().setStages(stages)
 
     info("[ConfigurationBasedFeatureExtractorPipeline] Fitting transformation pipeline...")
@@ -281,9 +289,9 @@ class ConfigurationBasedFeatureExtractorPipeline(
   /**
    * Fit and transform training data
    */
-  def fitTransform(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): (PipelineModel, DataFrame) = {
+  def fitTransform(data: DataFrame, experimentConfig: ExperimentConfig)(implicit spark: SparkSession, configuration: AppConfiguration): (PipelineModel, DataFrame) = {
     val preprocessed = preprocessBooleans(data)
-    val stages = buildPipelineStages(preprocessed)
+    val stages = buildPipelineStages(preprocessed, experimentConfig)
     val pipeline = new Pipeline().setStages(stages)
 
     info("[ConfigurationBasedFeatureExtractorPipeline] Fitting transformation pipeline...")
@@ -323,7 +331,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
   /**
    * Post-process: Select final columns (features, label)
    */
-  private def postProcess(df: DataFrame): DataFrame = {
+  def postProcess(df: DataFrame): DataFrame = {
     val finalFeaturesCol = if (df.columns.contains(_features)) {
       _features
     } else {
@@ -354,6 +362,70 @@ class ConfigurationBasedFeatureExtractorPipeline(
       features.keys.foreach(name => info(s"  - $name"))
     }
     println("=" * 80)
+  }
+
+  def logStages(stages: Array[PipelineStage])(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
+    info("=" * 80)
+    info("[ConfigurationBasedFeatureExtractorPipeline] Pipeline Stages")
+    info("=" * 80)
+
+    stages.zipWithIndex.foreach { case (stage, idx) =>
+      info(s"[$idx] ${stage.getClass.getSimpleName} (uid = ${stage.uid})")
+
+      stage match {
+
+        // ============================================================
+        // StringIndexer (mono ou multi)
+        // ============================================================
+        case s: StringIndexer =>
+          val in =
+            if (s.isSet(s.inputCols)) s.getInputCols.mkString(", ")
+            else s.getInputCol
+
+          val out =
+            if (s.isSet(s.outputCols)) s.getOutputCols.mkString(", ")
+            else s.getOutputCol
+
+          info("     type          = StringIndexer")
+          info(s"     inputCols     = $in")
+          info(s"     outputCols    = $out")
+          info(s"     handleInvalid = ${s.getHandleInvalid}")
+
+        // ============================================================
+        case e: OneHotEncoder =>
+          info("     type          = OneHotEncoder")
+          info(s"     inputCols     = ${e.getInputCols.mkString(", ")}")
+          info(s"     outputCols    = ${e.getOutputCols.mkString(", ")}")
+          info(s"     handleInvalid = ${e.getHandleInvalid}")
+
+        // ============================================================
+        case i: Imputer =>
+          info("     type          = Imputer")
+          info(s"     inputCols     = ${i.getInputCols.mkString(", ")}")
+          info(s"     outputCols    = ${i.getOutputCols.mkString(", ")}")
+          info(s"     strategy      = ${i.getStrategy}")
+
+        // ============================================================
+        case v: VectorAssembler =>
+          info("     type          = VectorAssembler")
+          info(s"     inputCols     = ${v.getInputCols.mkString(", ")}")
+          info(s"     outputCol     = ${v.getOutputCol}")
+
+        // ============================================================
+        case s: StandardScaler =>
+          info("     type          = StandardScaler")
+          info(s"     inputCol      = ${s.getInputCol}")
+          info(s"     outputCol     = ${s.getOutputCol}")
+          info(s"     withMean      = ${s.getWithMean}")
+          info(s"     withStd       = ${s.getWithStd}")
+
+        // ============================================================
+        case other =>
+          info(s"     type          = ${other.getClass.getName}")
+      }
+    }
+
+    info("=" * 80)
   }
 }
 

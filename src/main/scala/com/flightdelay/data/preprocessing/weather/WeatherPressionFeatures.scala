@@ -68,6 +68,12 @@ object WeatherPressionFeatures {
           "feature_pressure_variation_risk",
           when(col("press_change_abs") > StrongChangeThresh, 1).otherwise(0)
         )
+        // Is_Pressure_Dropping_Fast: indicateur d'une tempête approchante
+        // Seuil de -2.0 hPa indique une chute rapide de pression
+        .withColumn(
+          "feature_is_pressure_dropping_fast",
+          when(col("press_change_raw") <= -2.0, 1).otherwise(0)
+        )
         .withColumn(
           "feature_pressure_bucket",
           when(col("press_change_abs").isNull, "unknown")

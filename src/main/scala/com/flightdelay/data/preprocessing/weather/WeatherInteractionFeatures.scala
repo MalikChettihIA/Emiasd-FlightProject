@@ -8,6 +8,41 @@ import com.flightdelay.utils.DebugUtils._
 
 object WeatherInteractionFeatures {
 
+  // Map Code → Weather_Type
+  private val weatherTypeMap: Map[Int, String] = Map(
+    21 -> "Rain", 60 -> "Rain", 61 -> "Rain", 62 -> "Rain", 63 -> "Rain", 64 -> "Rain", 65 -> "Rain",
+    24 -> "Freezing_Precip", 56 -> "Freezing_Precip", 57 -> "Freezing_Precip", 66 -> "Freezing_Precip", 67 -> "Freezing_Precip",
+    20 -> "Drizzle", 50 -> "Drizzle", 51 -> "Drizzle", 52 -> "Drizzle", 53 -> "Drizzle", 54 -> "Drizzle", 55 -> "Drizzle",
+    22 -> "Snow", 70 -> "Snow", 71 -> "Snow", 72 -> "Snow", 73 -> "Snow", 74 -> "Snow", 75 -> "Snow",
+    23 -> "Rain_Snow_Mix", 68 -> "Rain_Snow_Mix", 69 -> "Rain_Snow_Mix",
+    25 -> "Shower", 26 -> "Shower", 80 -> "Shower", 81 -> "Shower", 82 -> "Shower",
+    83 -> "Shower", 84 -> "Shower", 85 -> "Shower", 86 -> "Shower",
+    17 -> "Thunderstorm", 29 -> "Thunderstorm", 95 -> "Thunderstorm",
+    96 -> "Thunderstorm", 97 -> "Thunderstorm", 99 -> "Thunderstorm",
+    10 -> "Fog_Mist", 28 -> "Fog_Mist", 40 -> "Fog_Mist", 41 -> "Fog_Mist",
+    42 -> "Fog_Mist", 43 -> "Fog_Mist", 44 -> "Fog_Mist", 45 -> "Fog_Mist",
+    5  -> "Haze",
+    18 -> "Squall",
+    30 -> "Dust_Sand", 31 -> "Dust_Sand", 32 -> "Dust_Sand", 33 -> "Dust_Sand",
+    34 -> "Dust_Sand", 35 -> "Dust_Sand",
+    36 -> "Blowing_Snow", 37 -> "Blowing_Snow", 38 -> "Blowing_Snow", 39 -> "Blowing_Snow"
+  )
+
+  // Map Code → Weather_Intensity
+  private val weatherIntensityMap: Map[Int, String] = Map(
+    50 -> "Light", 51 -> "Light", 60 -> "Light", 61 -> "Light", 70 -> "Light", 71 -> "Light",
+    80 -> "Light", 83 -> "Light", 85 -> "Light",
+    52 -> "Moderate", 53 -> "Moderate", 62 -> "Moderate", 63 -> "Moderate",
+    72 -> "Moderate", 73 -> "Moderate", 81 -> "Moderate", 84 -> "Moderate", 86 -> "Moderate",
+    54 -> "Heavy", 55 -> "Heavy", 64 -> "Heavy", 65 -> "Heavy",
+    74 -> "Heavy", 75 -> "Heavy", 82 -> "Heavy", 87 -> "Heavy", 88 -> "Heavy",
+    97 -> "Heavy", 99 -> "Heavy"
+  )
+
+  // Spark Column expressions pour les maps
+  private val weatherTypeMapCol = map(weatherTypeMap.flatMap { case (k, v) => Seq(lit(k), lit(v)) }.toSeq: _*)
+  private val weatherIntensityMapCol = map(weatherIntensityMap.flatMap { case (k, v) => Seq(lit(k), lit(v)) }.toSeq: _*)
+
   /**
    * Applique toutes les features d'interaction
    * OPTIMISÉ : Utilise uniquement des expressions Spark natives (pas d'UDF)
@@ -106,6 +141,28 @@ object WeatherInteractionFeatures {
           .when(col("feature_flight_category") === "IFR", lit(2))
           .when(col("feature_flight_category") === "MVFR", lit(1))
           .otherwise(lit(0))  // VFR = sévérité minimale
+      )
+
+      // 8. Weather_Type basé sur ValueForWindCharacter code
+      .withColumn("feature_weather_type",
+        coalesce(
+          weatherTypeMapCol(col("ValueForWindCharacter").cast("int")),
+          lit("Clear_or_Other")
+        )
+      )
+
+      // 9. Weather_Intensity basé sur ValueForWindCharacter code
+      .withColumn("feature_weather_intensity",
+        coalesce(
+          weatherIntensityMapCol(col("ValueForWindCharacter").cast("int")),
+          lit("Not_Applicable")
+        )
+      )
+
+      // 10. Temp_Dewpoint_Spread - indicateur de brouillard et nuages bas
+      // Une valeur faible indique que l'air est saturé (risque de brouillard)
+      .withColumn("feature_temp_dewpoint_spread",
+        col("DryBulbCelsius") - col("DewPointCelsius")
       )
 
       // Nettoyer les colonnes temporaires

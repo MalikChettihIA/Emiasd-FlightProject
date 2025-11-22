@@ -217,6 +217,11 @@ object ConfigurationLoader {
       .map(_.toString.toInt)
       .getOrElse(50)
 
+    // Parse handleInvalid (optional, defaults to "keep")
+    val handleInvalid = data.get("handleInvalid")
+      .map(_.toString)
+      .getOrElse("keep")
+
     // Parse flightSelectedFeatures (optional, for feature_selection type)
     // New format: Map[String, FeatureTransformationConfig]
     val flightSelectedFeatures = data.get("flightSelectedFeatures").map { featuresMap =>
@@ -247,6 +252,7 @@ object ConfigurationLoader {
       weatherOriginDepthHours = weatherOriginDepthHours,
       weatherDestinationDepthHours = weatherDestinationDepthHours,
       maxCategoricalCardinality = maxCategoricalCardinality,
+      handleInvalid = handleInvalid,
       flightSelectedFeatures = flightSelectedFeatures,
       weatherSelectedFeatures = weatherSelectedFeatures
     )

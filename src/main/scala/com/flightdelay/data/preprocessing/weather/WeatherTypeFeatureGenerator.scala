@@ -100,6 +100,11 @@ object WeatherTypeFeatureGenerator extends Serializable {
         when(col("WeatherType").contains("RA"), 1).otherwise(0).cast(IntegerType))
       .withColumn("has_snow",
         when(col("WeatherType").contains("SN"), 1).otherwise(0).cast(IntegerType))
+      .withColumn("has_drizzle",
+        when(col("WeatherType").contains("DZ"), 1).otherwise(0).cast(IntegerType))
+      .withColumn("has_fog_mist",
+        when(col("WeatherType").contains("FG") || col("WeatherType").contains("BR"), 1)
+          .otherwise(0).cast(IntegerType))
       .withColumn("has_hail",
         when(col("WeatherType").contains("GR") || col("WeatherType").contains("GS"), 1)
           .otherwise(0).cast(IntegerType))
@@ -132,24 +137,39 @@ object WeatherTypeFeatureGenerator extends Serializable {
     val withFeatures = createWeatherFeatures(weatherDF)
 
     withFeatures
-      // ICING RISK FLAG (binaire 0/1)
-      .withColumn("Icing_Risk_Flag",
+      // Calculer le Temp_Dewpoint_Spread pour le risque de givrage
+      .withColumn("_temp_dewpoint_spread",
+        col("DryBulbCelsius") - col("DewPointCelsius")
+      )
+
+      // ICING RISK FLAG (binaire 0/1) - selon spécification
+      // Auto-Trigger: Freezing_Precip actif
+      // Conditional Trigger: Temp entre -15 et 2°C ET (spread <= 3 OU Rain OU Drizzle OU Fog_Mist OU Snow)
+      .withColumn("feature_icing_risk_flag",
         when(col("has_freezing_precip") === 1, 1)
           .when(col("DryBulbCelsius").isNotNull &&
             col("DryBulbCelsius").between(-15.0, 2.0) &&
-            ((col("RelativeHumidity").isNotNull && col("RelativeHumidity") > 80.0) ||
-              col("has_visible_moisture") === 1), 1)
+            (
+              (col("_temp_dewpoint_spread").isNotNull && col("_temp_dewpoint_spread") <= 3.0) ||
+              col("has_rain") === 1 ||
+              col("has_drizzle") === 1 ||
+              col("has_fog_mist") === 1 ||
+              col("has_snow") === 1
+            ), 1)
           .otherwise(0).cast(IntegerType))
 
       // ICING RISK LEVEL (0-3)
-      .withColumn("Icing_Risk_Level",
+      .withColumn("feature_icing_risk_level",
         when(col("has_freezing_precip") === 1, 3)
           .when(col("DryBulbCelsius").between(-10.0, 0.0) &&
-            col("has_visible_moisture") === 1 &&
-            col("RelativeHumidity") > 85.0, 2)
+            (col("has_rain") === 1 || col("has_drizzle") === 1 || col("has_fog_mist") === 1 || col("has_snow") === 1) &&
+            col("_temp_dewpoint_spread").isNotNull && col("_temp_dewpoint_spread") <= 2.0, 2)
           .when(col("DryBulbCelsius").between(-15.0, 2.0) &&
-            (col("RelativeHumidity") > 80.0 || col("has_visible_moisture") === 1), 1)
+            (col("_temp_dewpoint_spread") <= 3.0 || col("has_rain") === 1 || col("has_drizzle") === 1 || col("has_fog_mist") === 1 || col("has_snow") === 1), 1)
           .otherwise(0).cast(IntegerType))
+
+      // Nettoyer la colonne temporaire
+      .drop("_temp_dewpoint_spread")
   }
 
   /**

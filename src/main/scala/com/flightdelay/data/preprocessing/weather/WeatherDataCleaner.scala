@@ -163,13 +163,13 @@ object WeatherDataCleaner extends BiDataPreprocessor {
     // 3.1 — cast simple des colonnes numériques usuelles
     val convertedData = convertDataTypes(df, typeMapping)
 
-    // 3.2 — Nettoyage précipitations horaires: 'T' (trace) -> 0.0
-    debug("  - Cleaning HourlyPrecip: Converting 'T' (trace) to 0.0")
+    // 3.2 — Nettoyage précipitations horaires: 'T' (trace) -> 0.0, espaces seuls -> null
+    debug("  - Cleaning HourlyPrecip: Converting 'T' (trace) to 0.0, whitespace-only to null")
     val withCleanedPrecip = convertedData.withColumn(
       "HourlyPrecip",
-      when(trim(col("HourlyPrecip")) === "T", lit("0.0"))
-        .otherwise(col("HourlyPrecip"))
-        .cast(DoubleType)
+      when(length(trim(col("HourlyPrecip"))) === 0, lit(null).cast(DoubleType))
+        .when(trim(col("HourlyPrecip")) === "T", lit(0.0))
+        .otherwise(col("HourlyPrecip").cast(DoubleType))
     )
 
     // 3.3 — Pression au niveau de la mer: 'M' (missing) -> null puis cast double
@@ -183,14 +183,14 @@ object WeatherDataCleaner extends BiDataPreprocessor {
 
     // 3.4 — Codes entiers stockés en string -> null-safe cast en Int
     //       on traite ici les colonnes sujettes à l'erreur VectorAssembler
-    //       Gère les valeurs missing: 'M', ' ', '', 'NULL', et tout texte non-numérique
+    //       Gère les valeurs missing: 'M', espaces seuls, '', 'NULL', et tout texte non-numérique
     val codeIntCols = Seq(
       "PressureTendency",
       "ValueForWindCharacter"
     ).filter(withCleanedPressure.columns.contains)
 
     val withCodesAsInt = codeIntCols.foldLeft(withCleanedPressure){ (acc, c) =>
-      debug(s"  - Cleaning code column '$c': 'M'/' '/''/NULL' -> null, cast to Int (strict=False behavior)")
+      debug(s"  - Cleaning code column '$c': 'M'/whitespace-only/''/NULL' -> null, cast to Int")
       acc.withColumn(
         c,
         when(trim(col(c)).isin("", "NULL", "M") || length(trim(col(c))) === 0, lit(null).cast(IntegerType))
@@ -205,7 +205,11 @@ object WeatherDataCleaner extends BiDataPreprocessor {
     debug("  - Converting Date from YYYYMMDD to Date type")
     val withDateConverted = withCodesAsInt.withColumn("Date", to_date(col("Date"), "yyyyMMdd"))
 
-    withDateConverted
+    // 3.6 — WindSpeed: fill null with 0.0 (null means no wind data, treat as 0)
+    debug("  - Filling null WindSpeed values with 0.0")
+    val withWindSpeedFilled = withDateConverted.na.fill(0.0, Seq("WindSpeed"))
+
+    withWindSpeedFilled
   }
 
   /** Phase 4: validation finale */

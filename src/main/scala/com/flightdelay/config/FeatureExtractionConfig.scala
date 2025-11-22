@@ -17,6 +17,7 @@ case class FeatureTransformationConfig(
  * @param nOnTime Number of on-time samples to use for training
  * @param pcaVarianceThreshold Variance threshold for PCA (0.0 to 1.0)
  * @param maxCategoricalCardinality Maximum distinct values for a column to be treated as categorical (default: 50)
+ * @param handleInvalid How to handle invalid data in StringIndexer: "skip", "keep", "error" (default: "keep")
  * @param flightSelectedFeatures Map of feature names to their transformation config (for feature_selection type)
  * @param weatherSelectedFeatures Map of feature names to their transformation config (for feature_selection type)
  */
@@ -30,6 +31,7 @@ case class FeatureExtractionConfig(
    weatherOriginDepthHours : Int,
    weatherDestinationDepthHours : Int,
    maxCategoricalCardinality: Int = 50,
+   handleInvalid: String = "keep",
    flightSelectedFeatures: Option[Map[String, FeatureTransformationConfig]] = None,
    weatherSelectedFeatures: Option[Map[String, FeatureTransformationConfig]] = None
 ) {

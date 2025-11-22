@@ -9,26 +9,26 @@ common:
   seed: 42
 
   # Logging configuration
-  log: true                    # Enable/disable all logging
-  logLevel: "debug"            # Minimum log level: debug, info, warn, error
-  loadDataFromCSV: false       # If true: load from CSV/TXT; if false: load from raw parquet
-  storeIntoParquet: false      # If true: save loaded data to parquet; if false: skip parquet saving
+  log: true                   # Enable/disable all logging
+  logLevel: "info"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: false       # If true: load from csv; if false: load from raw parquet
+  storeIntoParquet: true     # If true: save loaded data to parquet; if false: skip parquet saving
 
   data:
-    basePath: "/home/jovyan/work/data"
+    basePath: "/data"
     flight:
-      path: "/home/jovyan/work/data/FLIGHT-3Y/Flights/201201*.csv"
+      path: "/data/FLIGHT-3Y/Flights/*.csv"
     weather:
-      path: "/home/jovyan/work/data/FLIGHT-3Y/Weather/20101*.txt"
+      path: "/data/FLIGHT-3Y/Weather/*.txt"
     airportMapping:
-      path: "/home/jovyan/work/data/FLIGHT-3Y/wban_airport_timezone.csv"
+      path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
   output:
-    basePath: "/home/jovyan/work/output"
+    basePath: "/output"
 
-    mlflow:
-      enabled: true
-      trackingUri: "http://mlflow-server:5000"  # Utilise le nom du container et le port interne
+  mlflow:
+    enabled: true
+    trackingUri: "http://mlflow-server:5000"  # Utilise le nom du container et le port interne
 
 # ============================================================================
 # EXPERIMENTS - Each experiment has its own feature extraction and model config
@@ -39,7 +39,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-local"
+  - name: "Experience-local-3-3"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -50,10 +50,9 @@ experiments:
       delayThresholdMin: 60
       storeJoinData: true
       storeExplodeJoinData: true
-      weatherOriginDepthHours: 3
-      weatherDestinationDepthHours: 3
+      weatherOriginDepthHours: -1
+      weatherDestinationDepthHours: -1
       maxCategoricalCardinality: 50
-      handleInvalid: "skip"
 
       flightSelectedFeatures:
         CRS_DEP_TIME:
@@ -75,35 +74,7 @@ experiments:
         feature_arrival_time_period:
           transformation: "StringIndexer"
 
-      weatherSelectedFeatures:
-        RelativeHumidity:
-          transformation: "None"
-        feature_weather_severity_index:
-          transformation: "None"
-        weather_hazard_level:
-          transformation: "None"
-        feature_visibility_risk_score:
-          transformation: "None"
-        feature_operations_risk_level:
-          transformation: "None"
-        feature_requires_cat_ii:
-          transformation: "None"
-        feature_is_very_low_visibility:
-          transformation: "None"
-        feature_flight_category_ordinal:
-          transformation: "None"
-        press_change_abs:
-          transformation: "None"
-        extracted_codes:
-          transformation: "StringIndexer"
-        feature_visibility_category:
-          transformation: "StringIndexer"
-        feature_most_critical_sky:
-          transformation: "StringIndexer"
-        feature_pressure_vis_combo_bin:
-          transformation: "StringIndexer"
-        feature_pressure_bucket:
-          transformation: "StringIndexer"
+
 
     model:
       modelType: "randomforest"
@@ -120,7 +91,7 @@ experiments:
       trainRatio: 0.75
 
       crossValidation:
-        numFolds: 5
+        numFolds: 4
 
       gridSearch:
         enabled: true

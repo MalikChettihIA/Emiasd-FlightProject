@@ -144,8 +144,8 @@ object CrossValidator {
       // Split data
       val trainFold = dataWithFold.filter(col("fold") =!= foldIdx).drop("fold")
       val valFold = dataWithFold.filter(col("fold") === foldIdx).drop("fold")
-      info(s"[CrossValidator][trainFold] ${trainFold.count()}")
-      info(s"[CrossValidator][valFold] ${valFold.count()}")
+      debug(s"[CrossValidator][trainFold] ${trainFold.count()}")
+      debug(s"[CrossValidator][valFold] ${valFold.count()}")
 
       // Train with specific params
       val trainedModel = Trainer.trainWithParams(trainFold, experiment, params)
