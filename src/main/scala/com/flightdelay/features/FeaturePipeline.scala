@@ -2,10 +2,12 @@ package com.flightdelay.features
 
 import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import com.flightdelay.features.balancer.DelayBalancedDatasetBuilder
-import com.flightdelay.features.joiners.FlightWeatherDataJoiner
+import com.flightdelay.features.joiners.{DataJoinerPostProcessor, FlightWeatherDataJoiner}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import com.flightdelay.utils.DebugUtils._
 import com.flightdelay.utils.MetricsUtils
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.DoubleType
 
 object FeaturePipeline {
 
@@ -47,6 +49,7 @@ object FeaturePipeline {
     info("=" * 80)
     info("[FeaturePipeline][Step 4/5] Processing TRAIN flights (join + explode)")
     info("=" * 80)
+    // Step 1: Create label column from target
     val trainData = processFlightDataset(balancedFlightTrainData, weatherData, experiment, "TRAIN")
     info("[FeaturePipeline][Step 4/5] Processing TRAIN flights (count)"+ trainData.count())
 
@@ -128,7 +131,12 @@ object FeaturePipeline {
       stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
       debug(s"[$datasetName] Explode completed in ${stepDuration}s - ${explodedData.count()} lines")
 
-      explodedData
+      // Apply post-processing to both train and test datasets
+      info("[FeaturePipeline] Applying post-processing to datasets...")
+      val processedExplodedData = DataJoinerPostProcessor.execute(explodedData, experiment)
+      info("[$datasetName]  Post-processing completed")
+
+      processedExplodedData
 
     } else {
       info(s"[$datasetName] Weather features disabled - using flight data only")

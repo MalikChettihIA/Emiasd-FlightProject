@@ -12,7 +12,7 @@ object ConfigurationLoader {
    * Charge la configuration depuis les arguments de ligne de commande
    */
   def loadConfiguration(args: Array[String]): AppConfiguration = {
-    val environment = if (args.length > 0) args(0) else "local2"
+    val environment = if (args.length > 0) args(0) else "local"
     loadEnvironment(environment)
   }
 
@@ -242,6 +242,17 @@ object ConfigurationLoader {
       }
     }
 
+    // Parse aggregatedSelectedFeatures (optional, for accumulation features)
+    // Format: Map[String, AggregatedFeatureConfig]
+    val aggregatedSelectedFeatures = data.get("aggregatedSelectedFeatures").map { featuresMap =>
+      featuresMap.asInstanceOf[java.util.Map[String, Any]].asScala.toMap.map { case (featureName, config) =>
+        val configMap = config.asInstanceOf[java.util.Map[String, Any]].asScala.toMap
+        val aggregation = configMap("aggregation").toString
+        val transformation = configMap.get("transformation").map(_.toString).getOrElse("None")
+        (featureName, AggregatedFeatureConfig(aggregation, transformation))
+      }
+    }
+
     FeatureExtractionConfig(
       featureType = featureType,
       dxCol = dxCol,
@@ -254,7 +265,8 @@ object ConfigurationLoader {
       maxCategoricalCardinality = maxCategoricalCardinality,
       handleInvalid = handleInvalid,
       flightSelectedFeatures = flightSelectedFeatures,
-      weatherSelectedFeatures = weatherSelectedFeatures
+      weatherSelectedFeatures = weatherSelectedFeatures,
+      aggregatedSelectedFeatures = aggregatedSelectedFeatures
     )
   }
 

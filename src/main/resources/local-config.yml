@@ -11,8 +11,8 @@ common:
   # Logging configuration
   log: true                   # Enable/disable all logging
   logLevel: "info"            # Minimum log level: debug, info, warn, error
-  loadDataFromCSV: false       # If true: load from csv; if false: load from raw parquet
-  storeIntoParquet: false     # If true: save loaded data to parquet; if false: skip parquet saving
+  loadDataFromCSV: false      # If true: load from csv; if false: load from raw parquet
+  storeIntoParquet: true     # If true: save loaded data to parquet; if false: skip parquet saving
 
   data:
     basePath: "/data"
@@ -48,11 +48,11 @@ experiments:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: false
-      storeExplodeJoinData: false
-      weatherOriginDepthHours: -1
-      weatherDestinationDepthHours: -1
-      maxCategoricalCardinality: 80
+      storeJoinData: true
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: 3
+      weatherDestinationDepthHours: 3
+      maxCategoricalCardinality: 280
       handleInvalid: "keep"
 
       flightSelectedFeatures:
@@ -76,7 +76,13 @@ experiments:
           transformation: "StringIndexer"
 
       weatherSelectedFeatures:
+        HourlyPrecip:
+          transformation: "None"
         RelativeHumidity:
+          transformation: "None"
+        press_change_abs:
+          transformation: "None"
+        feature_temp_dewpoint_spread:
           transformation: "None"
         feature_weather_severity_index:
           transformation: "None"
@@ -92,8 +98,6 @@ experiments:
           transformation: "None"
         feature_flight_category_ordinal:
           transformation: "None"
-        press_change_abs:
-          transformation: "None"
         extracted_codes:
           transformation: "StringIndexer"
         feature_visibility_category:
@@ -108,11 +112,31 @@ experiments:
           transformation: "StringIndexer"
         feature_weather_intensity:
           transformation: "StringIndexer"
-        feature_temp_dewpoint_spread:
-          transformation: "None"
         feature_icing_risk_level:
           transformation: "None"
         feature_icing_risk_flag:
+          transformation: "None"
+        Temp_Delta_1hr:
+          transformation: "None"
+        Visibility_Delta_1hr:
+          transformation: "None"
+        Humidity_Delta_1hr:
+          transformation: "None"
+        WindSpeed_Delta_1hr:
+          transformation: "None"
+
+      aggregatedSelectedFeatures:
+        HourlyPrecip:
+          aggregation: "sum"
+          transformation: "None"
+        RelativeHumidity:
+          aggregation: "avg"
+          transformation: "None"
+        press_change_abs:
+          aggregation: "max"
+          transformation: "None"
+        feature_temp_dewpoint_spread:
+          aggregation: "min"
           transformation: "None"
 
     model:

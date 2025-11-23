@@ -104,6 +104,16 @@ experiments:
           transformation: "StringIndexer"
         feature_pressure_bucket:
           transformation: "StringIndexer"
+        feature_weather_type:
+          transformation: "StringIndexer"
+        feature_weather_intensity:
+          transformation: "StringIndexer"
+        feature_temp_dewpoint_spread:
+          transformation: "None"
+        feature_icing_risk_level:
+          transformation: "None"
+        feature_icing_risk_flag:
+          transformation: "None"
 
     model:
       modelType: "randomforest"

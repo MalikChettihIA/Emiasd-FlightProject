@@ -9,6 +9,16 @@ case class FeatureTransformationConfig(
 )
 
 /**
+ * Aggregated feature configuration
+ * @param aggregation Aggregation method: "sum", "avg", "max", "min", "std"
+ * @param transformation Transformation to apply to aggregated features: "None", "StringIndexer", "StandardScaler", etc.
+ */
+case class AggregatedFeatureConfig(
+  aggregation: String,
+  transformation: String = "None"
+)
+
+/**
  * Feature extraction configuration
  * @param featureType Type of feature extraction: "pca", "feature_selection", "none"
  * @param dxCol Column name for delay classification (e.g., "D2_60")
@@ -20,6 +30,7 @@ case class FeatureTransformationConfig(
  * @param handleInvalid How to handle invalid data in StringIndexer: "skip", "keep", "error" (default: "keep")
  * @param flightSelectedFeatures Map of feature names to their transformation config (for feature_selection type)
  * @param weatherSelectedFeatures Map of feature names to their transformation config (for feature_selection type)
+ * @param aggregatedSelectedFeatures Map of weather feature names to their aggregation config (for accumulation features)
  */
 case class FeatureExtractionConfig(
    featureType: String,
@@ -33,7 +44,8 @@ case class FeatureExtractionConfig(
    maxCategoricalCardinality: Int = 50,
    handleInvalid: String = "keep",
    flightSelectedFeatures: Option[Map[String, FeatureTransformationConfig]] = None,
-   weatherSelectedFeatures: Option[Map[String, FeatureTransformationConfig]] = None
+   weatherSelectedFeatures: Option[Map[String, FeatureTransformationConfig]] = None,
+   aggregatedSelectedFeatures: Option[Map[String, AggregatedFeatureConfig]] = None
 ) {
   /**
    * Helper method to check if PCA is enabled
@@ -57,5 +69,30 @@ case class FeatureExtractionConfig(
     val flightFeatures = flightSelectedFeatures.map(_.keys.toSeq).getOrElse(Seq.empty)
     val weatherFeatures = weatherSelectedFeatures.map(_.keys.toSeq).getOrElse(Seq.empty)
     flightFeatures ++ weatherFeatures
+  }
+
+  /**
+   * Get weather features including aggregated features with their transformations
+   * This enriches weatherSelectedFeatures with the aggregated features automatically
+   */
+  def getEnrichedWeatherFeatures: Map[String, FeatureTransformationConfig] = {
+    val baseWeatherFeatures = weatherSelectedFeatures.getOrElse(Map.empty)
+    val aggregatedFeatures = aggregatedSelectedFeatures.getOrElse(Map.empty)
+
+    // Generate aggregated feature names with their transformations
+    val aggregatedFeatureMap = aggregatedFeatures.flatMap { case (varName, aggConfig) =>
+      val aggMethod = aggConfig.aggregation.toLowerCase.capitalize
+      val transformation = FeatureTransformationConfig(aggConfig.transformation)
+
+      // Generate both origin and destination feature names
+      val features = Map(
+        s"origin_weather_${varName}_$aggMethod" -> transformation,
+        s"destination_weather_${varName}_$aggMethod" -> transformation
+      )
+      features
+    }
+
+    // Merge base weather features with aggregated features
+    baseWeatherFeatures ++ aggregatedFeatureMap
   }
 }

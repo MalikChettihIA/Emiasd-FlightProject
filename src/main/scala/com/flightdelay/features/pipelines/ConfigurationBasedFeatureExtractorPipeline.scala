@@ -29,16 +29,17 @@ class ConfigurationBasedFeatureExtractorPipeline(
 ) {
 
   // Column naming constants
-  private val _label = "label"
+  val _label = "label"
   private val _prefix = "indexed_"
   private val _ohe_prefix = "ohe_"
   private val _featuresVec = "featuresVec"
   private val _features = "features"
 
   // Extract feature configurations from config
+  // Note: getEnrichedWeatherFeatures includes both base weather features and aggregated features
   val featureTransformations: Map[String, FeatureTransformationConfig] = {
     val flight = featureConfig.flightSelectedFeatures.getOrElse(Map.empty)
-    val weather = featureConfig.weatherSelectedFeatures.getOrElse(Map.empty)
+    val weather = featureConfig.getEnrichedWeatherFeatures
     flight ++ weather
   }
 
@@ -57,39 +58,55 @@ class ConfigurationBasedFeatureExtractorPipeline(
      * Finds all columns that match a given feature name pattern.
      *
      * Logic:
-     * 1) Try an exact match first (for standard flight-level features).
-     * 2) If not found, try exploded weather features, which can appear as:
-     *      - origin_weather_<featureName>-<index>
-     *      - destination_weather_<featureName>-<index>
-     *    where the index ranges depend on weatherOriginDepthHours and weatherDestinationDepthHours.
+     * 1) If featureName is already a full aggregated name (e.g., origin_weather_RelativeHumidity_Avg),
+     *    return exact match only to avoid duplicates
+     * 2) Try exact match first (for standard flight-level features)
+     * 3) Try exploded weather features (_h1, _h2, _h3) - for base weather features
      *
      * Example:
-     *   featureName = "feature_weather_severity_index" matches:
-     *     - origin_weather_feature_weather_severity_index-0
-     *     - origin_weather_feature_weather_severity_index-1
-     *     - destination_weather_feature_weather_severity_index-0
-     *     - destination_weather_feature_weather_severity_index-1
+     *   featureName = "RelativeHumidity" matches:
+     *     - origin_weather_RelativeHumidity_h1, h2, h3 (exploded only)
+     *   featureName = "origin_weather_RelativeHumidity_Avg" matches:
+     *     - origin_weather_RelativeHumidity_Avg (exact match only)
      */
     def findMatchingColumns(featureName: String): Seq[String] = {
-      // 1) Try exact match first
+
+      // 1) Check if this is an aggregated feature name (already has origin_weather_ or destination_weather_ prefix)
+      //    This prevents duplicates: we want ONLY exact match for aggregated features
+      val aggMethods = Seq("Sum", "Avg", "Max", "Min", "Std")
+      val isAggregatedFeature = (featureName.startsWith("origin_weather_") || featureName.startsWith("destination_weather_")) &&
+                                aggMethods.exists(method => featureName.endsWith(s"_$method"))
+
+      if (isAggregatedFeature) {
+        // This is an aggregated feature (e.g., origin_weather_RelativeHumidity_Avg)
+        // Return exact match only
+        if (availableFeatures.contains(featureName)) {
+          return Seq(featureName)
+        } else {
+          return Seq.empty
+        }
+      }
+
+      // 2) Try exact match first (for standard flight-level features)
       if (availableFeatures.contains(featureName)) {
         return Seq(featureName)
       }
 
-      // 2) Generate exploded weather feature patterns
+      // 3) Generate exploded weather feature patterns (_h1, _h2, _h3)
+      //    This is for base weather features like "RelativeHumidity", "HourlyPrecip", etc.
       val safeOriginDepth = math.max(0, weatherOriginDepthHours)
       val safeDestDepth   = math.max(0, weatherDestinationDepthHours)
 
       val originPatterns =
-        (0 to safeOriginDepth).map(i => s"origin_weather_${featureName}_h$i")
+        (1 to safeOriginDepth).map(i => s"origin_weather_${featureName}_h$i")
 
       val destPatterns =
-        (0 to safeDestDepth).map(i => s"destination_weather_${featureName}_h$i")
+        (1 to safeDestDepth).map(i => s"destination_weather_${featureName}_h$i")
 
       val candidates = originPatterns ++ destPatterns
       val matching   = candidates.filter(availableFeatures.contains).sorted
 
-      // 3) Return all matching columns (empty sequence if none found)
+      // 4) Return all matching columns (empty sequence if none found)
       matching
     }
 
@@ -115,9 +132,11 @@ class ConfigurationBasedFeatureExtractorPipeline(
   }
 
   /**
-   * Preprocessing: Convert boolean columns to numeric (0.0/1.0)
+   * Preprocessing: Rename target to 'label' and convert boolean columns to numeric (0.0/1.0)
    */
   def preprocessBooleans(df: DataFrame): DataFrame = {
+
+    // Step 2: Convert boolean columns to numeric
     val booleanCols = df.schema.fields
       .filter(_.dataType == BooleanType)
       .map(_.name)
@@ -176,16 +195,10 @@ class ConfigurationBasedFeatureExtractorPipeline(
 
     var stages = Array.empty[PipelineStage]
 
-    // Stage 1: StringIndexer for label
-    // CRITICAL: Always use "skip" for label to ensure binary classification (2 classes only)
-    // Using "keep" would create a 3rd class for unknowns, causing evaluation errors
-    val labelIndexer = new StringIndexer()
-      .setInputCol(target)
-      .setOutputCol(_label)
-      .setHandleInvalid("skip")  // Always skip for label, regardless of handleInvalid parameter
-    stages = stages :+ labelIndexer
+    // Note: Label column is now created in preprocessBooleans() method
+    // No longer need StringIndexer for label since target is already numeric (0/1)
 
-    // Stage 2: StringIndexer for categorical features
+    // Stage 1: StringIndexer for categorical features
     if (stringIndexerCols.nonEmpty) {
       val categoricalIndexer = new StringIndexer()
         .setInputCols(stringIndexerCols)
@@ -194,7 +207,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
       stages = stages :+ categoricalIndexer
     }
 
-    // Stage 3: OneHotEncoder for categorical features that need it
+    // Stage 2: OneHotEncoder for categorical features that need it
     val oneHotInputCols = oneHotEncoderCols
     val oneHotIndexedCols = oneHotInputCols.map(_prefix + _)
     val oneHotOutputCols = oneHotInputCols.map(_ohe_prefix + _)
@@ -215,7 +228,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
       stages = stages :+ oneHotEncoder
     }
 
-    // Stage 4: Imputer to replace NaN/null values in numeric columns
+    // Stage 3: Imputer to replace NaN/null values in numeric columns
     // This is critical because VectorAssembler and ML models cannot handle NaN
     if (numericCols.nonEmpty) {
       val imputer = new Imputer()
@@ -228,7 +241,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
       info(s"  - Added Imputer for ${numericCols.length} numeric columns (strategy: mean)")
     }
 
-    // Stage 5: VectorAssembler to combine all features
+    // Stage 4: VectorAssembler to combine all features
     val imputedNumericCols = if (numericCols.nonEmpty) numericCols.map("imputed_" + _) else Array.empty[String]
     val allInputCols = stringIndexerCols.map(_prefix + _) ++
                        oneHotOutputCols ++
@@ -240,7 +253,7 @@ class ConfigurationBasedFeatureExtractorPipeline(
       .setHandleInvalid(handleInvalid)
     stages = stages :+ vectorAssembler
 
-    // Stage 6: Apply scalers if configured for numeric features
+    // Stage 5: Apply scalers if configured for numeric features
     val scalerConfig = numericCols.flatMap { colName =>
       featureTransformations.get(colName).map(config => (colName, config.transformation))
     }.groupBy(_._2)
@@ -262,11 +275,12 @@ class ConfigurationBasedFeatureExtractorPipeline(
       // We'll handle this in postProcess
     }
 
-    // Stage 6: VectorIndexer pour RandomForest (remplace StandardScaler)
+    // Stage 6: VectorIndexer pour RandomForest
     val vectorIndexer = new VectorIndexer()
       .setInputCol(_featuresVec)
       .setOutputCol(_features)          // "features" final pour le modèle
-      .setMaxCategories(experiment.featureExtraction.maxCategoricalCardinality)            // à ajuster selon ton cas
+      .setMaxCategories(experiment.featureExtraction.maxCategoricalCardinality)
+      .setHandleInvalid("keep")         // Keep unseen values as a new category
     stages = stages :+ vectorIndexer
 
     //Log Statges
@@ -426,6 +440,10 @@ class ConfigurationBasedFeatureExtractorPipeline(
     }
 
     info("=" * 80)
+  }
+
+  def getLabel(): String = {
+    _label
   }
 }
 

@@ -29,7 +29,8 @@ object WeatherPreprocessingPipeline {
     val porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf = porcessedWithVisibilityFeaturesDf.transform(WeatherInteractionFeatures.createInteractionFeatures)
     val porcessWithWeatherConditionFeaturesDf = porcessedWithSkyConditionAndVisibilityIntegrationFeaturesDf.transform(WeatherTypeFeatureGenerator.createFeatures)
     val processedWithPressureTendencyFeaturesDf = porcessWithWeatherConditionFeaturesDf.transform(WeatherPressionFeatures.createPressureFeatures)
-    val processedWeatherDf = WeatherDataCleaner.preprocess(processedWithPressureTendencyFeaturesDf, rawFlightData)
+    val processedWithTemporalFeaturesDf = WeatherTemporalFeatures.preprocess(processedWithPressureTendencyFeaturesDf)
+    val processedWeatherDf = WeatherDataCleaner.preprocess(processedWithTemporalFeaturesDf, rawFlightData)
 
     processedWeatherDf
   }

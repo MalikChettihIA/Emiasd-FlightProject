@@ -3,16 +3,18 @@ package com.flightdelay.features
 import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.ml.{PipelineModel}
+import org.apache.spark.ml.PipelineModel
 import org.apache.spark.ml.feature.PCAModel
 import com.flightdelay.data.utils.ColumnTypeDetector
-import com.flightdelay.features.pipelines.{EnhancedDataFeatureExtractorPipeline, ConfigurationBasedFeatureExtractorPipeline}
+import com.flightdelay.features.pipelines.{ConfigurationBasedFeatureExtractorPipeline, EnhancedDataFeatureExtractorPipeline}
 import com.flightdelay.features.pca.{PCAFeatureExtractor, VarianceAnalysis}
 import com.flightdelay.features.leakage.DataLeakageProtection
 import com.flightdelay.utils.DebugUtils._
 
 import scala.sys.process._
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.sql.types.DoubleType
+
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 
@@ -69,11 +71,12 @@ object FeatureExtractor {
    */
   def extract(data: DataFrame, experiment: ExperimentConfig)(implicit configuration: AppConfiguration, spark: SparkSession): (DataFrame, FeatureExtractionModels) = {
 
+    val dataWithLabel = data.withColumn("label", col(experiment.target).cast(DoubleType))
     val extractionStartTime = System.currentTimeMillis()
     val target = experiment.target
 
     var stepStartTime = System.currentTimeMillis()
-    val cleaData = DataLeakageProtection.clean(data, target)
+    val cleaData = DataLeakageProtection.clean(dataWithLabel, target)
     var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     info(s"  - Data leakage protection completed in ${stepDuration}s")
 
@@ -268,6 +271,8 @@ object FeatureExtractor {
    */
   def transform(data: DataFrame, models: FeatureExtractionModels, experiment: ExperimentConfig)(implicit configuration: AppConfiguration, spark: SparkSession): DataFrame = {
 
+    val dataWithLabel = data.withColumn("label", col(experiment.target).cast(DoubleType))
+
     val transformStartTime = System.currentTimeMillis()
     val target = experiment.target
 
@@ -276,7 +281,7 @@ object FeatureExtractor {
 
     // Step 1: Clean data (remove leakage columns)
     var stepStartTime = System.currentTimeMillis()
-    val cleanData = DataLeakageProtection.clean(data, target)
+    val cleanData = DataLeakageProtection.clean(dataWithLabel, target)
     var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
     info(s"  - Data leakage protection completed in ${stepDuration}s")
 
