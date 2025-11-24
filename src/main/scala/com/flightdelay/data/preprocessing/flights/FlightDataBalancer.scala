@@ -113,7 +113,7 @@ object FlightDataBalancer {
         withReplacement = false,
         fraction = samplingFraction,
         seed = seed
-      ).cache()
+      )
 
       val sampledMajorityCount = sampledMajority.count()
 
@@ -135,10 +135,8 @@ object FlightDataBalancer {
       debug(f"  - Samples removed:  ${totalCount - balancedCount}%,10d")
 
       // Clean up cache
-      df.unpersist()
       minorityData.unpersist()
       majorityData.unpersist()
-      sampledMajority.unpersist()
 
       debug("=" * 80)
       debug("[Data Balancing] Random Under-Sampling - End")

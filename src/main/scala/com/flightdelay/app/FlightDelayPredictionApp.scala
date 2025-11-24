@@ -187,8 +187,8 @@ object FlightDelayPredictionApp {
       warn(s"Loading prepared data:")
       warn(s"  - Train: $trainPath")
       warn(s"  - Test:  $testPath")
-      val trainData = spark.read.parquet(trainPath).cache()
-      val testData = spark.read.parquet(testPath).cache()
+      val trainData = spark.read.parquet(trainPath)
+      val testData = spark.read.parquet(testPath)
       (trainData, testData)
     }
 
