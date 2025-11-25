@@ -242,6 +242,96 @@ object MLPipeline {
     info(s"   Saving final model to: $modelPath")
     finalModel.asInstanceOf[PipelineModel].write.overwrite().save(modelPath)
 
+    // Save and log feature importances report for tree-based models
+    try {
+      val pipelineModel = finalModel.asInstanceOf[PipelineModel]
+      val baseModel = pipelineModel.stages(0)
+
+      // Check if model has feature importances (RandomForest, GBT)
+      val featureImportancesOpt = baseModel match {
+        case rf: org.apache.spark.ml.classification.RandomForestClassificationModel =>
+          Some((rf.featureImportances.toArray, "RandomForest"))
+        case gbt: org.apache.spark.ml.classification.GBTClassificationModel =>
+          Some((gbt.featureImportances.toArray, "GBT"))
+        case _ => None
+      }
+
+      featureImportancesOpt.foreach { case (importances, modelType) =>
+        // Load feature names
+        val featureNamesPath = s"$experimentOutputPath/features/selected_features.txt"
+        val featureNames = try {
+          val source = scala.io.Source.fromFile(featureNamesPath)
+          val names = source.getLines().toArray
+          source.close()
+          names
+        } catch {
+          case _: Exception =>
+            // If file not found, generate generic names
+            importances.indices.map(i => s"Feature_$i").toArray
+        }
+
+        // Create feature importances report
+        val reportPath = s"$experimentOutputPath/features/feature_importances_report.txt"
+        val report = new StringBuilder
+        report.append("=" * 90).append("\n")
+        report.append(s"Top 20 Feature Importances ($modelType)\n")
+        report.append("=" * 90).append("\n")
+        report.append(f"${"Rank"}%-6s ${"Index"}%-7s ${"Feature Name"}%-60s ${"Importance"}%12s\n")
+        report.append("=" * 90).append("\n")
+
+        importances.zipWithIndex
+          .sortBy(-_._1)
+          .take(20)
+          .zipWithIndex
+          .foreach { case ((importance, featureIdx), rank) =>
+            val featureName = if (featureIdx < featureNames.length) featureNames(featureIdx) else s"Feature_$featureIdx"
+            val importancePercent = importance * 100
+
+            // Visual indicator for importance level
+            val indicator = if (importancePercent >= 10) "█"
+                           else if (importancePercent >= 5) "▓"
+                           else if (importancePercent >= 1) "▒"
+                           else "░"
+
+            report.append(f"${rank + 1}%-6d [${featureIdx}%3d]  ${featureName}%-60s ${indicator}  ${importancePercent}%5.2f%%\n")
+          }
+
+        report.append("=" * 90).append("\n")
+        report.append("Importance Levels:  █≥10% ▓≥5% ▒≥1% ░<1%\n")
+        report.append("Abbreviations:\n")
+        report.append("  indexed_              = idx_\n")
+        report.append("  origin_weather_       = org_w_\n")
+        report.append("  destination_weather_  = dst_w_\n")
+        report.append("  feature_              = f_\n")
+
+        // Write report to file using Hadoop FileSystem
+        val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+        val reportPathObj = new org.apache.hadoop.fs.Path(reportPath)
+        val out = fs.create(reportPathObj, true)
+        val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
+        try {
+          writer.write(report.toString)
+          info(s"   Feature importances report saved to: $reportPath")
+        } finally {
+          writer.close()
+        }
+
+        // Log to MLFlow
+        runId.foreach { rid =>
+          MLFlowTracker.logFeatureImportances(
+            rid,
+            featureNames,
+            importances,
+            topN = Some(20)
+          )
+          info(s"   Feature importances logged to MLFlow (top 20)")
+        }
+      }
+    } catch {
+      case ex: Exception =>
+        info(s"   Warning: Could not save feature importances report: ${ex.getMessage}")
+    }
+
     info(s"   Reloading model for evaluation to avoid broadcast...")
     val reloadedModel = PipelineModel.load(modelPath)
 

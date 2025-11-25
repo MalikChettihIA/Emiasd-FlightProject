@@ -121,6 +121,7 @@ object DataJoinerPostProcessor {
 
     var resultDF = df
     var createdFeaturesCount = 0
+    var columnsToDrop = scala.collection.mutable.ArrayBuffer[String]()
 
     // Pour chaque variable météo configurée
     aggregatedFeatures.foreach { case (varName, aggConfig) =>
@@ -135,9 +136,15 @@ object DataJoinerPostProcessor {
 
         if (originCols.nonEmpty) {
           val aggExpr = createAggregationExpression(originCols, aggMethod)
-          resultDF = resultDF.withColumn(s"origin_weather_${varName}_${aggMethod.capitalize}", aggExpr)
-          debug(s"  - Created origin_weather_${varName}_${aggMethod.capitalize} from ${originCols.length} columns")
+          val featureName = s"origin_weather_${varName}_${aggMethod.capitalize}"
+          resultDF = resultDF.withColumn(featureName, aggExpr)
+          info(s"  ✓ Created: $featureName (from ${originCols.length} columns: ${originCols.mkString(", ")})")
+
+          // Marquer les colonnes sources pour suppression
+          columnsToDrop ++= originCols
           createdFeaturesCount += 1
+        } else {
+          info(s"  ✗ Skipped: origin_weather_${varName}_${aggMethod.capitalize} (no source columns found)")
         }
       }
 
@@ -149,11 +156,24 @@ object DataJoinerPostProcessor {
 
         if (destCols.nonEmpty) {
           val aggExpr = createAggregationExpression(destCols, aggMethod)
-          resultDF = resultDF.withColumn(s"destination_weather_${varName}_${aggMethod.capitalize}", aggExpr)
-          debug(s"  - Created destination_weather_${varName}_${aggMethod.capitalize} from ${destCols.length} columns")
+          val featureName = s"destination_weather_${varName}_${aggMethod.capitalize}"
+          resultDF = resultDF.withColumn(featureName, aggExpr)
+          info(s"  ✓ Created: $featureName (from ${destCols.length} columns: ${destCols.mkString(", ")})")
+
+          // Marquer les colonnes sources pour suppression
+          columnsToDrop ++= destCols
           createdFeaturesCount += 1
+        } else {
+          info(s"  ✗ Skipped: destination_weather_${varName}_${aggMethod.capitalize} (no source columns found)")
         }
       }
+    }
+
+    // Supprimer les colonnes temporelles _hx qui ont été agrégées
+    if (columnsToDrop.nonEmpty) {
+      val uniqueColumnsToDrop = columnsToDrop.distinct
+      resultDF = resultDF.drop(uniqueColumnsToDrop: _*)
+      info(s"  - Dropped ${uniqueColumnsToDrop.length} temporal columns (_hx) after aggregation")
     }
 
     info(s"  - Created $createdFeaturesCount accumulation features")
@@ -164,7 +184,7 @@ object DataJoinerPostProcessor {
    * Crée une expression d'agrégation Spark selon la méthode spécifiée
    *
    * @param columns Liste des noms de colonnes à agréger
-   * @param method Méthode d'agrégation: "sum", "avg", "max", "min", "std"
+   * @param method Méthode d'agrégation: "sum", "avg", "max", "min", "std", "range", "slope"
    * @return Expression Spark Column
    */
   private def createAggregationExpression(columns: Seq[String], method: String): org.apache.spark.sql.Column = {
@@ -191,8 +211,21 @@ object DataJoinerPostProcessor {
         val variance = squaredDiffs.reduce(_ + _) / n
         sqrt(variance)
 
+      case "range" =>
+        // Range: max - min (amplitude des variations)
+        val maxVal = columns.map(col).reduce((c1, c2) => greatest(c1, c2))
+        val minVal = columns.map(col).reduce((c1, c2) => least(c1, c2))
+        maxVal - minVal
+
+      case "slope" | "trend" =>
+        // Slope: (dernière valeur - première valeur) / nombre de périodes
+        // Mesure la tendance linéaire d'évolution
+        val firstVal = coalesce(col(columns.head), lit(0.0))
+        val lastVal = coalesce(col(columns.last), lit(0.0))
+        (lastVal - firstVal) / lit(columns.length.toDouble)
+
       case unknown =>
-        throw new IllegalArgumentException(s"Unknown aggregation method: $unknown. Supported: sum, avg, max, min, std")
+        throw new IllegalArgumentException(s"Unknown aggregation method: $unknown. Supported: sum, avg, max, min, std, range, slope")
     }
   }
 }

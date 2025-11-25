@@ -39,7 +39,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-local-base"
+  - name: "Experience-local-12-12"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -50,8 +50,8 @@ experiments:
       delayThresholdMin: 60
       storeJoinData: true
       storeExplodeJoinData: true
-      weatherOriginDepthHours: 3
-      weatherDestinationDepthHours: 3
+      weatherOriginDepthHours: 12
+      weatherDestinationDepthHours: 12
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
 
@@ -75,7 +75,32 @@ experiments:
         feature_arrival_time_period:
           transformation: "StringIndexer"
 
+        # Cyclic features (sin/cos) - capture periodic nature of temporal variables
+        feature_hour_sin:
+          transformation: "None"
+        feature_hour_cos:
+          transformation: "None"
+        feature_week_of_year_sin:
+          transformation: "None"
+        feature_week_of_year_cos:
+          transformation: "None"
+
       weatherSelectedFeatures:
+
+        feature_weather_type:
+          transformation: "StringIndexer"
+        feature_weather_intensity:
+          transformation: "StringIndexer"
+        feature_flight_category_ordinal:
+          transformation: "None"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_icing_risk_level:
+          transformation: "None"
+        feature_icing_risk_flag:
+          transformation: "None"
+        feature_is_pressure_dropping_fast:
+          transformation: "None"
         HourlyPrecip:
           transformation: "None"
         RelativeHumidity:
@@ -83,38 +108,6 @@ experiments:
         press_change_abs:
           transformation: "None"
         feature_temp_dewpoint_spread:
-          transformation: "None"
-        feature_weather_severity_index:
-          transformation: "None"
-        weather_hazard_level:
-          transformation: "None"
-        feature_visibility_risk_score:
-          transformation: "None"
-        feature_operations_risk_level:
-          transformation: "None"
-        feature_requires_cat_ii:
-          transformation: "None"
-        feature_is_very_low_visibility:
-          transformation: "None"
-        feature_flight_category_ordinal:
-          transformation: "None"
-        extracted_codes:
-          transformation: "StringIndexer"
-        feature_visibility_category:
-          transformation: "StringIndexer"
-        feature_most_critical_sky:
-          transformation: "StringIndexer"
-        feature_pressure_vis_combo_bin:
-          transformation: "StringIndexer"
-        feature_pressure_bucket:
-          transformation: "StringIndexer"
-        feature_weather_type:
-          transformation: "StringIndexer"
-        feature_weather_intensity:
-          transformation: "StringIndexer"
-        feature_icing_risk_level:
-          transformation: "None"
-        feature_icing_risk_flag:
           transformation: "None"
         Temp_Delta_1hr:
           transformation: "None"

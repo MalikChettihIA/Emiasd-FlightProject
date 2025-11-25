@@ -47,7 +47,10 @@ object FlightDataGenerator extends DataPreprocessor {
     // Étape 5: Ajout des features agrégées
     val withAggregatedFeatures = addAggregatedFeatures(withGeographicFeatures)
 
-    withAggregatedFeatures
+    // Étape 6: Ajout des features cycliques (sin/cos)
+    val withCyclicFeatures = addCyclicFeatures(withAggregatedFeatures)
+
+    withCyclicFeatures
 
   }
 
@@ -349,6 +352,13 @@ object FlightDataGenerator extends DataPreprocessor {
     val result2 = addCalculatedColumns(result1, columnExpressions2)
     debug(s"Added Flight features: ${columnExpressions1.size + columnExpressions2.size}")
     result2
+  }
+
+  /**
+   * Ajoute des features cycliques (sin/cos) pour capturer la nature périodique des variables temporelles
+   */
+  def addCyclicFeatures(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
+    FlightCyclicFeatures.createCyclicFeatures(df)
   }
 
   /**

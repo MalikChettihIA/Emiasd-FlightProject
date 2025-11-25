@@ -92,6 +92,10 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     // Save feature importance if path provided
     featureImportancePath.foreach { path =>
       saveFeatureImportance(rfModel, path)
+
+      // Also save text report
+      val reportPath = path.replace(".csv", "_report.txt")
+      saveFeatureImportanceReport(rfModel, reportPath)
     }
 
     println("=" * 80)
@@ -107,6 +111,39 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
   }
 
   /**
+   * Helper function to shorten feature names for display
+   */
+  private def shortenFeatureName(name: String, maxLen: Int = 55): String = {
+    if (name.length <= maxLen) {
+      name
+    } else {
+      // Smart truncation: keep the most important parts
+      val patterns = Map(
+        "indexed_" -> "idx_",
+        "origin_weather_" -> "org_w_",
+        "destination_weather_" -> "dst_w_",
+        "feature_" -> "f_",
+        "_operations_risk_level" -> "_opr_risk",
+        "_weather_severity_index" -> "_wsev_idx",
+        "_is_ifr_conditions" -> "_ifr",
+        "_is_vfr_conditions" -> "_vfr",
+        "_requires_cat_ii" -> "_cat2"
+      )
+
+      var shortened = name
+      patterns.foreach { case (long, short) =>
+        shortened = shortened.replace(long, short)
+      }
+
+      if (shortened.length <= maxLen) {
+        shortened
+      } else {
+        shortened.take(maxLen - 3) + "..."
+      }
+    }
+  }
+
+  /**
    * Display top feature importances from the trained model
    * Enhanced formatting with feature name abbreviation and grouping
    */
@@ -116,37 +153,6 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
 
     // Try to load feature names from file
     val featureNames = loadFeatureNames()
-
-    // Helper function to shorten feature names for display
-    def shortenFeatureName(name: String, maxLen: Int = 55): String = {
-      if (name.length <= maxLen) {
-        name
-      } else {
-        // Smart truncation: keep the most important parts
-        val patterns = Map(
-          "indexed_" -> "idx_",
-          "origin_weather_" -> "org_w_",
-          "destination_weather_" -> "dst_w_",
-          "feature_" -> "f_",
-          "_operations_risk_level" -> "_opr_risk",
-          "_weather_severity_index" -> "_wsev_idx",
-          "_is_ifr_conditions" -> "_ifr",
-          "_is_vfr_conditions" -> "_vfr",
-          "_requires_cat_ii" -> "_cat2"
-        )
-
-        var shortened = name
-        patterns.foreach { case (long, short) =>
-          shortened = shortened.replace(long, short)
-        }
-
-        if (shortened.length <= maxLen) {
-          shortened
-        } else {
-          shortened.take(maxLen - 3) + "..."
-        }
-      }
-    }
 
     println(f"Top $topN Feature Importances:")
     println("=" * 90)
@@ -222,6 +228,65 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
       case ex: Exception =>
         println(s" Error loading feature names: ${ex.getMessage}")
         Array.empty[String]
+    }
+  }
+
+  /**
+   * Save feature importances report to text file
+   */
+  def saveFeatureImportanceReport(model: RandomForestClassificationModel, outputPath: String): Unit = {
+    val importances = model.featureImportances.toArray
+    val featureNames = loadFeatureNames()
+
+    // Build report content
+    val report = new StringBuilder
+    report.append("=" * 90).append("\n")
+    report.append("Top 20 Feature Importances\n")
+    report.append("=" * 90).append("\n")
+    report.append(f"Rank   Index   Feature Name${" " * 48}Importance\n")
+    report.append("=" * 90).append("\n")
+
+    importances.zipWithIndex
+      .sortBy(-_._1)
+      .take(20)
+      .zipWithIndex
+      .foreach { case ((importance, featureIdx), rank) =>
+        val featureName = featureNames.lift(featureIdx).getOrElse(s"Feature_$featureIdx")
+        val shortName = shortenFeatureName(featureName, 60)
+        val importancePercent = importance * 100
+
+        // Visual indicator for importance level
+        val indicator = if (importancePercent >= 10) "█"
+                       else if (importancePercent >= 5) "▓"
+                       else if (importancePercent >= 1) "▒"
+                       else "░"
+
+        report.append(f"${rank + 1}%-6d [${featureIdx}%3d]  ${shortName}%-60s ${indicator}  ${importancePercent}%5.2f%%\n")
+      }
+
+    report.append("=" * 90).append("\n")
+    report.append("Importance Levels:  █≥10% ▓≥5% ▒≥1% ░<1%\n")
+
+    // Write to file using Hadoop FileSystem (HDFS-compatible)
+    try {
+      val spark = org.apache.spark.sql.SparkSession.active
+      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val outputPathObj = new Path(outputPath)
+      val parentDir = outputPathObj.getParent
+      if (parentDir != null && !fs.exists(parentDir)) {
+        fs.mkdirs(parentDir)
+      }
+      val out = fs.create(outputPathObj, true)
+      val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
+      try {
+        writer.write(report.toString)
+        println(s" Feature importance report saved to: $outputPath")
+      } finally {
+        writer.close()
+      }
+    } catch {
+      case ex: Exception =>
+        println(s" Failed to save feature importance report: ${ex.getMessage}")
     }
   }
 
