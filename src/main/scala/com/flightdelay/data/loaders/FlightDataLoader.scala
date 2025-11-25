@@ -96,7 +96,7 @@ object FlightDataLoader extends DataLoader[Flight] {
       info(s"Loading from existing Parquet file:")
       info(s"  - Path: $parquetPath")
 
-      val df = spark.read.parquet(parquetPath).cache()
+      val df = spark.read.parquet(parquetPath)
 
       whenDebug {
         val count = df.count()
@@ -121,7 +121,6 @@ object FlightDataLoader extends DataLoader[Flight] {
         .select(columnsToKeep: _*)
         .withColumn("FL_DATE", to_date(col("FL_DATE"), DEFAULT_DATE_FORMAT))
 
-      df.cache()
       whenDebug {
         val count = df.count
         println(s"  - Loaded $count records from CSV")

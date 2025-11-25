@@ -153,7 +153,6 @@ object WeatherDataLoader extends DataLoader[Nothing] {
         .option("escape", "\"")
         .load(filePath)
 
-      df.cache() 
       whenDebug {
          val count = df.count
          println(s"  - Loaded $count records from CSV")

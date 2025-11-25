@@ -77,7 +77,6 @@ object WeatherDataCleaner extends BiDataPreprocessor {
       val flightWBANs = originWBANs
         .unionByName(destWBANs)
         .distinct()
-        .cache()
 
       // 5) Filtrer les données météo pour ne garder que les WBAN utilisés
       debug("  - Filtering weather data by flight WBANs...")
@@ -85,7 +84,6 @@ object WeatherDataCleaner extends BiDataPreprocessor {
         .withColumn("WBAN", trim(col("WBAN")))
         .where(col("WBAN").isNotNull && length(col("WBAN")) > 0)
         .join(flightWBANs, Seq("WBAN"), "left_semi")
-        .cache()
 
       whenDebug{
 

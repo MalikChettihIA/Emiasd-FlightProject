@@ -148,7 +148,6 @@ object FlightWeatherDataJoiner {
       val originDF = originWithWoArr
         .select(col("*") +: woCols: _*)
         .drop("Wo")
-        .persist()
 
       originDF
     } else {
@@ -183,7 +182,6 @@ object FlightWeatherDataJoiner {
       val joinedDF = destWithWdArr
         .select( (baseCols ++ wdCols): _* )
         .drop("Wd")
-        .persist()
 
       joinedDF
     } else {

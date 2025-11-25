@@ -8,17 +8,21 @@ profile: "prodlamsade"
 common:
   # Random seed for reproducibility across all experiments
   seed: 42
+  log: true                   # Enable/disable all logging
+  logLevel: "info"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: true      # If true: load from CSV/TXT; if false: load from raw parquet
+  storeIntoParquet: false  
 
   data:
-    basePath: "/students/p6emiasd2025/hbalamou/data"
+    basePath: "hdfs:///students/p6emiasd2025/hbalamou/data"
     flight :
-      path: "/students/p6emiasd2025/hbalamou/data/Flights/201201.csv"
+      path: "hdfs:///students/p6emiasd2025/hbalamou/data/Flights/*.csv"
     weather :
-      path : "/students/p6emiasd2025/hbalamou/data/Weather/201201hourly.txt"
+      path : "hdfs:///students/p6emiasd2025/hbalamou/data/Weather/*.txt"
     airportMapping :
-      path : "/students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv"
+      path : "hdfs:///students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv"
   output:
-    basePath: "/students/p6emiasd2025/hbalamou/output"
+    basePath: "hdfs:///students/p6emiasd2025/hbalamou/output"
 
   mlflow:
     enabled: true
@@ -33,8 +37,8 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-local"
-    description: "Baseline Random Forest with hyperparameters tuning"
+  - name: "Experience-lamsade-12h"
+    description: "Random Forest with hyperparameters tuning and 8 hours weather data"
     enabled: true
     target: "is_delayed"
 
@@ -42,11 +46,12 @@ experiments:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: false
-      storeExplodeJoinData: false
-      weatherOriginDepthHours: 0
-      weatherDestinationDepthHours: 0
-      maxCategoricalCardinality: 50
+      storeJoinData: true
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: 11
+      weatherDestinationDepthHours: 11
+      maxCategoricalCardinality: 280
+      handleInvalid: "keep"
 
       flightSelectedFeatures:
         CRS_DEP_TIME:
@@ -67,136 +72,69 @@ experiments:
           transformation: "StringIndexer"
         feature_arrival_time_period:
           transformation: "StringIndexer"
-        #feature_turnaround_buffer:
-        #  transformation: "None"
 
       weatherSelectedFeatures:
-        feature_most_critical_sky:
-          transformation: "StringIndexer"
-        feature_num_cloud_layers:
-          transformation: "None"
-        feature_cloud_risk_score:
-          transformation: "None"
-        feature_has_overcast:
-          transformation: "None"
-        feature_has_broken:
-          transformation: "None"
-        feature_has_obscured:
-          transformation: "None"
-        feature_is_clear:
-          transformation: "None"
-        feature_lowest_cloud_height:
-          transformation: "None"
-        feature_ceiling:
-          transformation: "None"
-        feature_has_low_ceiling:
-          transformation: "None"
-        feature_visibility_miles:
-          transformation: "None"
-        feature_visibility_km:
-          transformation: "None"
-        feature_visibility_category:
-          transformation: "StringIndexer"
-        feature_visibility_risk_score:
-          transformation: "None"
-        feature_is_low_visibility:
-          transformation: "None"
-        feature_is_very_low_visibility:
-          transformation: "None"
-        feature_visibility_normalized:
-          transformation: "None"
-        feature_visibility_inverse:
-          transformation: "None"
-        feature_weather_severity_index:
-          transformation: "None"
-        feature_is_vfr_conditions:
-          transformation: "None"
-        feature_is_ifr_conditions:
-          transformation: "None"
-        feature_requires_cat_ii:
-          transformation: "None"
-        feature_operations_risk_level:
-          transformation: "None"
-        feature_flight_category:
-          transformation: "StringIndexer"
-        feature_flight_category_ordinal:
-          transformation: "None"
-        intensity_heavy:
-          transformation: "None"
-        intensity_light:
-          transformation: "None"
-        weather_intensity:
-          transformation: "StringIndexer"
-        feature_precipitation_intensity:
-          transformation: "None"
-        has_thunderstorm:
-          transformation: "None"
-        has_freezing_precip:
-          transformation: "None"
-        has_freezing:
-          transformation: "None"
-        has_precipitation:
-          transformation: "None"
-        has_obscuration:
-          transformation: "None"
-        has_visible_moisture:
-          transformation: "None"
-        has_hazardous:
-          transformation: "None"
-        has_rain:
-          transformation: "None"
-        has_snow:
-          transformation: "None"
-        has_hail:
-          transformation: "None"
-        extracted_codes:
-          transformation: "StringIndexer"
-        weather_hazard_level:
-          transformation: "None"
-        Icing_Risk_Flag:
-          transformation: "None"
-        Icing_Risk_Level:
-          transformation: "None"
-
-        # Feature Non retravailler
-        DryBulbFarenheit:
-          transformation: "None"
-        DryBulbCelsius:
-          transformation: "None"
-        WetBulbFarenheit:
-          transformation: "None"
-        WetBulbCelsius:
-          transformation: "None"
-        DewPointFarenheit:
-          transformation: "None"
-        DewPointCelsius:
+        HourlyPrecip:
           transformation: "None"
         RelativeHumidity:
           transformation: "None"
-        WindSpeed:
+        press_change_abs:
           transformation: "None"
-        WindDirection:
+        feature_temp_dewpoint_spread:
           transformation: "None"
-        ValueForWindCharacter:
+        feature_weather_severity_index:
           transformation: "None"
-        StationPressure:
+        weather_hazard_level:
           transformation: "None"
-        PressureTendency:
+        feature_visibility_risk_score:
           transformation: "None"
-        PressureChange:
+        feature_operations_risk_level:
           transformation: "None"
-        SeaLevelPressure:
+        feature_requires_cat_ii:
           transformation: "None"
-        HourlyPrecip:
+        feature_is_very_low_visibility:
           transformation: "None"
-        Altimeter:
+        feature_flight_category_ordinal:
           transformation: "None"
-
-        feature_pressure_visibility_combo:
+        extracted_codes:
+          transformation: "StringIndexer"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_most_critical_sky:
+          transformation: "StringIndexer"
+        feature_pressure_vis_combo_bin:
           transformation: "StringIndexer"
         feature_pressure_bucket:
           transformation: "StringIndexer"
+        feature_weather_type:
+          transformation: "StringIndexer"
+        feature_weather_intensity:
+          transformation: "StringIndexer"
+        feature_icing_risk_level:
+          transformation: "None"
+        feature_icing_risk_flag:
+          transformation: "None"
+        Temp_Delta_1hr:
+          transformation: "None"
+        Visibility_Delta_1hr:
+          transformation: "None"
+        Humidity_Delta_1hr:
+          transformation: "None"
+        WindSpeed_Delta_1hr:
+          transformation: "None"
+
+      aggregatedSelectedFeatures:
+        HourlyPrecip:
+          aggregation: "sum"
+          transformation: "None"
+        RelativeHumidity:
+          aggregation: "avg"
+          transformation: "None"
         press_change_abs:
+          aggregation: "max"
+          transformation: "None"
+        feature_temp_dewpoint_spread:
+          aggregation: "min"
           transformation: "None"
 
     model:
@@ -214,7 +152,7 @@ experiments:
       trainRatio: 0.75
 
       crossValidation:
-        numFolds: 5
+        numFolds: 4
 
       gridSearch:
         enabled: true

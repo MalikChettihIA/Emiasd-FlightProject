@@ -156,7 +156,6 @@ object FlightDataCleaner extends DataPreprocessor {
         .select(trim(col("WBAN")).as("WBAN"))
         .where(col("WBAN").isNotNull && length(col("WBAN")) > 0)
         .distinct()
-        .cache()
 
       whenDebug {
         val stationCount = weatherStations.count()
@@ -193,7 +192,6 @@ object FlightDataCleaner extends DataPreprocessor {
         val countBefore = flightsWBAN.count()
         debug(s"  - Flights before filtering: ${countBefore}")
 
-        flightDF_filtered.cache()
         val countAfter = flightDF_filtered.count()
         val removedCount = countBefore - countAfter
         val removalPercent = if (countBefore > 0) (removedCount.toDouble / countBefore * 100).round else 0
@@ -238,7 +236,6 @@ object FlightDataCleaner extends DataPreprocessor {
         .withColumn("month_utc", date_format(col("Date"), "yyyy-MM"))
         .select("month_utc")
         .distinct()
-        .cache()
 
       whenDebug {
         val monthCount = weatherMonths.count()
@@ -249,8 +246,7 @@ object FlightDataCleaner extends DataPreprocessor {
       debug("  - Filtering flights by covered months...")
       val flightDF_mCovered = flightsCoveredMonths
         .join(weatherMonths, Seq("month_utc"), "left_semi")
-        .drop("month_utc")  // Supprimer la colonne temporaire
-        .cache()
+        .drop("month_utc")
 
 
       // Comptage après filtrage et statistiques

@@ -44,7 +44,6 @@ object FlightPreviousLateFlightFeatureGenerator {
       debug(s"  - Repartitioning by AIRCRAFT_ID and FL_DATE...")
       val dfRepartitioned = dfWithAircraftId
         .repartition(200, col("AIRCRAFT_ID"), col("FL_DATE"))  // 200 partitions
-        .cache()  // Cache pour éviter de recalculer
 
       val countBefore = dfRepartitioned.count()
       debug(f"  - Processing $countBefore%,d flights")
