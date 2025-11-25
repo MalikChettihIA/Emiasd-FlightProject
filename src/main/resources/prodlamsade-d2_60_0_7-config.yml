@@ -1,0 +1,54 @@
+# Generated from local-d2_60_0_7-config.yml for prodlamsade environment
+environment: "prodlamsade"
+profile: "prodlamsade"
+common: { seed: 42, log: true, logLevel: "info", loadDataFromCSV: true, storeIntoParquet: false, data: { basePath: "hdfs:///students/p6emiasd2025/hbalamou/data", flight: { path: "hdfs:///students/p6emiasd2025/hbalamou/data/Flights/*.csv" }, weather: { path: "hdfs:///students/p6emiasd2025/hbalamou/data/Weather/*.txt" }, airportMapping: { path: "hdfs:///students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv" } }, output: { basePath: "hdfs:///students/p6emiasd2025/hbalamou/output" }, mlflow: { enabled: true, trackingUri: "http://localhost:5000" } }
+experiments:
+  - name: "Experience-lamsade-D2-60-0-7"
+    description: "Baseline Random Forest with hyperparameters tuning"
+    enabled: true
+    target: "is_delayed"
+    featureExtraction:
+      type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherOriginDepthHours: -1
+      weatherDestinationDepthHours: 7
+      maxCategoricalCardinality: 280
+      handleInvalid: "keep"
+      flightSelectedFeatures:
+        CRS_DEP_TIME: { transformation: "None" }
+        OP_CARRIER_AIRLINE_ID: { transformation: "StringIndexer" }
+        ORIGIN_AIRPORT_ID: { transformation: "StringIndexer" }
+        DEST_AIRPORT_ID: { transformation: "StringIndexer" }
+        CRS_ELAPSED_TIME: { transformation: "None" }
+        feature_departure_hour_rounded_sin: { transformation: "None" }
+        feature_departure_hour_rounded_cos: { transformation: "None" }
+        feature_flight_week_of_year_sin: { transformation: "None" }
+        feature_flight_week_of_year_cos: { transformation: "None" }
+        feature_departure_time_period: { transformation: "StringIndexer" }
+        feature_arrival_time_period: { transformation: "StringIndexer" }
+      weatherSelectedFeatures:
+        feature_weather_type: { transformation: "StringIndexer" }
+        feature_weather_intensity: { transformation: "StringIndexer" }
+        feature_flight_category_ordinal: { transformation: "None" }
+        feature_visibility_category: { transformation: "StringIndexer" }
+        feature_icing_risk_level: { transformation: "None" }
+        feature_icing_risk_flag: { transformation: "None" }
+        feature_is_pressure_dropping_fast: { transformation: "None" }
+        HourlyPrecip: { transformation: "None" }
+        RelativeHumidity: { transformation: "None" }
+        press_change_abs: { transformation: "None" }
+        feature_temp_dewpoint_spread: { transformation: "None" }
+        Temp_Delta_1hr: { transformation: "None" }
+        Visibility_Delta_1hr: { transformation: "None" }
+        Humidity_Delta_1hr: { transformation: "None" }
+        WindSpeed_Delta_1hr: { transformation: "None" }
+      aggregatedSelectedFeatures:
+        HourlyPrecip: { aggregation: "sum", transformation: "None" }
+        RelativeHumidity: { aggregation: "avg", transformation: "None" }
+        press_change_abs: { aggregation: "max", transformation: "None" }
+        feature_temp_dewpoint_spread: { aggregation: "min", transformation: "None" }
+    model: { modelType: "randomforest", hyperparameters: { numTrees: [15], maxDepth: [7], maxBins: [280], minInstancesPerNode: [5], subsamplingRate: [1.0], featureSubsetStrategy: ["all"], impurity: "gini" } }
+    train: { trainRatio: 0.75, crossValidation: { numFolds: 4 }, gridSearch: { enabled: true, evaluationMetric: "f1" } }
