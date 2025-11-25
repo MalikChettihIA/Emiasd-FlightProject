@@ -45,6 +45,19 @@ plt.rcParams['legend.frameon'] = True
 def natural_keys(text):
     return [ int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', text) ]
 
+def extract_short_name(exp_name):
+    """
+    Extrait la partie courte du nom d'expérience (ex: D2xxx)
+    Enlève tout ce qui est avant le deuxième tiret du 6
+    """
+    parts = exp_name.split('-')
+    if len(parts) >= 2:
+        # Cherche la partie qui commence par 'D' et garde tout après
+        for i, part in enumerate(parts):
+            if part.startswith('D'):
+                return '-'.join(parts[i:])
+    return exp_name  # Retourne le nom complet si pas de match
+
 def find_experiment_directories(output_dir):
     output_dir = Path(output_dir)
     experiments = []
@@ -139,7 +152,7 @@ def plot_metrics_comparison(df, output_dir):
     ax1.set_ylabel('Score (%)')
     ax1.set_title('Cross-Validation Performance', pad=10)
     ax1.set_xticks(x)
-    ax1.set_xticklabels(df['experiment_name'], rotation=30, ha='right')
+    ax1.set_xticklabels([extract_short_name(name) for name in df['experiment_name']], rotation=30, ha='right')
     ax1.legend(ncol=5, loc='lower right')
     ax1.set_ylim(0, 105)
 
@@ -158,7 +171,7 @@ def plot_metrics_comparison(df, output_dir):
     ax2.set_ylabel('Score (%)')
     ax2.set_title('Hold-out Test Performance', pad=10)
     ax2.set_xticks(x)
-    ax2.set_xticklabels(df['experiment_name'], rotation=30, ha='right')
+    ax2.set_xticklabels([extract_short_name(name) for name in df['experiment_name']], rotation=30, ha='right')
     ax2.set_ylim(0, 115)
 
     plt.tight_layout()
@@ -170,7 +183,7 @@ def plot_heatmap_comparison(df, output_dir):
     if not cols: return
 
     data = df[cols].copy() * 100
-    data.index = df['experiment_name']
+    data.index = [extract_short_name(name) for name in df['experiment_name']]
     data.columns = [c.replace('holdout_','').replace('_',' ').title() for c in cols]
 
     fig, ax = plt.subplots(figsize=(8, max(4, len(df)*0.6)))
@@ -195,7 +208,7 @@ def plot_radar_comparison(df, output_dir):
     for idx, row in df.iterrows():
         vals = [row.get(f'holdout_{m}', 0) for m in metrics]
         vals += vals[:1]
-        ax.plot(angles, vals, linewidth=2, label=row['experiment_name'], color=colors[idx])
+        ax.plot(angles, vals, linewidth=2, label=extract_short_name(row['experiment_name']), color=colors[idx])
         ax.fill(angles, vals, alpha=0.1, color=colors[idx])
 
     ax.set_xticks(angles[:-1])
@@ -225,7 +238,7 @@ def plot_stability_comparison(df, output_dir):
     ax.set_ylabel('Std Dev (%)')
     ax.set_title('Stability Comparison (Lower is Better)', pad=10)
     ax.set_xticks(x)
-    ax.set_xticklabels(df['experiment_name'], rotation=30, ha='right')
+    ax.set_xticklabels([extract_short_name(name) for name in df['experiment_name']], rotation=30, ha='right')
     ax.legend()
 
     plt.tight_layout()
@@ -245,7 +258,7 @@ def plot_f1_ranking(df, output_dir):
         ax1.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2,
                  f'{bar.get_width():.1f}%', va='center', fontsize=9, fontweight='bold')
     ax1.set_yticks(y)
-    ax1.set_yticklabels(df1['experiment_name'])
+    ax1.set_yticklabels([extract_short_name(name) for name in df1['experiment_name']])
     ax1.set_title('Ranking by Hold-out F1')
 
     # Plot 2
@@ -256,7 +269,7 @@ def plot_f1_ranking(df, output_dir):
         val = row.cv_f1_score_mean * 100
         ax2.text(val + row.cv_f1_score_std*100 + 1, i, f'{val:.1f}%', va='center', fontsize=9)
     ax2.set_yticks(y)
-    ax2.set_yticklabels(df2['experiment_name'])
+    ax2.set_yticklabels([extract_short_name(name) for name in df2['experiment_name']])
     ax2.set_title('Ranking by CV F1')
 
     plt.tight_layout()
@@ -268,6 +281,7 @@ def plot_hyperparameters_comparison(df, output_dir):
     if not cols: return
 
     data = df[['experiment_name'] + cols].copy()
+    data['experiment_name'] = data['experiment_name'].apply(extract_short_name)
     data.columns = ['Experiment'] + [c.replace('hp_','') for c in cols]
 
     fig, ax = plt.subplots(figsize=(10, max(3, len(cols)*0.5)))
@@ -328,7 +342,7 @@ def plot_roc_curves_comparison(experiments_info, output_dir):
 
             # Lines kept clear (lw=2)
             ax.plot(fpr, tpr, color=colors[idx], lw=2, alpha=0.8,
-                    label=f"{exp['name']} ({roc_auc:.3f})")
+                    label=f"{extract_short_name(exp['name'])} ({roc_auc:.3f})")
             roc_loaded = True
         except: pass
 
@@ -355,22 +369,26 @@ def plot_roc_curves_comparison(experiments_info, output_dir):
 def plot_global_sensitivity(df, output_dir):
     """
     Aggregates metrics from all experiments to plot a global sensitivity curve.
-    X-axis: Extracted 'exp_param' (e.g. 0, 1, 3, 5...)
+    X-axis: Experiment names
     Y-axis: Accuracy, Rec_o, Rec_d
     """
 
     # Check if we have the necessary columns
-    required_cols = ['holdout_accuracy', 'holdout_recall_ontime', 'holdout_recall_delayed', 'exp_param']
+    required_cols = ['holdout_accuracy', 'holdout_recall_ontime', 'holdout_recall_delayed']
     if not all(col in df.columns for col in required_cols):
         print("⚠ Missing columns for sensitivity analysis.")
         return
 
-    # Group/Sort by parameter
-    df_plot = df.sort_values('exp_param')
+    # Group/Sort by parameter if available, otherwise keep natural order
+    if 'exp_param' in df.columns:
+        df_plot = df.sort_values('exp_param')
+    else:
+        df_plot = df.copy()
 
-    x = df_plot['exp_param']
+    # Use indices for x-axis positioning
+    x = np.arange(len(df_plot))
 
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=(12, 7))
 
     # Style matching the photo:
     # Acc: Blue dash-dot, circle
@@ -385,7 +403,11 @@ def plot_global_sensitivity(df, output_dir):
     ax.plot(x, df_plot['holdout_recall_delayed'] * 100, color='#e74c3c', linestyle=':', marker='x',
             linewidth=1.5, markersize=7, label='Rec_d', alpha=0.9)
 
-    ax.set_xlabel('Experiment Parameter (Derived from Name)', fontsize=10, fontweight='bold')
+    # Set experiment names as x-tick labels
+    ax.set_xticks(x)
+    ax.set_xticklabels([extract_short_name(name) for name in df_plot['experiment_name']], rotation=45, ha='right')
+
+    ax.set_xlabel('Experiments', fontsize=10, fontweight='bold')
     ax.set_ylabel('Percentage (%)', fontsize=10, fontweight='bold')
     ax.set_title('Global Sensitivity Analysis', fontsize=11, fontweight='bold', pad=10)
 

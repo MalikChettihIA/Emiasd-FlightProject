@@ -32,4 +32,4 @@ spark-submit \
   --conf spark.memory.storageFraction=0.3 \
   --jars /apps/mlflow-client-3.4.0.jar,/apps/mlflow-spark_2.13-3.4.0.jar \
   /apps/Emiasd-Flight-Data-Analysis.jar \
-  local-d2_60_5_5 "$TASKS"
+  local-d2_60_0_0 "$TASKS"

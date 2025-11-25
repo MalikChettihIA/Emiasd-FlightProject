@@ -7,6 +7,7 @@ import com.flightdelay.ml.evaluation.ModelEvaluator
 import com.flightdelay.ml.evaluation.ModelEvaluator.EvaluationMetrics
 import com.flightdelay.ml.tracking.MLFlowTracker
 import com.flightdelay.ml.training.{CrossValidator, Trainer}
+import com.flightdelay.utils.HDFSHelper
 import org.apache.spark.ml.{PipelineModel, Transformer}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import com.flightdelay.utils.DebugUtils._
@@ -375,8 +376,16 @@ object MLPipeline {
     // Save training summary as TXT file
     saveTrainingSummary(experiment, cvResult, holdOutMetrics, totalTime, experimentOutputPath)
 
-    // Generate visualization plots
-    val metricsPath = s"$experimentOutputPath/metrics"
+    // Copy HDFS to local if localPath is configured (for visualization and MLFlow)
+    val localExperimentPath = HDFSHelper.copyExperimentMetrics(
+      spark,
+      experimentOutputPath,
+      configuration.common.output.localPath,
+      experiment.name
+    )
+
+    // Generate visualization plots using local path (or HDFS if no localPath)
+    val metricsPath = s"$localExperimentPath/metrics"
     generatePlots(metricsPath)
 
     info(f"   Total pipeline time: $totalTime%.2f seconds")
@@ -385,20 +394,23 @@ object MLPipeline {
     runId.foreach { rid =>
       MLFlowTracker.logMetric(rid, "training_time_seconds", totalTime)
 
+      // Use local paths for MLFlow artifact logging (already copied from HDFS if needed)
+      val localModelPath = s"$localExperimentPath/models/${experiment.model.modelType}_final"
+
       // Log artifacts organized in subdirectories
       // 1. Log metrics CSVs to "metrics/" subdirectory
       MLFlowTracker.logArtifactWithPath(rid, metricsPath, "metrics")
 
       // 2. Log model to "models/" subdirectory
-      MLFlowTracker.logArtifactWithPath(rid, modelPath, "models")
+      MLFlowTracker.logArtifactWithPath(rid, localModelPath, "models")
 
       // 3. Log YAML configuration to "configuration/" subdirectory
       val configPath = s"${configuration.environment}-config.yml"
       val configSourcePath = getClass.getClassLoader.getResource(configPath)
       if (configSourcePath != null) {
-        // Copy config to experiment output for logging
-        val configDestPath = s"$experimentOutputPath/configuration"
-        val configDestFile = s"$configDestPath/${configuration.environment}-config.yml"
+        // Copy config to HDFS experiment output
+        val configDestPathHDFS = s"$experimentOutputPath/configuration"
+        val configDestFileHDFS = s"$configDestPathHDFS/${configuration.environment}-config.yml"
 
         val source = scala.io.Source.fromURL(configSourcePath, "UTF-8")
         val configContent = source.mkString
@@ -406,11 +418,11 @@ object MLPipeline {
 
         // Write using Hadoop FileSystem (HDFS-compatible)
         val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
-        val configDirPath = new Path(configDestPath)
+        val configDirPath = new Path(configDestPathHDFS)
         if (!fs.exists(configDirPath)) {
           fs.mkdirs(configDirPath)
         }
-        val configFilePath = new Path(configDestFile)
+        val configFilePath = new Path(configDestFileHDFS)
         val out = fs.create(configFilePath, true)
         val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
         try {
@@ -419,16 +431,17 @@ object MLPipeline {
           writer.close()
         }
 
-        // Log configuration directory to MLFlow
-        MLFlowTracker.logArtifactWithPath(rid, configDestPath, "configuration")
+        // Log configuration from local path (already copied from HDFS)
+        val localConfigDestPath = s"$localExperimentPath/configuration"
+        MLFlowTracker.logArtifactWithPath(rid, localConfigDestPath, "configuration")
         info(s"   Configuration saved to MLFlow: configuration/${configuration.environment}-config.yml")
       }
 
       // 4. Log feature files to "features/" subdirectory
-      val featuresPath = s"$experimentOutputPath/features"
-      val featuresDir = new java.io.File(featuresPath)
+      val localFeaturesPath = s"$localExperimentPath/features"
+      val featuresDir = new java.io.File(localFeaturesPath)
       if (featuresDir.exists() && featuresDir.isDirectory) {
-        MLFlowTracker.logArtifactWithPath(rid, featuresPath, "features")
+        MLFlowTracker.logArtifactWithPath(rid, localFeaturesPath, "features")
         info(s"   Feature files saved to MLFlow: features/")
       }
 
@@ -776,8 +789,11 @@ object MLPipeline {
     info("[STEP 8] Generating Visualization Plots")
     info("=" * 80)
 
-    // Path to Python script (mounted in Docker container at /scripts)
-    val scriptPath = "/scripts/visualize_ml_pipeline.py"
+    // Path to Python script (configurable, defaults to /scripts for Docker)
+    val scriptsBasePath = configuration.common.scriptsPath
+    val scriptPath = s"$scriptsBasePath/visualize_ml_pipeline.py"
+
+    info(s"   Looking for visualization script at: $scriptPath")
 
     // Check if script exists
     val scriptFile = new java.io.File(scriptPath)

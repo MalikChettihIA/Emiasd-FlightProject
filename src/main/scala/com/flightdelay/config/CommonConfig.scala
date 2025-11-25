@@ -10,6 +10,7 @@ package com.flightdelay.config
  * @param data Data sources configuration
  * @param output Output base path configuration
  * @param mlflow MLFlow tracking configuration
+ * @param scriptsPath Optional path to Python visualization scripts (defaults to /scripts)
  */
 case class CommonConfig(
   seed: Long,
@@ -19,7 +20,8 @@ case class CommonConfig(
   storeIntoParquet: Boolean = false,
   data: DataConfig,
   output: OutputConfig,
-  mlflow: MLFlowConfig = MLFlowConfig()
+  mlflow: MLFlowConfig = MLFlowConfig(),
+  scriptsPath: String = "/scripts"
 ) {
   /**
    * Convertit le logLevel string en LogLevel enum

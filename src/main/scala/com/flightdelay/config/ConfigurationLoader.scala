@@ -100,10 +100,14 @@ object ConfigurationLoader {
     val outputData = commonData("output").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
     val basePath = outputData("basePath").toString
 
+    // Parse optional localPath (for HDFS to local copy, e.g., CephFS)
+    val localPath = outputData.get("localPath").map(_.toString)
+
     val outputConfig = OutputConfig(
       basePath = basePath,
       data = FileConfig(path = s"$basePath/data"),
-      model = FileConfig(path = s"$basePath/model")
+      model = FileConfig(path = s"$basePath/model"),
+      localPath = localPath
     )
 
     // Parse mlflow config (optional)
@@ -115,6 +119,11 @@ object ConfigurationLoader {
       )
     }.getOrElse(MLFlowConfig())
 
+    // Parse scriptsPath (optional, defaults to /scripts)
+    val scriptsPath = commonData.get("scriptsPath")
+      .map(_.toString)
+      .getOrElse("/scripts")
+
     CommonConfig(
       seed = seed,
       log = log,
@@ -123,7 +132,8 @@ object ConfigurationLoader {
       storeIntoParquet = storeIntoParquet,
       data = dataConfig,
       output = outputConfig,
-      mlflow = mlflowConfig
+      mlflow = mlflowConfig,
+      scriptsPath = scriptsPath
     )
   }
 

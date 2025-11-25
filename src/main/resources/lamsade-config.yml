@@ -25,10 +25,14 @@ common:
 
   output:
     basePath: "hdfs:///students/p6emiasd2025/mchettih/output"
+    localPath: "/opt/cephfs/users/students/p6emiasd2025/mchettih/workspace/output"
 
   mlflow:
     enabled: false
     trackingUri: "http://mlflow-server:5000"  # Utilise le nom du container et le port interne
+
+  # Path to Python visualization scripts
+  scriptsPath: "/opt/cephfs/users/students/p6emiasd2025/mchettih/workspace/scripts"
 
 # ============================================================================
 # EXPERIMENTS - Each experiment has its own feature extraction and model config
