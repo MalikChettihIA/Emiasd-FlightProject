@@ -84,7 +84,7 @@ spark-submit:
 
 ```bash
 cd docker
-./rebuild-and-restart.sh
+./rebuild-and-local-restart.sh
 ```
 
 This script will:
@@ -107,7 +107,7 @@ MLFlow 3.4.0
 ### Run Your ML Pipeline
 
 ```bash
-./submit.sh
+./local-submit.sh
 ```
 
 **Expected Behavior**:

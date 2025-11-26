@@ -168,7 +168,7 @@ spark-submit:
 **Usage:**
 ```bash
 # Execute via management script
-./docker/submit.sh
+./docker/local-submit.sh
 
 # Or directly
 docker exec spark-submit spark-submit \
@@ -342,13 +342,13 @@ All management scripts are in `docker/` directory.
 
 ```bash
 # Start all services
-./start.sh
+./local-start.sh
 
 # Stop all services (preserves data)
-./stop.sh
+./local-stop.sh
 
 # Restart all services
-./restart.sh
+./local-restart.sh
 ```
 
 ---
@@ -359,10 +359,10 @@ All management scripts are in `docker/` directory.
 
 ```bash
 # Run with default config
-./submit.sh
+./local-submit.sh
 
 # Run specific tasks
-TASKS="load,preprocess" ./submit.sh
+TASKS="load,preprocess" ./local-submit.sh
 ```
 
 **Internal command:**
@@ -682,7 +682,7 @@ sbt package
 
 # 3. Submit job
 cd docker
-./submit.sh
+./local-submit.sh
 
 # 4. Check results
 # - MLflow UI: http://localhost:5555

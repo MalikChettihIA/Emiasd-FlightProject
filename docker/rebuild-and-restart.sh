@@ -1,5 +1,5 @@
 #!/bin/bash
-# rebuild-and-restart.sh
+# rebuild-and-local-restart.sh
 # Script to rebuild Spark images with MLFlow and restart containers
 
 set -e  # Exit on error

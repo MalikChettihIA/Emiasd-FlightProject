@@ -244,7 +244,7 @@ sbt package
 
 ### Exécuter et capturer les logs:
 ```bash
-./submit.sh 2>&1 | tee execution.log
+./local-submit.sh 2>&1 | tee execution.log
 ```
 
 ### Rechercher les logs VectorIndexer:

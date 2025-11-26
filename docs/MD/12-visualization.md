@@ -680,7 +680,7 @@ plt.tight_layout()
 # run_and_visualize.sh
 
 cd docker
-./submit.sh
+./local-submit.sh
 
 # Wait for completion
 python ../work/scripts/visualize_pca.py /output/exp4_rf_pca_cv_15min/metrics

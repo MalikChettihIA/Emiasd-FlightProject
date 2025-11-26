@@ -203,7 +203,7 @@ sbt package
 ### 3. Relancer le Pipeline
 
 ```bash
-./submit.sh
+./local-submit.sh
 ```
 
 ### 4. Vérifier les Logs
@@ -301,7 +301,7 @@ train:
 Relancer le pipeline :
 
 ```bash
-./submit.sh
+./local-submit.sh
 ```
 
 L'entraînement devrait maintenant fonctionner correctement avec 5 folds de cross-validation ! 🎯

@@ -4,7 +4,7 @@ import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.feature.{PCA, PCAModel}
 import org.apache.spark.ml.linalg.{DenseVector, Vector}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 
 /**
@@ -221,7 +221,7 @@ class PCAFeatureExtractor(
    * @param analysis VarianceAnalysis object
    * @param outputPath Path to save CSV file
    */
-  def saveVarianceAnalysis(analysis: VarianceAnalysis, outputPath: String): Unit = {
+  def saveVarianceAnalysis(analysis: VarianceAnalysis, outputPath: String)(implicit spark: SparkSession): Unit = {
     val headers = Seq("component", "explained_variance", "cumulative_variance", "cumulative_variance_pct")
     val rows = analysis.componentIndices.zip(analysis.explainedVariance).zip(analysis.cumulativeVariance).map {
       case ((idx, individual), cumulative) =>
@@ -305,7 +305,7 @@ class PCAFeatureExtractor(
     outputPath: String,
     topN: Option[Int] = None,
     featureNames: Option[Array[String]] = None
-  ): Unit = {
+  )(implicit spark: SparkSession): Unit = {
     val pc = model.pc // Principal components matrix (features x components)
     val numFeatures = pc.numRows
     val numComponents = pc.numCols
@@ -338,7 +338,7 @@ class PCAFeatureExtractor(
    * @param featureNames Array of feature names
    * @param outputPath Path to save CSV file
    */
-  def saveFeatureNames(featureNames: Array[String], outputPath: String): Unit = {
+  def saveFeatureNames(featureNames: Array[String], outputPath: String)(implicit spark: SparkSession): Unit = {
     val headers = Seq("feature_index", "feature_name")
     val rows = featureNames.zipWithIndex.map { case (name, idx) =>
       Seq(idx.toString, name)

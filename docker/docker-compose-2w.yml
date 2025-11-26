@@ -1,0 +1,312 @@
+services:
+  # ============================================================================
+  # Spark Master
+  # ============================================================================
+  spark-master:
+    image: bitnamilegacy/spark:3.5.3
+    container_name: spark-master
+    hostname: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_DAEMON_MEMORY=2g
+      # JMX Exporter for Prometheus
+      - SPARK_MASTER_OPTS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9999:/opt/jmx-exporter/jmx-exporter-config.yml
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+      - "9999:9999"  # JMX Exporter metrics
+    volumes:
+      - ../work/notebooks:/notebooks
+      - ../work/data:/data
+      - ../work/apps:/apps
+      - ../work/output:/output
+      - ./monitoring/jmx-exporter:/opt/jmx-exporter
+    networks:
+      - spark-network
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8080' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+  # ============================================================================
+  # Spark Worker 1
+  # ============================================================================
+  spark-worker-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark-mlflow
+    image: custom-spark-mlflow:3.5.3
+    container_name: spark-worker-1
+    hostname: spark-worker-1
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=20G
+      - SPARK_WORKER_CORES=6
+      - SPARK_WORKER_WEBUI_PORT=8081
+      - SPARK_DAEMON_MEMORY=2g
+      - SPARK_LOCAL_DIRS=/tmp/spark-local
+      # JMX Exporter for Prometheus
+      - SPARK_WORKER_OPTS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9999:/opt/jmx-exporter/jmx-exporter-config.yml
+    ports:
+      - "8081:8081"
+      - "9101:9999"  # JMX Exporter metrics
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - ../work/data:/data
+      - ../work/apps:/apps
+      - ../work/output:/output
+      - ../work/tmp/spark-tmp-1:/tmp/spark-local
+      - ./monitoring/jmx-exporter:/opt/jmx-exporter
+    networks:
+      - spark-network
+  # ============================================================================
+  # Spark Worker 2
+  # ============================================================================
+  spark-worker-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark-mlflow
+    image: custom-spark-mlflow:3.5.3
+    container_name: spark-worker-2
+    hostname: spark-worker-2
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=20G
+      - SPARK_WORKER_CORES=6
+      - SPARK_WORKER_WEBUI_PORT=8082
+      - SPARK_DAEMON_MEMORY=2g
+      - SPARK_LOCAL_DIRS=/tmp/spark-local
+      # JMX Exporter for Prometheus
+      - SPARK_WORKER_OPTS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9999:/opt/jmx-exporter/jmx-exporter-config.yml
+    ports:
+      - "8082:8082"
+      - "9102:9999"  # JMX Exporter metrics
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - ../work/data:/data
+      - ../work/apps:/apps
+      - ../work/output:/output
+      - ../work/tmp/spark-tmp-2:/tmp/spark-local
+      - ./monitoring/jmx-exporter:/opt/jmx-exporter
+    networks:
+      - spark-network
+  # ============================================================================
+  # Spark Submit
+  # ============================================================================
+  spark-submit:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark-mlflow
+    image: custom-spark-mlflow:3.5.3
+    container_name: spark-submit
+    hostname: spark-submit
+    environment:
+      - SPARK_MODE=submit
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_HOME=/opt/bitnami/spark
+      - JAVA_HOME=/opt/bitnami/java
+    #ports:
+    #  - "4040:4040"  # Spark Application UI
+    volumes:
+      - ../work/data:/data
+      - ../work/apps:/apps
+      - ../work/output:/output
+      - ../work/scripts:/scripts
+      - ../work/libs:/libs
+      - ../work/mlflow:/mlflow  # MLFlow artifacts storage (shared with mlflow-server)
+      - ../work/spark-events:/spark-events  # Spark event logs for History Server
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - spark-network
+    # Maintien le container actif sans démarrer de service Spark
+    command: tail -f /dev/null
+    restart: unless-stopped
+    # Resource limits to support large model broadcasts
+    deploy:
+      resources:
+        limits:
+          memory: 32G
+          cpus: '10'
+        reservations:
+          memory: 20G
+          cpus: '8'
+  # ============================================================================
+  # Jupyter - Notebooks
+  # ============================================================================
+  jupyter:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.jupyter
+    container_name: jupyter-spark
+    hostname: jupyter-spark
+    ports:
+      - "8888:8888"
+      - "4040-4050:4040-4050"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - GRANT_SUDO=yes
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_HOME=/usr/local/spark
+      - JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-arm64
+      - PYSPARK_DRIVER_PYTHON=jupyter
+      - PYSPARK_DRIVER_PYTHON_OPTS=lab
+      - SPARK_DRIVER_MEMORY=8g
+      - SPARK_EXECUTOR_MEMORY=7g
+      - SPARK_EXECUTOR_CORES=3
+      - SPARK_DRIVER_MAXRESULTSIZE=2g
+      - SPARK_OPTS=--driver-java-options=-Xms1024M --driver-java-options=-Xmx4096M --driver-java-options=-Dlog4j.logLevel=info --conf spark.eventLog.enabled=true --conf spark.eventLog.dir=/home/jovyan/work/spark-events --conf spark.eventLog.compress=true
+    volumes:
+      - ../work:/home/jovyan/work
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - spark-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # MLFlow Tracking Server
+  # ============================================================================
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.4.0
+    container_name: mlflow-server
+    ports:
+      - "5555:5000"
+    volumes:
+      # SQLite database persistence
+      - ../work/mlflow:/mlflow
+      # Artifacts storage
+      - ../work/mlflow/artifacts:/mlflow/artifacts
+    environment:
+      # Backend store (SQLite)
+      - BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
+      # Artifact store (local filesystem)
+      - ARTIFACT_ROOT=/mlflow/artifacts
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - spark-network
+
+  # ============================================================================
+  # Spark History Server - View past Spark jobs
+  # ============================================================================
+  spark-history:
+    image: bitnamilegacy/spark:3.5.3
+    container_name: spark-history-server
+    hostname: spark-history-server
+    environment:
+      - SPARK_MODE=master
+      - "SPARK_HISTORY_OPTS=-Dspark.history.server.jsonStreamReadConstraints.maxStringLength=100000000 -Dspark.history.fs.logDirectory=file:///spark-events"
+    command: bash -c "/opt/bitnami/spark/sbin/start-history-server.sh && tail -f /dev/null"
+    ports:
+      - "18080:18080"
+    volumes:
+      - ../work/spark-events:/spark-events
+    networks:
+      - spark-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Prometheus - Metrics Collection
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    hostname: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - spark-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Grafana - Visualization & Dashboards
+  # ============================================================================
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: grafana
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards-json:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana/data
+    depends_on:
+      - prometheus
+    networks:
+      - spark-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # cAdvisor - Docker Container Metrics
+  # ============================================================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: cadvisor
+    hostname: cadvisor
+    command:
+      - '--docker_only=true'
+      - '--housekeeping_interval=10s'
+      - '--store_container_labels=true'
+    ports:
+      - "8889:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    networks:
+      - spark-network
+    restart: unless-stopped
+
+networks:
+  spark-network:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:

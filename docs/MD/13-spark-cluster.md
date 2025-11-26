@@ -147,8 +147,8 @@ Le fichier Compose constitue la « spécification » du cluster. Les aspects cl�
 ### 4.2 Soumission des jobs
 Le service `spark-submit` monte également `../work/scripts` et `../work/libs`. Lorsqu’on exécute `./submit.sh`, la commande suivante est lancée :
 ```bash
-docker exec -it spark-submit chmod +x /scripts/spark-submit.sh
-docker exec -it spark-submit /scripts/spark-submit.sh
+docker exec -it spark-submit chmod +x /scripts/spark-local-submit.sh
+docker exec -it spark-submit /scripts/spark-local-submit.sh
 ```
 `/scripts/spark-submit.sh` appelle ensuite `/opt/bitnami/spark/bin/spark-submit` avec les arguments définis dans nos configs YAML (chemin du jar `work/apps/Emiasd-Flight-Data-Analysis.jar`, chemin du `local-config.yml`, etc.). La présence du conteneur `spark-submit` évite d’installer Spark sur la machine hôte et garantit que les dépendances (MLflow, Python libs) sont identiques aux workers.
 

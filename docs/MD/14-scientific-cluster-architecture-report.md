@@ -1127,7 +1127,7 @@ docker compose ps  # Vérifier l'état des services
 
 **Soumission d'un job:**
 ```bash
-docker exec -it spark-submit /scripts/spark-submit.sh
+docker exec -it spark-submit /scripts/spark-local-submit.sh
 ```
 
 **Accès aux logs:**

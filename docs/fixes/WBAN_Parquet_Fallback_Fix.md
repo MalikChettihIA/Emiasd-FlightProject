@@ -121,7 +121,7 @@ To test the fix:
 
 2. **Run the pipeline**:
    ```bash
-   ./work/scripts/spark-submit.sh
+   ./work/scripts/spark-local-submit.sh
    ```
 
 3. **Expected**: Should automatically load from CSV and create parquet without crashing

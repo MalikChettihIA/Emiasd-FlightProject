@@ -268,7 +268,7 @@ sbt clean compile package
 ### 2. Exécuter
 
 ```bash
-./work/scripts/spark-submit.sh
+./work/scripts/spark-local-submit.sh
 ```
 
 ### 3. Vérifier les Logs
@@ -364,5 +364,5 @@ Si les noms ne contiennent pas `_year`, `_month`, etc., modifier les suffixes da
 
 ```bash
 sbt clean compile package
-./work/scripts/spark-submit.sh
+./work/scripts/spark-local-submit.sh
 ```

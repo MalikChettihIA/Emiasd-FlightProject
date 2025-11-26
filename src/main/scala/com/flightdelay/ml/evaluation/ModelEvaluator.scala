@@ -216,7 +216,7 @@ object ModelEvaluator {
   /**
    * Save metrics to CSV files
    */
-  private def saveMetricsToFile(metrics: EvaluationMetrics, basePath: String): Unit = {
+  private def saveMetricsToFile(metrics: EvaluationMetrics, basePath: String)(implicit spark: SparkSession): Unit = {
     // Save main metrics
     val metricsMap = Map(
       "accuracy" -> metrics.accuracy,
@@ -307,7 +307,7 @@ object ModelEvaluator {
     trainMetrics: EvaluationMetrics,
     testMetrics: EvaluationMetrics,
     basePath: String
-  ): Unit = {
+  )(implicit spark: SparkSession): Unit = {
     val trainMap = Map(
       "accuracy" -> trainMetrics.accuracy,
       "precision" -> trainMetrics.precision,

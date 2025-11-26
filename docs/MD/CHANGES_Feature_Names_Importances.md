@@ -289,7 +289,7 @@ Top 20 Feature Importances:
 
 3. Relancer le pipeline feature-extraction:
    ```bash
-   ./submit.sh
+   ./local-submit.sh
    ```
 
 ---
@@ -322,5 +322,5 @@ Top 20 Feature Importances:
 
 ```bash
 sbt package
-./submit.sh
+./local-submit.sh
 ```
