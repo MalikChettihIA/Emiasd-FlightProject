@@ -160,7 +160,7 @@ object MLPipeline {
     // Extract features from dev set (fit + transform)
     // Returns both transformed data AND fitted models for reuse on test set
     val (devData, featureModels) = FeatureExtractor.extract(devDataRaw, experiment)
-    info(f"   Dev features extracted: ${devData.count()}%,d records")
+    debug(f"   Dev features extracted: ${devData.count()}%,d records")
 
     // Transform test set using pre-fitted models from dev set (NO REFITTING)
     info("=" * 80)
@@ -171,7 +171,7 @@ object MLPipeline {
     info("  - Scaler: uses statistics (mean/std) from dev set only")
     info("  - PCA: uses components fitted on dev set only")
     val testData = FeatureExtractor.transform(testDataRaw, featureModels, experiment)
-    info(f"   Test features extracted: ${testData.count()}%,d records")
+    debug(f"   Test features extracted: ${testData.count()}%,d records")
 
     // ========================================================================
     // STEP 4: K-fold CV + Grid Search on dev set

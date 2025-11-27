@@ -1,9 +1,10 @@
 package com.flightdelay.features.joiners
 
 import com.flightdelay.config.AppConfiguration
-import org.apache.spark.sql.{DataFrame, Column, Row, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import com.flightdelay.utils.DebugUtils._
+import com.flightdelay.utils.MetricsUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -39,181 +40,181 @@ object FlightWeatherDataJoiner {
                             )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
 
-    // Validation : valeurs négatives acceptées (= pas de jointure), sinon max 11
-    require(weatherOriginDepthHours <= 11,
-      s"weatherOriginDepthHours doit être <= 11 (ou négatif pour désactiver), valeur fournie: $weatherOriginDepthHours")
+      // Validation : valeurs négatives acceptées (= pas de jointure), sinon max 11
+      require(weatherOriginDepthHours <= 11,
+        s"weatherOriginDepthHours doit être <= 11 (ou négatif pour désactiver), valeur fournie: $weatherOriginDepthHours")
 
-    require(weatherDestinationDepthHours <= 11,
-      s"weatherDestinationDepthHours doit être <= 11 (ou négatif pour désactiver), valeur fournie: $weatherDestinationDepthHours")
+      require(weatherDestinationDepthHours <= 11,
+        s"weatherDestinationDepthHours doit être <= 11 (ou négatif pour désactiver), valeur fournie: $weatherDestinationDepthHours")
 
-    // Si les deux sont négatifs, pas de jointure du tout
-    if (weatherOriginDepthHours < 0 && weatherDestinationDepthHours < 0) {
-      info("[FlightWeatherJoiner]   Both weatherOriginDepthHours and weatherDestinationDepthHours are negative - NO weather join")
-      return flightDF
-    }
+      // Si les deux sont négatifs, pas de jointure du tout
+      if (weatherOriginDepthHours < 0 && weatherDestinationDepthHours < 0) {
+        info("[FlightWeatherJoiner]   Both weatherOriginDepthHours and weatherDestinationDepthHours are negative - NO weather join")
+        return flightDF
+      }
 
-    // Paramètres de partitions "reducers"
-    val cores = spark.sparkContext.defaultParallelism
+      // Paramètres de partitions "reducers"
+      val cores = spark.sparkContext.defaultParallelism
 
-    val numPartsOrigin = pickParts(3.3, 32, 128, cores) // ≈ 40
-    val numPartsDest   = pickParts(5.2, 48, 192, cores) // ≈ 64
-    spark.conf.set("spark.sql.shuffle.partitions", numPartsDest) // borne haute DF
+      val numPartsOrigin = pickParts(3.3, 32, 128, cores) // ≈ 40
+      val numPartsDest   = pickParts(5.2, 48, 192, cores) // ≈ 64
+      spark.conf.set("spark.sql.shuffle.partitions", numPartsDest) // borne haute DF
 
-    // Préparation de WeatherDF
-    val weather = weatherDF.select(
-      col("Date").cast(DateType).as("WDATE"),
-      col("Time").as("WTIME_HHMM"),
-      col("*")
-    ).where(col("WBAN").isNotNull && length(col("WBAN")) > 0 && col("WDATE").isNotNull)
+      // Préparation de WeatherDF
+      val weather = weatherDF.select(
+        col("Date").cast(DateType).as("WDATE"),
+        col("Time").as("WTIME_HHMM"),
+        col("*")
+      ).where(col("WBAN").isNotNull && length(col("WBAN")) > 0 && col("WDATE").isNotNull)
 
-    // ------------------------
-    // Préparation météo avec relHour + duplication J/J+1 (Map)
-    // ------------------------
-    val weatherWithHour = weather
-      .withColumn("hour", hhmmHourCol(col("WTIME_HHMM")))
-      .na.fill(Map("hour" -> -1))
-
-    val meteoSameDay = weatherWithHour
-      .withColumn("relHour", col("hour"))
-      .withColumn("DATE", col("WDATE"))
-
-    val meteoNextDay = weatherWithHour
-      .withColumn("relHour", col("hour") - lit(24))
-      .withColumn("DATE", date_add(col("WDATE"), 1))
-
-    val weatherRel = meteoSameDay.unionByName(meteoNextDay)
-      .filter(col("relHour").between(-24, 23))
-
-    // ------------------------
-    // Reduce météo par clé → Map relHour -> struct (Reduce)
-    // ------------------------
-
-    // 1) Récupérer les features météo depuis la config (Option[Map[...]])
-
-
-    // 2) Colonnes fixes dans la struct
-    val staticCols = Seq(
-      col("relHour").as("hour"),
-      col("WBAN"),
-      col("WDATE"),
-      col("WTIME_HHMM")
-    )
-
-    // 3) Colonnes dynamiques venant de la config
-    val staticNames = Set("relHour", "WBAN", "WDATE", "WTIME_HHMM")
-    val allWeatherCols: Seq[String] =
-      selectedWeatherColumns.getOrElse(Seq.empty[String])
-    val dynamicFeatureCols =
-      allWeatherCols
-        .filterNot(staticNames.contains)
-        .map(c => col(c).alias(c))
-
-    // 4) Struct finale : [hour, WBAN, WDATE, WTIME_HHMM, <features>...]
-    val weatherStruct =
-      struct((staticCols ++ dynamicFeatureCols): _*)
-
-    // 5) Agrégation en map relHour -> struct(...)
-    val weatherByKey: DataFrame =
-      weatherRel
-        .groupBy(col("WBAN"), col("DATE"))
-        .agg(
-          map_from_entries(
-            collect_list(struct(col("relHour"), weatherStruct))
-          ).as("wmap")
-        )
-
-    // Première jointure : aéroport d'origine (seulement si >= 0)
-    val withOriginWeather = if (weatherOriginDepthHours >= 0) {
       // ------------------------
-      // JOIN #1 — ORIGIN (Partition = hash(ORIGIN_WBAN, UTC_FL_DATE))
+      // Préparation météo avec relHour + duplication J/J+1 (Map)
       // ------------------------
-      val flightsDep = flightDF
-        .withColumn("depHour", coalesce(hhmmHourCol(col("UTC_CRS_DEP_TIME")), lit(0)))
+      val weatherWithHour = weather
+        .withColumn("hour", hhmmHourCol(col("WTIME_HHMM")))
+        .na.fill(Map("hour" -> -1))
 
-      val originPre = flightsDep
-        .repartition(numPartsOrigin, col("ORIGIN_WBAN"), col("UTC_FL_DATE")) // <-- Hash partition explicite
-        .join(
-          weatherByKey.hint("shuffle_hash"),
-          col("ORIGIN_WBAN") === weatherByKey("WBAN") &&
-            col("UTC_FL_DATE")    === weatherByKey("DATE"),
-          "left"
-        )
-        .drop(weatherByKey("WBAN")).drop(weatherByKey("DATE"))
+      val meteoSameDay = weatherWithHour
+        .withColumn("relHour", col("hour"))
+        .withColumn("DATE", col("WDATE"))
 
-      val originWithWoArr = originPre
-        .withColumn("Wo", expr(s"transform(sequence(1, ${weatherOriginDepthHours}), i -> element_at(wmap, depHour - i))"))
-        .drop("wmap")
+      val meteoNextDay = weatherWithHour
+        .withColumn("relHour", col("hour") - lit(24))
+        .withColumn("DATE", date_add(col("WDATE"), 1))
 
-      val woCols = (0 until weatherOriginDepthHours).map(i => col("Wo").getItem(i).as(s"Wo_h${i+1}"))
-      val originDF = originWithWoArr
-        .select(col("*") +: woCols: _*)
-        .drop("Wo")
+      val weatherRel = meteoSameDay.unionByName(meteoNextDay)
+        .filter(col("relHour").between(-24, 23))
 
-      originDF
-    } else {
-      info(s"[FlightWeatherJoiner] Skipping origin weather join (weatherOriginDepthHours=$weatherOriginDepthHours)")
-      flightDF
-    }
+      // ------------------------
+      // Reduce météo par clé → Map relHour -> struct (Reduce)
+      // ------------------------
 
-    // Deuxième jointure : aéroport de destination (seulement si >= 0)
-    val withBothWeather = if (weatherDestinationDepthHours >= 0) {
-      val flightsArr = withOriginWeather
-        .withColumn("arrHour", coalesce(hhmmHourCol(col("UTC_ARR_TIME")), lit(0)))
+      // 1) Récupérer les features météo depuis la config (Option[Map[...]])
 
-      val destPre = flightsArr
-        .repartition(numPartsDest, col("DEST_WBAN"), col("UTC_ARR_DATE"))     // <-- Hash partition explicite
-        .join(
-          weatherByKey.hint("shuffle_hash"),
-          col("DEST_WBAN") === weatherByKey("WBAN") &&
-            col("UTC_ARR_DATE")  === weatherByKey("DATE"),
-          "left"
-        )
-        .drop(weatherByKey("WBAN")).drop(weatherByKey("DATE"))
 
-      val destWithWdArr = destPre
-        .withColumn("Wd", expr(s"transform(sequence(1, ${weatherDestinationDepthHours}), i -> element_at(wmap, arrHour - i))"))
-        .drop("wmap")
-
-      val wdCols = (0 until weatherDestinationDepthHours).map(i => col("Wd").getItem(i).as(s"Wd_h${i+1}"))
-
-      val baseCols: Seq[org.apache.spark.sql.Column] =
-        withOriginWeather.columns.map(col).toSeq
-
-      val joinedDF = destWithWdArr
-        .select( (baseCols ++ wdCols): _* )
-        .drop("Wd")
-
-      joinedDF
-    } else {
-      info(s"[FlightWeatherJoiner] Skipping destination weather join (weatherDestinationDepthHours=$weatherDestinationDepthHours)")
-      withOriginWeather
-    }
-
-    // Supprimer les colonnes météo non désirées basées sur les valeurs négatives
-    var finalResult = withBothWeather
-
-    // Si weatherOriginDepthHours < 0, supprimer origin_weather_observations si elle existe
-    if (weatherOriginDepthHours < 0 && finalResult.columns.contains("origin_weather_observations")) {
-      info(s"[FlightWeatherJoiner] Removing origin_weather_observations column (weatherOriginDepthHours=$weatherOriginDepthHours)")
-      finalResult = finalResult.drop("origin_weather_observations")
-    }
-
-    // Si weatherDestinationDepthHours < 0, supprimer destination_weather_observations si elle existe
-    if (weatherDestinationDepthHours < 0 && finalResult.columns.contains("destination_weather_observations")) {
-      info(s"[FlightWeatherJoiner] Removing destination_weather_observations column (weatherDestinationDepthHours=$weatherDestinationDepthHours)")
-      finalResult = finalResult.drop("destination_weather_observations")
-    }
-
-    // Supprimer les colonnes de leakage si demandé
-    if (removeLeakageColumns) {
-      removeDataLeakageColumns(
-        finalResult,
-        keepRelativeTime = removeLeakageColumns,  // ou true si tu veux garder hours_before_flight
-        selectedWeatherColumns = selectedWeatherColumns
+      // 2) Colonnes fixes dans la struct
+      val staticCols = Seq(
+        col("relHour").as("hour"),
+        col("WBAN"),
+        col("WDATE"),
+        col("WTIME_HHMM")
       )
-    } else {
-      finalResult
-    }
+
+      // 3) Colonnes dynamiques venant de la config
+      val staticNames = Set("relHour", "WBAN", "WDATE", "WTIME_HHMM")
+      val allWeatherCols: Seq[String] =
+        selectedWeatherColumns.getOrElse(Seq.empty[String])
+      val dynamicFeatureCols =
+        allWeatherCols
+          .filterNot(staticNames.contains)
+          .map(c => col(c).alias(c))
+
+      // 4) Struct finale : [hour, WBAN, WDATE, WTIME_HHMM, <features>...]
+      val weatherStruct =
+        struct((staticCols ++ dynamicFeatureCols): _*)
+
+      // 5) Agrégation en map relHour -> struct(...)
+      val weatherByKey: DataFrame =
+        weatherRel
+          .groupBy(col("WBAN"), col("DATE"))
+          .agg(
+            map_from_entries(
+              collect_list(struct(col("relHour"), weatherStruct))
+            ).as("wmap")
+          )
+
+      // Première jointure : aéroport d'origine (seulement si >= 0)
+      val withOriginWeather = if (weatherOriginDepthHours >= 0) {
+        // ------------------------
+        // JOIN #1 — ORIGIN (Partition = hash(ORIGIN_WBAN, UTC_FL_DATE))
+        // ------------------------
+        val flightsDep = flightDF
+          .withColumn("depHour", coalesce(hhmmHourCol(col("UTC_CRS_DEP_TIME")), lit(0)))
+
+        val originPre = flightsDep
+          .repartition(numPartsOrigin, col("ORIGIN_WBAN"), col("UTC_FL_DATE")) // <-- Hash partition explicite
+          .join(
+            weatherByKey.hint("shuffle_hash"),
+            col("ORIGIN_WBAN") === weatherByKey("WBAN") &&
+              col("UTC_FL_DATE")    === weatherByKey("DATE"),
+            "left"
+          )
+          .drop(weatherByKey("WBAN")).drop(weatherByKey("DATE"))
+
+        val originWithWoArr = originPre
+          .withColumn("Wo", expr(s"transform(sequence(1, ${weatherOriginDepthHours}), i -> element_at(wmap, depHour - i))"))
+          .drop("wmap")
+
+        val woCols = (0 until weatherOriginDepthHours).map(i => col("Wo").getItem(i).as(s"Wo_h${i+1}"))
+        val originDF = originWithWoArr
+          .select(col("*") +: woCols: _*)
+          .drop("Wo")
+
+        originDF
+      } else {
+        info(s"[FlightWeatherJoiner] Skipping origin weather join (weatherOriginDepthHours=$weatherOriginDepthHours)")
+        flightDF
+      }
+
+      // Deuxième jointure : aéroport de destination (seulement si >= 0)
+      val withBothWeather = if (weatherDestinationDepthHours >= 0) {
+        val flightsArr = withOriginWeather
+          .withColumn("arrHour", coalesce(hhmmHourCol(col("UTC_ARR_TIME")), lit(0)))
+
+        val destPre = flightsArr
+          .repartition(numPartsDest, col("DEST_WBAN"), col("UTC_ARR_DATE"))     // <-- Hash partition explicite
+          .join(
+            weatherByKey.hint("shuffle_hash"),
+            col("DEST_WBAN") === weatherByKey("WBAN") &&
+              col("UTC_ARR_DATE")  === weatherByKey("DATE"),
+            "left"
+          )
+          .drop(weatherByKey("WBAN")).drop(weatherByKey("DATE"))
+
+        val destWithWdArr = destPre
+          .withColumn("Wd", expr(s"transform(sequence(1, ${weatherDestinationDepthHours}), i -> element_at(wmap, arrHour - i))"))
+          .drop("wmap")
+
+        val wdCols = (0 until weatherDestinationDepthHours).map(i => col("Wd").getItem(i).as(s"Wd_h${i+1}"))
+
+        val baseCols: Seq[org.apache.spark.sql.Column] =
+          withOriginWeather.columns.map(col).toSeq
+
+        val joinedDF = destWithWdArr
+          .select( (baseCols ++ wdCols): _* )
+          .drop("Wd")
+
+        joinedDF
+      } else {
+        info(s"[FlightWeatherJoiner] Skipping destination weather join (weatherDestinationDepthHours=$weatherDestinationDepthHours)")
+        withOriginWeather
+      }
+
+      // Supprimer les colonnes météo non désirées basées sur les valeurs négatives
+      var finalResult = withBothWeather
+
+      // Si weatherOriginDepthHours < 0, supprimer origin_weather_observations si elle existe
+      if (weatherOriginDepthHours < 0 && finalResult.columns.contains("origin_weather_observations")) {
+        info(s"[FlightWeatherJoiner] Removing origin_weather_observations column (weatherOriginDepthHours=$weatherOriginDepthHours)")
+        finalResult = finalResult.drop("origin_weather_observations")
+      }
+
+      // Si weatherDestinationDepthHours < 0, supprimer destination_weather_observations si elle existe
+      if (weatherDestinationDepthHours < 0 && finalResult.columns.contains("destination_weather_observations")) {
+        info(s"[FlightWeatherJoiner] Removing destination_weather_observations column (weatherDestinationDepthHours=$weatherDestinationDepthHours)")
+        finalResult = finalResult.drop("destination_weather_observations")
+      }
+
+      // Supprimer les colonnes de leakage si demandé
+      if (removeLeakageColumns) {
+        removeDataLeakageColumns(
+          finalResult,
+          keepRelativeTime = removeLeakageColumns,  // ou true si tu veux garder hours_before_flight
+          selectedWeatherColumns = selectedWeatherColumns
+        )
+      } else {
+        finalResult
+      }
   }
 
   /**

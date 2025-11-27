@@ -175,22 +175,24 @@ class ConfigurationBasedFeatureExtractorPipeline(
 
 
     // DIAGNOSTIC: Print distinct value counts for categorical features
-    debug(s"[ConfigurationBasedFeatureExtractorPipeline] Categorical Features Cardinality:")
-    stringIndexerCols.zipWithIndex.foreach { case (colName, idx) =>
-      val distinctCount = data.select(colName).distinct().count()
-      debug(f"  [$idx%2d] $colName%-50s : $distinctCount%,6d distinct values")
-    }
-    debug(s"  - OneHotEncoder features: ${oneHotEncoderCols.length}")
-    if (oneHotEncoderCols.length > 0 && oneHotEncoderCols.length <= 5) {
-      debug(s"    ${oneHotEncoderCols.mkString(", ")}")
-    } else if (oneHotEncoderCols.length > 5) {
-      debug(s"    ${oneHotEncoderCols.take(5).mkString(", ")}, ... (${oneHotEncoderCols.length - 5} more)")
-    }
-    debug(s"  - Numeric features: ${numericCols.length}")
-    if (numericCols.length > 0 && numericCols.length <= 5) {
-      debug(s"    ${numericCols.mkString(", ")}")
-    } else if (numericCols.length > 5) {
-      debug(s"    ${numericCols.take(5).mkString(", ")}, ... (${numericCols.length - 5} more)")
+    whenDebug{
+      debug(s"[ConfigurationBasedFeatureExtractorPipeline] Categorical Features Cardinality:")
+      stringIndexerCols.zipWithIndex.foreach { case (colName, idx) =>
+        val distinctCount = data.select(colName).distinct().count()
+        debug(f"  [$idx%2d] $colName%-50s : $distinctCount%,6d distinct values")
+      }
+      debug(s"  - OneHotEncoder features: ${oneHotEncoderCols.length}")
+      if (oneHotEncoderCols.length > 0 && oneHotEncoderCols.length <= 5) {
+        debug(s"    ${oneHotEncoderCols.mkString(", ")}")
+      } else if (oneHotEncoderCols.length > 5) {
+        debug(s"    ${oneHotEncoderCols.take(5).mkString(", ")}, ... (${oneHotEncoderCols.length - 5} more)")
+      }
+      debug(s"  - Numeric features: ${numericCols.length}")
+      if (numericCols.length > 0 && numericCols.length <= 5) {
+        debug(s"    ${numericCols.mkString(", ")}")
+      } else if (numericCols.length > 5) {
+        debug(s"    ${numericCols.take(5).mkString(", ")}, ... (${numericCols.length - 5} more)")
+      }
     }
 
     var stages = Array.empty[PipelineStage]

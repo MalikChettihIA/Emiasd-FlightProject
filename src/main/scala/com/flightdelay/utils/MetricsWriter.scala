@@ -26,8 +26,8 @@ object MetricsWriter {
   def writeCsv(headers: Seq[String], rows: Seq[Seq[Any]], outputPath: String)
               (implicit spark: SparkSession): Try[Unit] = Try {
 
-    // Check if path is HDFS
-    if (outputPath.startsWith("hdfs://")) {
+    // Check if path is HDFS (both hdfs:// and hdfs:/// formats)
+    if (outputPath.startsWith("hdfs://") || outputPath.startsWith("hdfs:///")) {
       // HDFS path - use Hadoop FileSystem
       writeToHDFS(headers, rows, outputPath)
     } else {

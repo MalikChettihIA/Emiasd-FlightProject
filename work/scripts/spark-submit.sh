@@ -1,13 +1,21 @@
 #!/bin/bash
 
-# Configuration des workers (2w ou 4w)
+# =====================================================================
+# Lancement de l'app Flight Delay Prediction en mode Spark standalone
+# Modes de cluster :
+#   1w : 1 worker  (1 exécuteur)
+#   2w : 2 workers (2 exécuteurs)
+#   4w : 4 workers (4 exécuteurs, plus petits)
+# =====================================================================
+
 WORKERS="${1:-4w}"
 TASKS="${2:-data-pipeline,feature-extraction,train}"
 
-if [[ "$WORKERS" != "2w" && "$WORKERS" != "4w" ]]; then
-    echo "❌ Argument invalide. Utilisation: $0 [2w|4w] [tasks]"
-    echo "   2w: 2 workers × 20G × 6 cores"
-    echo "   4w: 4 workers × 10G × 3 cores (défaut)"
+if [[ "$WORKERS" != "1w" && "$WORKERS" != "2w" && "$WORKERS" != "4w" ]]; then
+    echo "❌ Argument invalide. Utilisation: $0 [1w|2w|4w] [tasks]"
+    echo "   1w: 1 worker  × 8G  × 4 cores"
+    echo "   2w: 2 workers × 8G  × 4 cores"
+    echo "   4w: 4 workers × 4G  × 3 cores (défaut, plus granulaire)"
     echo ""
     echo "Exemples:"
     echo "  $0 2w"
@@ -19,28 +27,39 @@ echo "🔧 Configuration cluster: $WORKERS"
 
 # ============================================================================
 # CONFIGURE SPARK PARAMETERS BASED ON WORKERS
+# => Objectif : rester raisonnable avec un Mac 48 Go
+#    Docker + OS + overhead JVM -> viser ~24–26 Go pour Spark
 # ============================================================================
-if [ "$WORKERS" = "2w" ]; then
-    # Configuration 2 workers × 20G × 6 cores
-    EXECUTOR_MEMORY="18G"
-    EXECUTOR_CORES="6"
+
+if [ "$WORKERS" = "1w" ]; then
+    # 1 worker → 1 exécuteur "moyen"
+    EXECUTOR_MEMORY="8G"
+    EXECUTOR_CORES="4"
+    NUM_EXECUTORS="1"
+    SHUFFLE_PARTITIONS="160"
+    echo "✅ Spark config: 1 executor × 8G × 4 cores"
+    echo "   Mode debug / développement (simple et stable)"
+elif [ "$WORKERS" = "2w" ]; then
+    # 2 workers → 2 exécuteurs "moyens"
+    EXECUTOR_MEMORY="10G"
+    EXECUTOR_CORES="4"
     NUM_EXECUTORS="2"
     SHUFFLE_PARTITIONS="200"
-    echo "✅ Spark config: 2 executors × 18G × 6 cores (GROS EXECUTORS pour RF)"
-    echo "   Mémoire pour RandomForest: ~7.2G par executor"
+    echo "✅ Spark config: 2 executors × 8G × 4 cores"
+    echo "   Bon compromis parallélisme / mémoire (~24G total avec le driver)"
 else
-    # Configuration 4 workers × 10G × 3 cores
-    EXECUTOR_MEMORY="9G"
+    # 4 workers → 4 petits exécuteurs (plus de parallélisme, moins de mémoire chacun)
+    EXECUTOR_MEMORY="4G"
     EXECUTOR_CORES="3"
     NUM_EXECUTORS="4"
-    SHUFFLE_PARTITIONS="200"
-    echo "✅ Spark config: 4 executors × 9G × 3 cores (PETITS EXECUTORS)"
-    echo "   Mémoire pour RandomForest: ~3.6G par executor"
+    SHUFFLE_PARTITIONS="240"
+    echo "✅ Spark config: 4 executors × 4G × 3 cores"
+    echo "   Mode plus granulaire, adapté aux jobs plus légers ou très parallélisables"
 fi
 
 # ============================================================================
-# OPTIMIZED CONFIGURATION FOR MAC M4 PRO (14 cores, 48GB RAM)
-# Auto-adapted based on cluster topology
+# CONFIG MAC M4 PRO (14 cores, 48GB RAM)
+# deploy-mode client : le driver tourne sur le Mac (spark-submit)
 # ============================================================================
 
 spark-submit \
@@ -49,9 +68,9 @@ spark-submit \
   --class com.flightdelay.app.FlightDelayPredictionApp \
   \
   `# ========================================================================` \
-  `# MEMORY CONFIGURATION - Auto-detected from cluster` \
+  `# MEMORY CONFIGURATION` \
   `# ========================================================================` \
-  --driver-memory 28G \
+  --driver-memory 8G \
   --driver-cores 2 \
   --executor-memory "$EXECUTOR_MEMORY" \
   --executor-cores "$EXECUTOR_CORES" \
@@ -59,13 +78,14 @@ spark-submit \
   \
   `# ========================================================================` \
   `# SPARK MEMORY TUNING` \
+  `# (on reste relativement proche des valeurs par défaut)` \
   `# ========================================================================` \
   --conf spark.driver.maxResultSize=4g \
   --conf spark.memory.fraction=0.8 \
   --conf spark.memory.storageFraction=0.5 \
   \
   `# ========================================================================` \
-  `# PARALLELISM CONFIGURATION - Auto-adapted` \
+  `# PARALLELISM CONFIGURATION` \
   `# ========================================================================` \
   --conf spark.sql.shuffle.partitions="$SHUFFLE_PARTITIONS" \
   --conf spark.default.parallelism="$SHUFFLE_PARTITIONS" \
@@ -80,14 +100,14 @@ spark-submit \
   --conf spark.executor.heartbeatInterval=30s \
   \
   `# ========================================================================` \
-  `# BROADCAST & MODEL HANDLING` \
+  `# BROADCAST & COMPRESSION` \
   `# ========================================================================` \
   --conf spark.broadcast.compress=true \
   --conf spark.io.compression.codec=lz4 \
   --conf spark.sql.autoBroadcastJoinThreshold=10m \
   \
   `# ========================================================================` \
-  `# GARBAGE COLLECTION (Important for RandomForest)` \
+  `# GARBAGE COLLECTION (RF / GBT)` \
   `# ========================================================================` \
   --conf spark.executor.extraJavaOptions="-XX:+UseG1GC -XX:InitiatingHeapOccupancyPercent=35 -XX:MaxGCPauseMillis=200" \
   --conf spark.driver.extraJavaOptions="-XX:+UseG1GC" \
@@ -96,6 +116,13 @@ spark-submit \
   `# MISC` \
   `# ========================================================================` \
   --conf spark.sql.debug.maxToStringFields=1000 \
+  \
+  `# ========================================================================` \
+  `# EVENT LOGGING (pour Spark History Server)` \
+  `# ========================================================================` \
+  --conf spark.eventLog.enabled=true \
+  --conf spark.eventLog.dir=/spark-events \
+  --conf spark.eventLog.compress=true \
   \
   --jars /apps/mlflow-client-3.4.0.jar,/apps/mlflow-spark_2.13-3.4.0.jar \
   /apps/Emiasd-Flight-Data-Analysis.jar \

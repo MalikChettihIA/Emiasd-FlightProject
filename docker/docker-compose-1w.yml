@@ -46,8 +46,8 @@ services:
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=10G
-      - SPARK_WORKER_CORES=6
+      - SPARK_WORKER_MEMORY=40G
+      - SPARK_WORKER_CORES=1
       - SPARK_WORKER_WEBUI_PORT=8081
       - SPARK_DAEMON_MEMORY=2g
       - SPARK_LOCAL_DIRS=/tmp/spark-local
@@ -64,40 +64,6 @@ services:
       - ../work/apps:/apps
       - ../work/output:/output
       - ../work/tmp/spark-tmp-1:/tmp/spark-local
-      - ./monitoring/jmx-exporter:/opt/jmx-exporter
-    networks:
-      - spark-network
-  # ============================================================================
-  # Spark Worker 2
-  # ============================================================================
-  spark-worker-2:
-    build:
-      context: .
-      dockerfile: Dockerfile.spark-mlflow
-    image: custom-spark-mlflow:3.5.3
-    container_name: spark-worker-2
-    hostname: spark-worker-2
-    environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=10G
-      - SPARK_WORKER_CORES=6
-      - SPARK_WORKER_WEBUI_PORT=8082
-      - SPARK_DAEMON_MEMORY=2g
-      - SPARK_LOCAL_DIRS=/tmp/spark-local
-      # JMX Exporter for Prometheus
-      - SPARK_WORKER_OPTS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9999:/opt/jmx-exporter/jmx-exporter-config.yml
-    ports:
-      - "8082:8082"
-      - "9102:9999"  # JMX Exporter metrics
-    depends_on:
-      spark-master:
-        condition: service_healthy
-    volumes:
-      - ../work/data:/data
-      - ../work/apps:/apps
-      - ../work/output:/output
-      - ../work/tmp/spark-tmp-2:/tmp/spark-local
       - ./monitoring/jmx-exporter:/opt/jmx-exporter
     networks:
       - spark-network

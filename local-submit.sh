@@ -4,7 +4,7 @@
 WORKERS="${1:-4w}"
 TASKS="${2:-data-pipeline,feature-extraction,train}"
 
-if [[ "$WORKERS" != "2w" && "$WORKERS" != "4w" ]]; then
+if [[ "$WORKERS" != "1w" && "$WORKERS" != "2w" && "$WORKERS" != "4w" ]]; then
     echo "❌ Argument invalide. Utilisation: $0 [2w|4w] [tasks]"
     echo "   2w: 2 workers × 20G × 6 cores"
     echo "   4w: 4 workers × 10G × 3 cores (défaut)"

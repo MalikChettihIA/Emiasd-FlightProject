@@ -175,7 +175,7 @@ object FeaturePipeline {
 
     MetricsUtils.withUiLabels(
       groupId = "FeaturePipeline.join",
-      desc    = "",
+      desc    = "FeaturePipeline.join",
       tags    = "sampling,split,balance"
     ) {
       // Jointure des données
@@ -217,12 +217,9 @@ object FeaturePipeline {
       info("  - Caching joined data...")
       val cachedJoinedData = joinedData.cache()
 
-      // Force materialization with a single count
-      whenDebug{
-        val joinedCount = cachedJoinedData.count()
-        debug(f"  - Joined records: ${joinedCount}%,d with ${cachedJoinedData.columns.length}%3d columns")
-      }
-
+      // Force materialization with a single count (ALWAYS executed to trigger Spark job with UI labels)
+      val joinedCount = cachedJoinedData.count()
+      info(f"  - Joined records: ${joinedCount}%,d with ${cachedJoinedData.columns.length}%3d columns")
       cachedJoinedData
     }
 
@@ -309,7 +306,7 @@ object FeaturePipeline {
           } else {
             // optionnel : log en debug si la feature n'existe pas dans le struct
             whenDebug {
-              info(s"[explose2] Feature '$feature' not found in struct '$structName'")
+              info(s"[explose] Feature '$feature' not found in struct '$structName'")
             }
           }
         }
@@ -322,7 +319,12 @@ object FeaturePipeline {
       info(s"  - Output columns: ${result.columns.length}")
       info("  - Caching exploded data...")
 
-      result.cache()
+      val cachedResult = result.cache()
+
+      // Force materialization with a single count (ALWAYS executed to trigger Spark job with UI labels)
+      val explodedCount = cachedResult.count()
+      info(f"  - Exploded records: ${explodedCount}%,d with ${cachedResult.columns.length}%3d columns")
+      cachedResult
     }
   }
 }
