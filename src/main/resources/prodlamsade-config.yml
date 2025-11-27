@@ -23,11 +23,13 @@ common:
       path : "hdfs:///students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv"
   output:
     basePath: "hdfs:///students/p6emiasd2025/hbalamou/output"
+    localPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/output"
 
   mlflow:
     enabled: true
     trackingUri: "http://localhost:5000"  # Utilise le nom du container et le port interne
 
+  scriptsPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/scripts"
 # ============================================================================
 # EXPERIMENTS - Each experiment has its own feature extraction and model config
 # ============================================================================
@@ -37,7 +39,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-lamsade-12h"
+  - name: "Experience-lamsade-1h"
     description: "Random Forest with hyperparameters tuning and 8 hours weather data"
     enabled: true
     target: "is_delayed"
@@ -48,8 +50,8 @@ experiments:
       delayThresholdMin: 60
       storeJoinData: true
       storeExplodeJoinData: true
-      weatherOriginDepthHours: 11
-      weatherDestinationDepthHours: 11
+      weatherOriginDepthHours: 1
+      weatherDestinationDepthHours: 1
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
 
