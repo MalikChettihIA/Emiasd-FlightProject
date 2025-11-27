@@ -28,6 +28,19 @@ object CrossValidator {
 
     val numFolds = experiment.train.crossValidation.numFolds
 
+    // If numFolds <= 1, do simple train/test split instead of CV
+    if (numFolds <= 1) {
+      info(s"[CrossValidator] Simple Train/Test Mode (no cross-validation)")
+      info(s"  - Using 80/20 train/validation split")
+      info(s"  - Grid Search: ${if (experiment.train.gridSearch.enabled) "ENABLED" else "DISABLED"}")
+
+      if (experiment.train.gridSearch.enabled) {
+        return validateSimpleTrainTestWithGridSearch(devData, experiment)
+      } else {
+        return validateSimpleTrainTest(devData, experiment)
+      }
+    }
+
     info(s"[CrossValidator] Starting K-Fold Cross-Validation")
     info(s"  - Number of folds: $numFolds")
     info(s"  - Grid Search: ${if (experiment.train.gridSearch.enabled) "ENABLED" else "DISABLED"}")
@@ -37,6 +50,196 @@ object CrossValidator {
     } else {
       validateSimple(devData, experiment, numFolds)
     }
+  }
+
+  /**
+   * Simple train/test split without cross-validation (for fast debugging)
+   * Used when numFolds <= 1 and gridSearch = false
+   */
+  private def validateSimpleTrainTest(
+                                       devData: DataFrame,
+                                       experiment: ExperimentConfig
+                                     )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
+
+    val trainRatio = experiment.train.trainRatio
+    val testRatio = 1.0 - trainRatio
+    info(s"[Simple Train/Test] Performing single train/validation split (${trainRatio * 100}%/${testRatio * 100}%)...")
+
+    // Split data using configured trainRatio
+    val Array(trainDataTemp, valDataTemp) = devData.randomSplit(Array(trainRatio, testRatio), seed = config.common.seed)
+
+    // Cache data to avoid DAG recomputation
+    val trainData = trainDataTemp.cache()
+    val valData = valDataTemp.cache()
+
+    val trainCount = trainData.count()  // Materialize cache
+    val valCount = valData.count()      // Materialize cache
+    info(f"  Train: $trainCount%,d samples | Validation: $valCount%,d samples")
+    info(s"  Train/Val data cached")
+
+    // Train model
+    val model = ModelFactory.create(experiment)
+    info(s"  Training ${experiment.model.modelType} model...")
+    val trainedModel = model.train(trainData)
+
+    // SOLUTION: Save and reload model to avoid broadcast OOM
+    val tempModelPath = s"${config.common.output.basePath}/${experiment.name}/model/temp_simple_${System.currentTimeMillis()}"
+
+    val metrics = try {
+      trainedModel match {
+        case pm: PipelineModel =>
+          info(s"  Saving model to avoid broadcast OOM...")
+          pm.write.overwrite().save(tempModelPath)
+          info(s"  Reloading model from disk...")
+          val reloadedModel = PipelineModel.load(tempModelPath)
+
+          // Evaluate on validation set with reloaded model
+          info(s"  Evaluating on validation set...")
+          val predictions = reloadedModel.transform(valData)
+          ModelEvaluator.evaluate(predictions, None, "validation")
+
+        case _ =>
+          // Fallback: evaluate directly (may cause broadcast issues)
+          info(s"  Model is not PipelineModel, evaluating directly (may cause OOM)")
+          info(s"  Evaluating on validation set...")
+          val predictions = trainedModel.transform(valData)
+          ModelEvaluator.evaluate(predictions, None, "validation")
+      }
+    } finally {
+      cleanupTempModel(tempModelPath)
+    }
+
+    info(f"  Validation Results:")
+    info(f"    Accuracy:  ${metrics.accuracy * 100}%6.2f%%")
+    info(f"    Precision: ${metrics.precision * 100}%6.2f%%")
+    info(f"    Recall:    ${metrics.recall * 100}%6.2f%%")
+    info(f"    F1-Score:  ${metrics.f1Score * 100}%6.2f%%")
+    info(f"    AUC-ROC:   ${metrics.areaUnderROC}%6.4f")
+
+    // No hyperparameter search in simple mode - use default hyperparameters from config
+    val bestHyperparameters = Map.empty[String, Any]
+
+    // Unpersist cached data to free memory
+    trainData.unpersist()
+    valData.unpersist()
+
+    // Return CVResult with single fold (std = 0)
+    val zeroMetrics = EvaluationMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+    CVResult(
+      avgMetrics = metrics,
+      stdMetrics = zeroMetrics,  // No std deviation with single split
+      foldMetrics = Seq(metrics),
+      bestHyperparameters = bestHyperparameters,
+      numFolds = 1
+    )
+  }
+
+  /**
+   * Grid search with simple train/test split (no K-fold CV)
+   * Used when numFolds <= 1 and gridSearch = true
+   * Much faster than K-fold grid search: tests each combo only ONCE
+   */
+  private def validateSimpleTrainTestWithGridSearch(
+                                                     devData: DataFrame,
+                                                     experiment: ExperimentConfig
+                                                   )(implicit spark: SparkSession, config: AppConfiguration): CVResult = {
+
+    info(s"[Grid Search] Building parameter grid...")
+    val paramGrid = buildParameterGrid(experiment)
+
+    val trainRatio = experiment.train.trainRatio
+    val testRatio = 1.0 - trainRatio
+
+    info(s"  - Total combinations: ${paramGrid.size}")
+    info(s"  - Evaluation metric: ${experiment.train.gridSearch.evaluationMetric}")
+    info(s"  - Mode: Simple train/validation split (NO K-fold)")
+    info(f"  - Split ratio: ${trainRatio * 100}%.0f%% train / ${testRatio * 100}%.0f%% validation")
+
+    // Split data using configured trainRatio
+    val Array(trainDataTemp, valDataTemp) = devData.randomSplit(Array(trainRatio, testRatio), seed = config.common.seed)
+
+    // CRITICAL: Cache train/val data to avoid recomputing DAG for each hyperparameter combo
+    val trainData = trainDataTemp.cache()
+    val valData = valDataTemp.cache()
+
+    val trainCount = trainData.count()  // Materialize cache
+    val valCount = valData.count()      // Materialize cache
+    info(f"  - Train: $trainCount%,d samples | Validation: $valCount%,d samples")
+    info(s"  - Train/Val data cached to avoid DAG recomputation")
+
+    // Test all combinations on this single split
+    val gridResults = paramGrid.zipWithIndex.map { case (params, idx) =>
+      info(s"[Grid Search] Testing combination ${idx + 1}/${paramGrid.size}")
+      params.foreach { case (k, v) => info(s"    $k: $v") }
+
+      // Train with specific params
+      val trainedModel = Trainer.trainWithParams(trainData, experiment, params)
+
+      // SOLUTION: Save and reload model to avoid broadcast OOM
+      val tempModelPath = s"${config.common.output.basePath}/${experiment.name}/model/temp_gridsearch_${idx}_${System.currentTimeMillis()}"
+
+      val metrics = try {
+        trainedModel match {
+          case pm: PipelineModel =>
+            pm.write.overwrite().save(tempModelPath)
+            val reloadedModel = PipelineModel.load(tempModelPath)
+
+            // Evaluate on validation set with reloaded model
+            val predictions = reloadedModel.transform(valData)
+            val evaluationMetrics = ModelEvaluator.evaluate(predictions, None, "validation")
+
+            val metricValue = getMetricValue(evaluationMetrics, experiment.train.gridSearch.evaluationMetric)
+            info(f"    → ${experiment.train.gridSearch.evaluationMetric}: $metricValue%.4f")
+
+            evaluationMetrics
+
+          case _ =>
+            // Fallback: evaluate directly (may cause broadcast issues)
+            info(s"    Model is not PipelineModel, evaluating directly (may cause OOM)")
+            val predictions = trainedModel.transform(valData)
+            val evaluationMetrics = ModelEvaluator.evaluate(predictions, None, "validation")
+
+            val metricValue = getMetricValue(evaluationMetrics, experiment.train.gridSearch.evaluationMetric)
+            info(f"    → ${experiment.train.gridSearch.evaluationMetric}: $metricValue%.4f")
+
+            evaluationMetrics
+        }
+      } finally {
+        cleanupTempModel(tempModelPath)
+      }
+
+      val metricValue = getMetricValue(metrics, experiment.train.gridSearch.evaluationMetric)
+      (params, metrics, metricValue)
+    }
+
+    // Find best combination
+    val (bestParams, bestMetrics, bestMetricValue) = gridResults.maxBy(_._3)
+
+    info(s"=" * 80)
+    info("[Grid Search] BEST COMBINATION FOUND")
+    info("=" * 80)
+    bestParams.toSeq.sortBy(_._1).foreach { case (k, v) =>
+      info(f"  $k%-25s : $v")
+    }
+    info(f"  Best ${experiment.train.gridSearch.evaluationMetric}%-25s : $bestMetricValue%.6f")
+    info("=" * 80)
+
+    // Unpersist cached data to free memory
+    trainData.unpersist()
+    valData.unpersist()
+    info(s"  - Train/Val data unpersisted to free memory")
+
+    // Return CVResult with single fold (std = 0)
+    val zeroMetrics = EvaluationMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+    CVResult(
+      avgMetrics = bestMetrics,
+      stdMetrics = zeroMetrics,  // No std deviation with single split
+      foldMetrics = Seq(bestMetrics),
+      bestHyperparameters = bestParams,
+      numFolds = 1
+    )
   }
 
   /**

@@ -154,7 +154,7 @@ Pour valider que la restructuration fonctionne:
 sbt clean compile
 
 # 2. Lancer un training avec la nouvelle config
-./work/scripts/spark-submit.sh
+./work/scripts/spark-local-submit.sh
 
 # 3. Vérifier que les logs affichent correctement les hyperparamètres
 # Chercher "[RandomForest] Training with hyperparameters:"

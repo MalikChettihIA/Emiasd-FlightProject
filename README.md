@@ -95,7 +95,7 @@ cd docker
 ./setup.sh
 
 # 3. Submit your first experiment
-./submit.sh
+./local-submit.sh
 
 # 4. View results
 # - Spark UI: http://localhost:8080
@@ -227,13 +227,13 @@ cd docker
 ./setup.sh              # Interactive setup with cleanup option
 
 # Manage cluster
-./start.sh              # Start all services
-./stop.sh               # Stop all services
-./restart.sh            # Restart all services
+./local-start.sh              # Start all services
+./local-stop.sh               # Stop all services
+./local-restart.sh            # Restart all services
 ./logs.sh [service]     # View logs
 
 # Submit jobs
-./submit.sh             # Run ML pipeline
+./local-submit.sh             # Run ML pipeline
 ./shell.sh              # Access Spark shell
 
 # Cleanup

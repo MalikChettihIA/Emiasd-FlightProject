@@ -165,7 +165,7 @@ sbt package
 
 ### 2. Exécuter
 ```bash
-./submit.sh
+./local-submit.sh
 ```
 
 ### 3. Vérifier les Logs
@@ -271,10 +271,10 @@ wc -l /output/Experience-1-local/features/selected_features.txt
 **Solution:**
 ```bash
 # Relancer UNIQUEMENT la feature extraction pour regénérer le fichier
-./submit.sh
+./local-submit.sh
 # OU forcer la suppression et relancer
 rm -rf /output/Experience-1-local/features/
-./submit.sh
+./local-submit.sh
 ```
 
 ---
@@ -293,7 +293,7 @@ rm -rf /output/Experience-1-local/features/
 ```bash
 # Supprimer l'ancien fichier et relancer
 rm /output/Experience-1-local/features/selected_features.txt
-./submit.sh
+./local-submit.sh
 ```
 
 ---
@@ -311,5 +311,5 @@ rm /output/Experience-1-local/features/selected_features.txt
 
 ```bash
 sbt package
-./submit.sh
+./local-submit.sh
 ```

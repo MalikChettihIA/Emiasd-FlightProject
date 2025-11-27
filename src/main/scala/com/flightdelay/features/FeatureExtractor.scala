@@ -343,7 +343,7 @@ object FeatureExtractor {
   def applyPCA(
     data: DataFrame,
     featureNames: Array[String],
-    experiment: ExperimentConfig)(implicit configuration: AppConfiguration): (DataFrame, PCAModel, VarianceAnalysis) = {
+    experiment: ExperimentConfig)(implicit configuration: AppConfiguration, spark: SparkSession): (DataFrame, PCAModel, VarianceAnalysis) = {
 
     val varianceThreshold = experiment.featureExtraction.pcaVarianceThreshold
 

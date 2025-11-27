@@ -39,7 +39,7 @@
 
 ```bash
 cd /Users/malikchettih/Projects/Emiasd-Projects/Emiasd-FlightProject/docker
-./rebuild-and-restart.sh
+./rebuild-and-local-restart.sh
 ```
 
 Ce script fait tout automatiquement et affiche la progression.
@@ -90,7 +90,7 @@ MLFlow 3.4.0
 
 ```bash
 cd /Users/malikchettih/Projects/Emiasd-Projects/Emiasd-FlightProject
-./submit.sh
+./local-submit.sh
 ```
 
 **Attendu**:

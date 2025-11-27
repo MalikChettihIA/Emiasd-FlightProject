@@ -197,7 +197,7 @@ Include `weatherSelectedFeatures` with at least one feature:
 ### Test 1: Run with Weather (Existing Config)
 ```bash
 # Use existing local-config.yml with weather features
-./work/scripts/spark-submit.sh
+./work/scripts/spark-local-submit.sh
 ```
 
 Expected: Pipeline runs normally with weather processing.
@@ -205,7 +205,7 @@ Expected: Pipeline runs normally with weather processing.
 ### Test 2: Run without Weather (New Config)
 ```bash
 # Use the flight-only example config
-./work/scripts/spark-submit.sh flight-only
+./work/scripts/spark-local-submit.sh flight-only
 ```
 
 Expected:

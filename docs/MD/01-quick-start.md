@@ -98,7 +98,7 @@ Run the ML pipeline with default configuration:
 
 ```bash
 # From the docker/ directory
-./submit.sh
+./local-submit.sh
 ```
 
 **What this does:**
@@ -234,7 +234,7 @@ sbt package
 
 # Run experiments
 cd docker
-./submit.sh
+./local-submit.sh
 ```
 
 ---
@@ -247,13 +247,13 @@ cd docker
 cd docker
 
 # Start all services
-./start.sh
+./local-start.sh
 
 # Stop all services
-./stop.sh
+./local-stop.sh
 
 # Restart
-./restart.sh
+./local-restart.sh
 
 # View logs
 ./logs.sh mlflow-server
@@ -264,11 +264,11 @@ cd docker
 
 ```bash
 # Run with default config
-./submit.sh
+./local-submit.sh
 
 # Run specific tasks
-./submit.sh load,preprocess
-./submit.sh train
+./local-submit.sh load,preprocess
+./local-submit.sh train
 ```
 
 ### Access Spark Shell

@@ -96,7 +96,7 @@ sbt package
 
 ### 2. Exécuter et Capturer les Logs
 ```bash
-./submit.sh 2>&1 | tee execution_with_vectorindexer_logs.log
+./local-submit.sh 2>&1 | tee execution_with_vectorindexer_logs.log
 ```
 
 ### 3. Rechercher les Logs VectorIndexer
@@ -263,5 +263,5 @@ Pour plus de détails, consultez:
 
 ```bash
 sbt package
-./submit.sh
+./local-submit.sh
 ```

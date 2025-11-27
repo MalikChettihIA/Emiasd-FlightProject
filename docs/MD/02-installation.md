@@ -356,7 +356,7 @@ docker ps
 # Type :quit to exit
 
 # Test job submission
-./submit.sh
+./local-submit.sh
 # Should start the ML pipeline
 ```
 
@@ -451,7 +451,7 @@ sbt evicted
 environment:
   - SPARK_DRIVER_MEMORY=14G  # Increase this
 
-# Or in spark-submit.sh
+# Or in spark-local-submit.sh
 --driver-memory 14G
 ```
 
@@ -508,7 +508,7 @@ See [Configuration Guide](05-configuration.md) for details.
 
 ```bash
 cd docker
-./submit.sh
+./local-submit.sh
 ```
 
 ### 3. Verify Results

@@ -282,7 +282,7 @@ sbt package
 
 ```bash
 cd docker
-./submit.sh
+./local-submit.sh
 ```
 
 **Expected Output**:
@@ -500,7 +500,7 @@ experiments:
 
 **Run**:
 ```bash
-./submit.sh
+./local-submit.sh
 ```
 
 **Verify**:

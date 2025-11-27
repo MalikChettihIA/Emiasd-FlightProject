@@ -12,7 +12,7 @@ common:
   log: true                   # Enable/disable all logging
   logLevel: "info"            # Minimum log level: debug, info, warn, error
   loadDataFromCSV: false      # If true: load from csv; if false: load from raw parquet
-  storeIntoParquet: true     # If true: save loaded data to parquet; if false: skip parquet saving
+  storeIntoParquet: false     # If true: save loaded data to parquet; if false: skip parquet saving
 
   data:
     basePath: "/data"
@@ -39,7 +39,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-local-12-12"
+  - name: "Experience-local-D2-60-3-3"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -48,10 +48,10 @@ experiments:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: true
-      storeExplodeJoinData: true
-      weatherOriginDepthHours: 12
-      weatherDestinationDepthHours: 12
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherOriginDepthHours: 3
+      weatherDestinationDepthHours: 3
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
 
@@ -66,24 +66,18 @@ experiments:
           transformation: "StringIndexer"
         CRS_ELAPSED_TIME:
           transformation: "None"
-        feature_departure_hour_rounded:
-          transformation: "StringIndexer"
-        feature_flight_week_of_year:
-          transformation: "StringIndexer"
+        feature_departure_hour_rounded_sin:
+          transformation: "None"
+        feature_departure_hour_rounded_cos:
+          transformation: "None"
+        feature_flight_week_of_year_sin:
+          transformation: "None"
+        feature_flight_week_of_year_cos:
+          transformation: "None"
         feature_departure_time_period:
           transformation: "StringIndexer"
         feature_arrival_time_period:
           transformation: "StringIndexer"
-
-        # Cyclic features (sin/cos) - capture periodic nature of temporal variables
-        feature_hour_sin:
-          transformation: "None"
-        feature_hour_cos:
-          transformation: "None"
-        feature_week_of_year_sin:
-          transformation: "None"
-        feature_week_of_year_cos:
-          transformation: "None"
 
       weatherSelectedFeatures:
 

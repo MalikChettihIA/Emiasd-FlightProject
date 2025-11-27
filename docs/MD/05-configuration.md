@@ -67,10 +67,10 @@ Configuration is selected via command-line argument:
 
 ```bash
 # Use local-config.yml (default)
-./submit.sh
+./local-submit.sh
 
 # Use lamsade-config.yml
-./submit.sh lamsade-config.yml
+./local-submit.sh lamsade-config.yml
 ```
 
 **Default**: `local-config.yml` if no argument provided

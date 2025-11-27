@@ -123,7 +123,7 @@ sbt package
 ### 3. Exécution
 
 ```bash
-./work/scripts/spark-submit.sh
+./work/scripts/spark-local-submit.sh
 ```
 
 **Logs attendus :**
@@ -261,7 +261,7 @@ Task not serializable
 
 3. Vérifier que Spark utilise le bon JAR :
    ```bash
-   grep "main JAR" work/scripts/spark-submit.sh
+   grep "main JAR" work/scripts/spark-local-submit.sh
    ```
 
 ---
@@ -306,5 +306,5 @@ SerializationDebugger.find(monObjet)
 **Prochaine étape :** Relancer le pipeline pour vérifier que les date features sont bien traitées comme numériques ! 🎯
 
 ```bash
-./work/scripts/spark-submit.sh
+./work/scripts/spark-local-submit.sh
 ```
