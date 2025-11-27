@@ -201,14 +201,16 @@ object FlightDelayPredictionApp {
       info("-" * 80)
 
       // Train model using new MLPipeline (pre-split balanced datasets)
-      val mlResult = MLPipeline.train(trainData, testData, experiment)
+      val mlResult = MLPipeline.train(trainData, testData, experiment, experiment.train.fast)
 
       // Display summary
       info("-" * 80)
       info("Training Summary")
       info("-" * 80)
       info(f"Accuracy:          ${mlResult.holdOutMetrics.accuracy * 100}%6.2f%%")
-      info(f"CV F1-Score:       ${mlResult.cvMetrics.avgF1 * 100}%6.2f%% ± ${mlResult.cvMetrics.stdF1 * 100}%.2f%%")
+      if (!experiment.train.fast) {
+        info(f"CV F1-Score:       ${mlResult.cvMetrics.avgF1 * 100}%6.2f%% ± ${mlResult.cvMetrics.stdF1 * 100}%.2f%%")
+      }
       info(f"Hold-out F1-Score: ${mlResult.holdOutMetrics.f1Score * 100}%6.2f%%")
       info(f"RECd (Delayed):    ${mlResult.holdOutMetrics.recallDelayed * 100}%6.2f%%")
       info(f"RECo (On-time):    ${mlResult.holdOutMetrics.recallOnTime * 100}%6.2f%%")

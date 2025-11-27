@@ -73,7 +73,7 @@ object MLPipeline {
    *
    * Pipeline:
    * 1. Receive pre-split train/test datasets (already balanced from FeaturePipeline)
-   * 2. K-fold CV + optional Grid Search on dev set
+   * 2. K-fold CV + optional Grid Search on dev set (skipped if fast=true)
    * 3. Train final model on full dev set with best params
    * 4. Evaluate on hold-out test set
    * 5. Save model and metrics per experiment
@@ -81,6 +81,7 @@ object MLPipeline {
    * @param devDataRaw Pre-split training dataset (balanced, exploded, but features not extracted yet)
    * @param testDataRaw Pre-split test dataset (balanced, exploded, but features not extracted yet)
    * @param experiment Experiment configuration
+   * @param fast Skip cross-validation and go directly to final model training (default: false)
    * @param spark Implicit SparkSession
    * @param config Implicit AppConfiguration
    * @return MLResult with trained model and comprehensive metrics
@@ -88,16 +89,21 @@ object MLPipeline {
   def train(
              devDataRaw: DataFrame,
              testDataRaw: DataFrame,
-             experiment: ExperimentConfig
+             experiment: ExperimentConfig,
+             fast: Boolean = false
   )(implicit spark: SparkSession, configuration: AppConfiguration): MLResult = {
 
     info("=" * 100)
     info(s"[ML PIPELINE] Starting for experiment: ${experiment.name}")
     info("=" * 100)
-    info(s"Strategy: Hold-out test (${experiment.train.trainRatio * 100}%) + K-fold CV (${experiment.train.crossValidation.numFolds} folds)")
+    if (fast) {
+      info(s"Mode: FAST (skipping cross-validation)")
+    } else {
+      info(s"Strategy: Hold-out test (${experiment.train.trainRatio * 100}%) + K-fold CV (${experiment.train.crossValidation.numFolds} folds)")
+    }
     info(s"Model: ${experiment.model.modelType}")
     info(s"Target: ${experiment.target}")
-    if (experiment.train.gridSearch.enabled) {
+    if (!fast && experiment.train.gridSearch.enabled) {
       info(s"Grid Search: ENABLED (metric: ${experiment.train.gridSearch.evaluationMetric})")
     }
     info("=" * 100)
@@ -174,47 +180,77 @@ object MLPipeline {
     debug(f"   Test features extracted: ${testData.count()}%,d records")
 
     // ========================================================================
-    // STEP 4: K-fold CV + Grid Search on dev set
+    // STEP 4: K-fold CV + Grid Search on dev set (skipped if fast=true)
     // ========================================================================
-    info("[ML PIPELINE][STEP 4] Cross-Validation on Development Set")
-    info("=" * 80)
+    val cvResult = if (fast) {
+      info("[ML PIPELINE][STEP 4] FAST MODE - Skipping Cross-Validation")
+      info("=" * 80)
+      info("  Using default hyperparameters from configuration")
 
-    val cvResult = CrossValidator.validate(devData, experiment)
+      // Create a dummy CV result with empty metrics
+      val emptyMetrics = EvaluationMetrics(
+        accuracy = 0.0,
+        precision = 0.0,
+        recall = 0.0,
+        f1Score = 0.0,
+        areaUnderROC = 0.0,
+        areaUnderPR = 0.0,
+        truePositives = 0L,
+        trueNegatives = 0L,
+        falsePositives = 0L,
+        falseNegatives = 0L
+      )
 
-    info(f"  CV Results (${cvResult.numFolds} folds):")
-    info(f"    Accuracy:  ${cvResult.avgMetrics.accuracy * 100}%6.2f%% ± ${cvResult.stdMetrics.accuracy * 100}%.2f%%")
-    info(f"    Precision: ${cvResult.avgMetrics.precision * 100}%6.2f%% ± ${cvResult.stdMetrics.precision * 100}%.2f%%")
-    info(f"    Recall:    ${cvResult.avgMetrics.recall * 100}%6.2f%% ± ${cvResult.stdMetrics.recall * 100}%.2f%%")
-    info(f"    F1-Score:  ${cvResult.avgMetrics.f1Score * 100}%6.2f%% ± ${cvResult.stdMetrics.f1Score * 100}%.2f%%")
-    info(f"    AUC-ROC:   ${cvResult.avgMetrics.areaUnderROC}%6.4f ± ${cvResult.stdMetrics.areaUnderROC}%.4f")
+      CrossValidator.CVResult(
+        avgMetrics = emptyMetrics,
+        stdMetrics = emptyMetrics,
+        foldMetrics = Seq.empty,
+        bestHyperparameters = Map.empty,
+        numFolds = 0
+      )
+    } else {
+      info("[ML PIPELINE][STEP 4] Cross-Validation on Development Set")
+      info("=" * 80)
 
-    // Log CV metrics to MLFlow
-    runId.foreach { rid =>
-      // Log best hyperparameters
-      MLFlowTracker.logParams(rid, cvResult.bestHyperparameters)
+      val cvRes = CrossValidator.validate(devData, experiment)
 
-      // Log per-fold metrics
-      cvResult.foldMetrics.zipWithIndex.foreach { case (metrics, fold) =>
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_accuracy", metrics.accuracy, step = fold)
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_precision", metrics.precision, step = fold)
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_recall", metrics.recall, step = fold)
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_f1", metrics.f1Score, step = fold)
-        MLFlowTracker.logMetric(rid, s"cv_fold${fold}_auc", metrics.areaUnderROC, step = fold)
+      info(f"  CV Results (${cvRes.numFolds} folds):")
+      info(f"    Accuracy:  ${cvRes.avgMetrics.accuracy * 100}%6.2f%% ± ${cvRes.stdMetrics.accuracy * 100}%.2f%%")
+      info(f"    Precision: ${cvRes.avgMetrics.precision * 100}%6.2f%% ± ${cvRes.stdMetrics.precision * 100}%.2f%%")
+      info(f"    Recall:    ${cvRes.avgMetrics.recall * 100}%6.2f%% ± ${cvRes.stdMetrics.recall * 100}%.2f%%")
+      info(f"    F1-Score:  ${cvRes.avgMetrics.f1Score * 100}%6.2f%% ± ${cvRes.stdMetrics.f1Score * 100}%.2f%%")
+      info(f"    AUC-ROC:   ${cvRes.avgMetrics.areaUnderROC}%6.4f ± ${cvRes.stdMetrics.areaUnderROC}%.4f")
+
+      // Log CV metrics to MLFlow
+      runId.foreach { rid =>
+        // Log best hyperparameters
+        MLFlowTracker.logParams(rid, cvRes.bestHyperparameters)
+
+        // Log per-fold metrics
+        cvRes.foldMetrics.zipWithIndex.foreach { case (metrics, fold) =>
+          MLFlowTracker.logMetric(rid, s"cv_fold${fold}_accuracy", metrics.accuracy, step = fold)
+          MLFlowTracker.logMetric(rid, s"cv_fold${fold}_precision", metrics.precision, step = fold)
+          MLFlowTracker.logMetric(rid, s"cv_fold${fold}_recall", metrics.recall, step = fold)
+          MLFlowTracker.logMetric(rid, s"cv_fold${fold}_f1", metrics.f1Score, step = fold)
+          MLFlowTracker.logMetric(rid, s"cv_fold${fold}_auc", metrics.areaUnderROC, step = fold)
+        }
+
+        // Log aggregated CV metrics
+        MLFlowTracker.logMetrics(rid, Map(
+          "cv_mean_accuracy" -> cvRes.avgMetrics.accuracy,
+          "cv_std_accuracy" -> cvRes.stdMetrics.accuracy,
+          "cv_mean_precision" -> cvRes.avgMetrics.precision,
+          "cv_std_precision" -> cvRes.stdMetrics.precision,
+          "cv_mean_recall" -> cvRes.avgMetrics.recall,
+          "cv_std_recall" -> cvRes.stdMetrics.recall,
+          "cv_mean_f1" -> cvRes.avgMetrics.f1Score,
+          "cv_std_f1" -> cvRes.stdMetrics.f1Score,
+          "cv_mean_auc" -> cvRes.avgMetrics.areaUnderROC,
+          "cv_std_auc" -> cvRes.stdMetrics.areaUnderROC
+        ))
       }
 
-      // Log aggregated CV metrics
-      MLFlowTracker.logMetrics(rid, Map(
-        "cv_mean_accuracy" -> cvResult.avgMetrics.accuracy,
-        "cv_std_accuracy" -> cvResult.stdMetrics.accuracy,
-        "cv_mean_precision" -> cvResult.avgMetrics.precision,
-        "cv_std_precision" -> cvResult.stdMetrics.precision,
-        "cv_mean_recall" -> cvResult.avgMetrics.recall,
-        "cv_std_recall" -> cvResult.stdMetrics.recall,
-        "cv_mean_f1" -> cvResult.avgMetrics.f1Score,
-        "cv_std_f1" -> cvResult.stdMetrics.f1Score,
-        "cv_mean_auc" -> cvResult.avgMetrics.areaUnderROC,
-        "cv_std_auc" -> cvResult.stdMetrics.areaUnderROC
-      ))
+      cvRes
     }
 
     // ========================================================================
@@ -368,13 +404,13 @@ object MLPipeline {
     info("   Model already saved in Step 5 (to avoid broadcast OOM)")
 
     // Save comprehensive metrics (CSV + TXT summary)
-    saveMetrics(experiment, cvResult, holdOutMetrics, testPredictions, experimentOutputPath)
+    saveMetrics(experiment, cvResult, holdOutMetrics, testPredictions, experimentOutputPath, fast)
 
     val endTime = System.currentTimeMillis()
     val totalTime = (endTime - startTime) / 1000.0
 
     // Save training summary as TXT file
-    saveTrainingSummary(experiment, cvResult, holdOutMetrics, totalTime, experimentOutputPath)
+    saveTrainingSummary(experiment, cvResult, holdOutMetrics, totalTime, experimentOutputPath, fast)
 
     // Copy HDFS to local if localPath is configured (for visualization and MLFlow)
     val localExperimentPath = HDFSHelper.copyExperimentMetrics(
@@ -457,7 +493,7 @@ object MLPipeline {
     // ========================================================================
     // Display Best Model Summary
     // ========================================================================
-    displayBestModelSummary(experiment, cvResult, holdOutMetrics, totalTime)
+    displayBestModelSummary(experiment, cvResult, holdOutMetrics, totalTime, fast)
 
     info("=" * 100)
     info(s"[ML PIPELINE] Completed for experiment: ${experiment.name}")
@@ -500,7 +536,8 @@ object MLPipeline {
     experiment: ExperimentConfig,
     cvResult: CrossValidator.CVResult,
     holdOutMetrics: EvaluationMetrics,
-    totalTime: Double
+    totalTime: Double,
+    fast: Boolean = false
   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     info("=" * 100)
     info("BEST MODEL SUMMARY")
@@ -531,12 +568,16 @@ object MLPipeline {
 
     // Display performance metrics
     info(s" Performance Metrics:")
-    info(s"   Cross-Validation (${cvResult.numFolds}-fold):")
-    info(f"     Accuracy  : ${cvResult.avgMetrics.accuracy * 100}%6.2f%% ± ${cvResult.stdMetrics.accuracy * 100}%5.2f%%")
-    info(f"     Precision : ${cvResult.avgMetrics.precision * 100}%6.2f%% ± ${cvResult.stdMetrics.precision * 100}%5.2f%%")
-    info(f"     Recall    : ${cvResult.avgMetrics.recall * 100}%6.2f%% ± ${cvResult.stdMetrics.recall * 100}%5.2f%%")
-    info(f"     F1-Score  : ${cvResult.avgMetrics.f1Score * 100}%6.2f%% ± ${cvResult.stdMetrics.f1Score * 100}%5.2f%%")
-    info(f"     AUC-ROC   : ${cvResult.avgMetrics.areaUnderROC}%6.4f ± ${cvResult.stdMetrics.areaUnderROC}%6.4f")
+    if (!fast) {
+      info(s"   Cross-Validation (${cvResult.numFolds}-fold):")
+      info(f"     Accuracy  : ${cvResult.avgMetrics.accuracy * 100}%6.2f%% ± ${cvResult.stdMetrics.accuracy * 100}%5.2f%%")
+      info(f"     Precision : ${cvResult.avgMetrics.precision * 100}%6.2f%% ± ${cvResult.stdMetrics.precision * 100}%5.2f%%")
+      info(f"     Recall    : ${cvResult.avgMetrics.recall * 100}%6.2f%% ± ${cvResult.stdMetrics.recall * 100}%5.2f%%")
+      info(f"     F1-Score  : ${cvResult.avgMetrics.f1Score * 100}%6.2f%% ± ${cvResult.stdMetrics.f1Score * 100}%5.2f%%")
+      info(f"     AUC-ROC   : ${cvResult.avgMetrics.areaUnderROC}%6.4f ± ${cvResult.stdMetrics.areaUnderROC}%6.4f")
+    } else {
+      info(s"   Cross-Validation: SKIPPED (fast mode)")
+    }
 
     info(s"\n   Hold-out Test Set:")
     info(f"     Accuracy  : ${holdOutMetrics.accuracy * 100}%6.2f%%")
@@ -567,38 +608,41 @@ object MLPipeline {
     cvResult: CrossValidator.CVResult,
     holdOutMetrics: EvaluationMetrics,
     testPredictions: DataFrame,
-    basePath: String
+    basePath: String,
+    fast: Boolean = false
   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     import com.flightdelay.utils.MetricsWriter
     import org.apache.spark.sql.functions._
 
     val metricsPath = s"$basePath/metrics"
 
-    // Save CV fold metrics
-    val cvHeaders = Seq("fold", "accuracy", "precision", "recall", "f1_score", "auc_roc", "auc_pr")
-    val cvRows = cvResult.foldMetrics.zipWithIndex.map { case (metrics, idx) =>
-      Seq(
-        (idx + 1).toString,
-        f"${metrics.accuracy}%.6f",
-        f"${metrics.precision}%.6f",
-        f"${metrics.recall}%.6f",
-        f"${metrics.f1Score}%.6f",
-        f"${metrics.areaUnderROC}%.6f",
-        f"${metrics.areaUnderPR}%.6f"
-      )
-    }
-    MetricsWriter.writeCsv(cvHeaders, cvRows, s"$metricsPath/cv_fold_metrics.csv")
+    // Save CV fold metrics (only if not in fast mode)
+    if (!fast) {
+      val cvHeaders = Seq("fold", "accuracy", "precision", "recall", "f1_score", "auc_roc", "auc_pr")
+      val cvRows = cvResult.foldMetrics.zipWithIndex.map { case (metrics, idx) =>
+        Seq(
+          (idx + 1).toString,
+          f"${metrics.accuracy}%.6f",
+          f"${metrics.precision}%.6f",
+          f"${metrics.recall}%.6f",
+          f"${metrics.f1Score}%.6f",
+          f"${metrics.areaUnderROC}%.6f",
+          f"${metrics.areaUnderPR}%.6f"
+        )
+      }
+      MetricsWriter.writeCsv(cvHeaders, cvRows, s"$metricsPath/cv_fold_metrics.csv")
 
-    // Save CV average metrics
-    val avgHeaders = Seq("metric", "mean", "std")
-    val avgRows = Seq(
-      Seq("accuracy", f"${cvResult.avgMetrics.accuracy}%.6f", f"${cvResult.stdMetrics.accuracy}%.6f"),
-      Seq("precision", f"${cvResult.avgMetrics.precision}%.6f", f"${cvResult.stdMetrics.precision}%.6f"),
-      Seq("recall", f"${cvResult.avgMetrics.recall}%.6f", f"${cvResult.stdMetrics.recall}%.6f"),
-      Seq("f1_score", f"${cvResult.avgMetrics.f1Score}%.6f", f"${cvResult.stdMetrics.f1Score}%.6f"),
-      Seq("auc_roc", f"${cvResult.avgMetrics.areaUnderROC}%.6f", f"${cvResult.stdMetrics.areaUnderROC}%.6f")
-    )
-    MetricsWriter.writeCsv(avgHeaders, avgRows, s"$metricsPath/cv_summary.csv")
+      // Save CV average metrics
+      val avgHeaders = Seq("metric", "mean", "std")
+      val avgRows = Seq(
+        Seq("accuracy", f"${cvResult.avgMetrics.accuracy}%.6f", f"${cvResult.stdMetrics.accuracy}%.6f"),
+        Seq("precision", f"${cvResult.avgMetrics.precision}%.6f", f"${cvResult.stdMetrics.precision}%.6f"),
+        Seq("recall", f"${cvResult.avgMetrics.recall}%.6f", f"${cvResult.stdMetrics.recall}%.6f"),
+        Seq("f1_score", f"${cvResult.avgMetrics.f1Score}%.6f", f"${cvResult.stdMetrics.f1Score}%.6f"),
+        Seq("auc_roc", f"${cvResult.avgMetrics.areaUnderROC}%.6f", f"${cvResult.stdMetrics.areaUnderROC}%.6f")
+      )
+      MetricsWriter.writeCsv(avgHeaders, avgRows, s"$metricsPath/cv_summary.csv")
+    }
 
     // Save hold-out test metrics
     val testHeaders = Seq("metric", "value")
@@ -665,7 +709,8 @@ object MLPipeline {
     cvResult: CrossValidator.CVResult,
     holdOutMetrics: EvaluationMetrics,
     totalTime: Double,
-    basePath: String
+    basePath: String,
+    fast: Boolean = false
   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val metricsPath = s"$basePath/metrics"
     val summaryFile = s"$metricsPath/training_summary.txt"
@@ -708,15 +753,20 @@ object MLPipeline {
     // Cross-Validation Results
     summary.append("CROSS-VALIDATION RESULTS\n")
     summary.append("-" * 100 + "\n")
-    summary.append(s"Number of Folds: ${cvResult.numFolds}\n\n")
-    summary.append(f"  Metric       Mean          Std Dev\n")
-    summary.append(f"  ${"=" * 50}\n")
-    summary.append(f"  Accuracy     ${cvResult.avgMetrics.accuracy * 100}%6.2f%%      ± ${cvResult.stdMetrics.accuracy * 100}%5.2f%%\n")
-    summary.append(f"  Precision    ${cvResult.avgMetrics.precision * 100}%6.2f%%      ± ${cvResult.stdMetrics.precision * 100}%5.2f%%\n")
-    summary.append(f"  Recall       ${cvResult.avgMetrics.recall * 100}%6.2f%%      ± ${cvResult.stdMetrics.recall * 100}%5.2f%%\n")
-    summary.append(f"  F1-Score     ${cvResult.avgMetrics.f1Score * 100}%6.2f%%      ± ${cvResult.stdMetrics.f1Score * 100}%5.2f%%\n")
-    summary.append(f"  AUC-ROC      ${cvResult.avgMetrics.areaUnderROC}%6.4f       ± ${cvResult.stdMetrics.areaUnderROC}%6.4f\n")
-    summary.append("\n")
+    if (fast) {
+      summary.append("SKIPPED (fast mode enabled)\n")
+      summary.append("Using default hyperparameters from configuration\n\n")
+    } else {
+      summary.append(s"Number of Folds: ${cvResult.numFolds}\n\n")
+      summary.append(f"  Metric       Mean          Std Dev\n")
+      summary.append(f"  ${"=" * 50}\n")
+      summary.append(f"  Accuracy     ${cvResult.avgMetrics.accuracy * 100}%6.2f%%      ± ${cvResult.stdMetrics.accuracy * 100}%5.2f%%\n")
+      summary.append(f"  Precision    ${cvResult.avgMetrics.precision * 100}%6.2f%%      ± ${cvResult.stdMetrics.precision * 100}%5.2f%%\n")
+      summary.append(f"  Recall       ${cvResult.avgMetrics.recall * 100}%6.2f%%      ± ${cvResult.stdMetrics.recall * 100}%5.2f%%\n")
+      summary.append(f"  F1-Score     ${cvResult.avgMetrics.f1Score * 100}%6.2f%%      ± ${cvResult.stdMetrics.f1Score * 100}%5.2f%%\n")
+      summary.append(f"  AUC-ROC      ${cvResult.avgMetrics.areaUnderROC}%6.4f       ± ${cvResult.stdMetrics.areaUnderROC}%6.4f\n")
+      summary.append("\n")
+    }
 
     // Hold-out Test Results
     summary.append("HOLD-OUT TEST SET RESULTS\n")

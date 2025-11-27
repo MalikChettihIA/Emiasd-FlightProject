@@ -39,7 +39,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-local-D2-60-3-3"
+  - name: "Experience-optimized-local-D2-60-1-1"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -50,8 +50,8 @@ experiments:
       delayThresholdMin: 60
       storeJoinData: false
       storeExplodeJoinData: false
-      weatherOriginDepthHours: 3
-      weatherDestinationDepthHours: 3
+      weatherOriginDepthHours: 1
+      weatherDestinationDepthHours: 1
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
 
@@ -138,6 +138,7 @@ experiments:
         impurity: "gini"
 
     train:
+      fast: true  # Skip cross-validation
       trainRatio: 0.75
 
       crossValidation:

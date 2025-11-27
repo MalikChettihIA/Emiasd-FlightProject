@@ -8,11 +8,12 @@
 #   4w : 4 workers (4 exécuteurs, plus petits)
 # =====================================================================
 
-WORKERS="${1:-4w}"
+WORKERS="${1:-2w}"
 TASKS="${2:-data-pipeline,feature-extraction,train}"
+EXPERIENCE="${3:-local-d2_60_0_0}"
 
 if [[ "$WORKERS" != "1w" && "$WORKERS" != "2w" && "$WORKERS" != "4w" ]]; then
-    echo "❌ Argument invalide. Utilisation: $0 [1w|2w|4w] [tasks]"
+    echo "❌ Argument invalide. Utilisation: $0 [1w|2w|4w] [tasks] [experience]"
     echo "   1w: 1 worker  × 8G  × 4 cores"
     echo "   2w: 2 workers × 8G  × 4 cores"
     echo "   4w: 4 workers × 4G  × 3 cores (défaut, plus granulaire)"
@@ -20,10 +21,13 @@ if [[ "$WORKERS" != "1w" && "$WORKERS" != "2w" && "$WORKERS" != "4w" ]]; then
     echo "Exemples:"
     echo "  $0 2w"
     echo "  $0 4w data-pipeline,train"
+    echo "  $0 2w data-pipeline,feature-extraction,train local-optimized-d2_60_0_0"
     exit 1
 fi
 
 echo "🔧 Configuration cluster: $WORKERS"
+echo "📋 Tasks: $TASKS"
+echo "🧪 Experience: $EXPERIENCE"
 
 # ============================================================================
 # CONFIGURE SPARK PARAMETERS BASED ON WORKERS
@@ -126,4 +130,4 @@ spark-submit \
   \
   --jars /apps/mlflow-client-3.4.0.jar,/apps/mlflow-spark_2.13-3.4.0.jar \
   /apps/Emiasd-Flight-Data-Analysis.jar \
-  local-d2_60_3_3_hyperparmaters "$TASKS"
+  "$EXPERIENCE" "$TASKS"

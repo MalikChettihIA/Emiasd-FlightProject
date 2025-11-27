@@ -302,6 +302,9 @@ object ConfigurationLoader {
   private def parseTrainConfig(trainData: Map[String, Any]): TrainConfig = {
     val trainRatio = trainData("trainRatio").toString.toDouble
 
+    // Parse fast flag (default: false)
+    val fast = trainData.getOrElse("fast", false).toString.toBoolean
+
     // Parse cross-validation
     val cvData = trainData("crossValidation").asInstanceOf[java.util.Map[String, Any]].asScala.toMap
     val crossValidationConfig = CrossValidationConfig(
@@ -317,6 +320,7 @@ object ConfigurationLoader {
 
     TrainConfig(
       trainRatio = trainRatio,
+      fast = fast,
       crossValidation = crossValidationConfig,
       gridSearch = gridSearchConfig
     )
@@ -382,6 +386,27 @@ object ConfigurationLoader {
       case value => Seq(value.toString.toDouble)
     }
 
+    // XGBoost specific parameters (optional)
+    val alpha = data.get("alpha").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toDouble).toSeq
+      case value => Seq(value.toString.toDouble)
+    }
+
+    val lambda = data.get("lambda").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toDouble).toSeq
+      case value => Seq(value.toString.toDouble)
+    }
+
+    val gamma = data.get("gamma").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toDouble).toSeq
+      case value => Seq(value.toString.toDouble)
+    }
+
+    val colsampleBytree = data.get("colsampleBytree").map {
+      case list: java.util.List[_] => list.asScala.map(_.toString.toDouble).toSeq
+      case value => Seq(value.toString.toDouble)
+    }
+
     HyperparametersConfig(
       numTrees = numTrees,
       maxDepth = maxDepth,
@@ -393,7 +418,11 @@ object ConfigurationLoader {
       stepSize = stepSize,
       maxIter = maxIter,
       regParam = regParam,
-      elasticNetParam = elasticNetParam
+      elasticNetParam = elasticNetParam,
+      alpha = alpha,
+      lambda = lambda,
+      gamma = gamma,
+      colsampleBytree = colsampleBytree
     )
   }
 }

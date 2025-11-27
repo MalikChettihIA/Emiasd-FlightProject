@@ -44,16 +44,14 @@ object ModelFactory {
         println("  → Logistic Regression Classifier")
         new LogisticRegressionModel(experiment)
 
+      case "xgboost" | "xgb" =>
+        println("  → XGBoost Classifier")
+        new XGBoostModel(experiment)
+
       case "decisiontree" | "dt" =>
         throw new NotImplementedError(
           "Decision Tree not yet implemented. " +
-            "Available models: randomforest"
-        )
-
-      case "xgboost" =>
-        throw new NotImplementedError(
-          "XGBoost not yet implemented. " +
-            "Available models: randomforest"
+            "Available models: randomforest, gbt, logisticregression, xgboost"
         )
 
       case "lightgbm" =>
@@ -65,7 +63,7 @@ object ModelFactory {
       case unknown =>
         throw new IllegalArgumentException(
           s"Unknown model type: '$unknown'. " +
-            s"Available models: randomforest, gbt, logisticregression, decisiontree, xgboost, lightgbm"
+            s"Available models: randomforest, gbt, logisticregression, xgboost, decisiontree, lightgbm"
         )
     }
   }
@@ -82,6 +80,7 @@ object ModelFactory {
       case "randomforest" | "rf" => true
       case "gbt" | "gradientboostedtrees" => true
       case "logisticregression" | "lr" => true
+      case "xgboost" | "xgb" => true
       case _ => false
     }
   }
@@ -94,7 +93,8 @@ object ModelFactory {
   def supportedModels: Seq[String] = Seq(
     "randomforest",
     "gbt",
-    "logisticregression"
+    "logisticregression",
+    "xgboost"
   )
 
   /**
@@ -104,7 +104,6 @@ object ModelFactory {
    */
   def plannedModels: Seq[String] = Seq(
     "decisiontree",
-    "xgboost",
     "lightgbm"
   )
 }

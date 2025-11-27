@@ -1,0 +1,151 @@
+# src/main/resources/local-config.yml
+environment: "local"
+
+# ============================================================================
+# COMMON CONFIGURATION - Shared across all experiments
+# ============================================================================
+common:
+  # Random seed for reproducibility across all experiments
+  seed: 42
+
+  # Logging configuration
+  log: true                   # Enable/disable all logging
+  logLevel: "info"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: false      # If true: load from csv; if false: load from raw parquet
+  storeIntoParquet: true     # If true: save loaded data to parquet; if false: skip parquet saving
+
+  data:
+    basePath: "/data"
+    flight:
+      path: "/data/FLIGHT-3Y/Flights/*.csv"
+    weather:
+      path: "/data/FLIGHT-3Y/Weather/*.txt"
+    airportMapping:
+      path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
+
+  output:
+    basePath: "/output"
+
+  mlflow:
+    enabled: true
+    trackingUri: "http://mlflow-server:5000"  # Utilise le nom du container et le port interne
+
+# ============================================================================
+# EXPERIMENTS - Each experiment has its own feature extraction and model config
+# ============================================================================
+experiments:
+
+  # =========================================================================
+  # Experiment 1:
+  # Model : Logistic Regression, feature_selection
+  # =========================================================================
+  - name: "Experience-md-lr-local-D2-60-7-7"
+    description: "Logistic Regression with ElasticNet regularization and weather features (7h depth)"
+    enabled: true
+    target: "is_delayed"
+
+    featureExtraction:
+      type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
+      storeJoinData: true
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: 7
+      weatherDestinationDepthHours: 7
+      maxCategoricalCardinality: 280
+      handleInvalid: "keep"
+
+      flightSelectedFeatures:
+        CRS_DEP_TIME:
+          transformation: "StandardScaler"  # Numeric: normalize
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "OneHotEncoder"  # Categorical: one-hot encode
+        ORIGIN_AIRPORT_ID:
+          transformation: "OneHotEncoder"  # Categorical: one-hot encode
+        DEST_AIRPORT_ID:
+          transformation: "OneHotEncoder"  # Categorical: one-hot encode
+        CRS_ELAPSED_TIME:
+          transformation: "StandardScaler"  # Numeric: normalize
+        feature_departure_hour_rounded_sin:
+          transformation: "StandardScaler"  # Numeric: normalize (already normalized -1/1 but good practice)
+        feature_departure_hour_rounded_cos:
+          transformation: "StandardScaler"  # Numeric: normalize
+        feature_flight_week_of_year_sin:
+          transformation: "StandardScaler"  # Numeric: normalize
+        feature_flight_week_of_year_cos:
+          transformation: "StandardScaler"  # Numeric: normalize
+        feature_departure_time_period:
+          transformation: "OneHotEncoder"  # Categorical: one-hot encode
+        feature_arrival_time_period:
+          transformation: "OneHotEncoder"  # Categorical: one-hot encode
+
+      weatherSelectedFeatures:
+
+        feature_weather_type:
+          transformation: "OneHotEncoder"  # Categorical: one-hot encode
+        feature_weather_intensity:
+          transformation: "OneHotEncoder"  # Categorical: one-hot encode
+        feature_flight_category_ordinal:
+          transformation: "StandardScaler"  # Numeric: normalize
+        feature_visibility_category:
+          transformation: "OneHotEncoder"  # Categorical: one-hot encode
+        feature_icing_risk_level:
+          transformation: "StandardScaler"  # Numeric: normalize
+        feature_icing_risk_flag:
+          transformation: "StandardScaler"  # Numeric (binary): normalize
+        feature_is_pressure_dropping_fast:
+          transformation: "StandardScaler"  # Numeric (binary): normalize
+        HourlyPrecip:
+          transformation: "StandardScaler"  # Numeric: normalize
+        RelativeHumidity:
+          transformation: "StandardScaler"  # Numeric: normalize
+        press_change_abs:
+          transformation: "StandardScaler"  # Numeric: normalize
+        feature_temp_dewpoint_spread:
+          transformation: "StandardScaler"  # Numeric: normalize
+        Temp_Delta_1hr:
+          transformation: "StandardScaler"  # Numeric: normalize
+        Visibility_Delta_1hr:
+          transformation: "StandardScaler"  # Numeric: normalize
+        Humidity_Delta_1hr:
+          transformation: "StandardScaler"  # Numeric: normalize
+        WindSpeed_Delta_1hr:
+          transformation: "StandardScaler"  # Numeric: normalize
+
+      aggregatedSelectedFeatures:
+        HourlyPrecip:
+          aggregation: "sum"
+          transformation: "StandardScaler"  # Numeric: normalize aggregated precipitation
+        RelativeHumidity:
+          aggregation: "avg"
+          transformation: "StandardScaler"  # Numeric: normalize average humidity
+        press_change_abs:
+          aggregation: "max"
+          transformation: "StandardScaler"  # Numeric: normalize max pressure change
+        feature_temp_dewpoint_spread:
+          aggregation: "min"
+          transformation: "StandardScaler"  # Numeric: normalize min temp-dewpoint spread
+
+    model:
+      modelType: "logisticregression"
+      hyperparameters:
+        # Logistic Regression hyperparameters
+        maxIter: [100]              # Maximum number of iterations (default: 100, range: 10-500)
+        regParam: [0.0]             # Regularization parameter (default: 0.0, range: 0.0-1.0)
+                                    # Higher values = stronger regularization
+        elasticNetParam: [0.0]      # ElasticNet mixing parameter (default: 0.0)
+                                    # 0.0 = L2 regularization (Ridge)
+                                    # 1.0 = L1 regularization (Lasso)
+                                    # 0.5 = ElasticNet (mix of L1 and L2)
+
+    train:
+      fast: true  # Skip cross-validation (train only final model)
+      trainRatio: 0.75
+
+      crossValidation:
+        numFolds: 1
+
+      gridSearch:
+        enabled: false  # Disabled (using single hyperparameter values)
+        evaluationMetric: "f1"
+

@@ -39,6 +39,10 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-sql" % sparkVersion % "provided",
   "org.apache.spark" %% "spark-mllib" % sparkVersion % "provided",
 
+  // XGBoost for Spark
+  "ml.dmlc" %% "xgboost4j-spark" % "2.1.1",  // XGBoost Spark integration
+  "ml.dmlc" %% "xgboost4j" % "2.1.1",        // XGBoost core library
+
   // Configuration dependencies
   "ch.qos.logback" % "logback-classic" % "1.4.14",
   "ch.qos.logback" % "logback-core" % "1.4.14",
