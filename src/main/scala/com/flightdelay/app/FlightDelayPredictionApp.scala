@@ -30,8 +30,8 @@ object FlightDelayPredictionApp {
     val appStartTime = System.currentTimeMillis()
     implicit val configuration: AppConfiguration = ConfigurationLoader.loadConfiguration(args)
 
-    // Create execution time tracker
-    val timeTracker = ExecutionTimeTracker.create()
+    // Create global execution time tracker for data processing (shared across experiments)
+    val globalTimeTracker = ExecutionTimeTracker.create()
 
     info("=" * 160)
     info("Flight Delay Prediction App Starting...")
@@ -78,7 +78,7 @@ object FlightDelayPredictionApp {
       // Exécute (ou charge) la pipeline de données et retourne les DataFrames flights et weather
       val (flightData, weatherData) = if (tasks.contains("data-pipeline")) {
         // Si la tâche "data-pipeline" est demandée, lancer la pipeline qui charge et pré-traite les données
-        val (flights, weather) = DataPipeline.execute(timeTracker)
+        val (flights, weather) = DataPipeline.execute(globalTimeTracker)
         info("[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... ")
 
         // Debug : afficher le nombre d'enregistrements et de colonnes (attention : count() déclenche une action Spark)
@@ -114,7 +114,17 @@ object FlightDelayPredictionApp {
         info("=" * 80 )
 
         try {
-          runExperiment(experiment, tasks, flightData, weatherData, timeTracker)
+          // Create a new time tracker for this experiment
+          val experimentTimeTracker = ExecutionTimeTracker.create()
+
+          // Copy data processing metrics from global tracker to experiment tracker
+          globalTimeTracker.getAllTimes.foreach { case (stepName, time) =>
+            if (stepName.startsWith("data_processing.")) {
+              experimentTimeTracker.setStepTime(stepName, time)
+            }
+          }
+
+          runExperiment(experiment, tasks, flightData, weatherData, experimentTimeTracker)
         } catch {
           case ex: Exception =>
             error("=" * 80)
@@ -148,31 +158,31 @@ object FlightDelayPredictionApp {
       info(f"Total execution time: ${totalAppDuration}%.2f seconds (${totalAppDuration / 60}%.2f minutes)")
       info("=" * 80)
 
-      // Display execution time summary table
+      // Display global execution time summary table (data processing only)
       info("")
       info("=" * 90)
-      info("DISPLAYING EXECUTION TIME SUMMARY")
+      info("DISPLAYING GLOBAL EXECUTION TIME SUMMARY (DATA PROCESSING)")
       info("=" * 90)
-      timeTracker.displaySummaryTable()
+      globalTimeTracker.displaySummaryTable()
 
-      // Save execution time metrics to CSV and TXT
+      // Save global execution time metrics to CSV and TXT (common level)
       try {
-        val metricsBasePath = s"${configuration.common.output.basePath}/execution_time_metrics"
+        val commonMetricsPath = s"${configuration.common.output.basePath}/execution_time_metrics"
         info("=" * 90)
-        info("SAVING EXECUTION TIME METRICS")
+        info("SAVING GLOBAL EXECUTION TIME METRICS (COMMON LEVEL)")
         info("=" * 90)
-        info(s"  Saving to: $metricsBasePath")
+        info(s"  Saving to: $commonMetricsPath")
 
-        timeTracker.saveToCSV(s"$metricsBasePath/execution_times.csv")
-        info(s"  - CSV file saved: $metricsBasePath/execution_times.csv")
+        globalTimeTracker.saveToCSV(s"$commonMetricsPath/execution_times.csv")
+        info(s"  - CSV file saved: $commonMetricsPath/execution_times.csv")
 
-        timeTracker.saveToText(s"$metricsBasePath/execution_times.txt")
-        info(s"  - TXT file saved: $metricsBasePath/execution_times.txt")
+        globalTimeTracker.saveToText(s"$commonMetricsPath/execution_times.txt")
+        info(s"  - TXT file saved: $commonMetricsPath/execution_times.txt")
 
         info("=" * 90)
       } catch {
         case ex: Exception =>
-          error(s"Error saving execution time metrics: ${ex.getMessage}")
+          error(s"Error saving global execution time metrics: ${ex.getMessage}")
           ex.printStackTrace()
       }
 
@@ -252,6 +262,29 @@ object FlightDelayPredictionApp {
 
     } else {
       warn(s"[FlightDelayPredictionApp][STEP 3] Training model for ${experiment.name}... SKIPPED")
+    }
+
+    // =====================================================================================
+    // Save execution time metrics at experiment level
+    // =====================================================================================
+    try {
+      val experimentMetricsPath = s"${configuration.common.output.basePath}/${experiment.name}/execution_time"
+      info("=" * 90)
+      info(s"SAVING EXECUTION TIME METRICS FOR ${experiment.name}")
+      info("=" * 90)
+      info(s"  Saving to: $experimentMetricsPath")
+
+      timeTracker.saveToCSV(s"$experimentMetricsPath/execution_times.csv")
+      info(s"  - CSV file saved: $experimentMetricsPath/execution_times.csv")
+
+      timeTracker.saveToText(s"$experimentMetricsPath/execution_times.txt")
+      info(s"  - TXT file saved: $experimentMetricsPath/execution_times.txt")
+
+      info("=" * 90)
+    } catch {
+      case ex: Exception =>
+        error(s"Error saving execution time metrics for ${experiment.name}: ${ex.getMessage}")
+        ex.printStackTrace()
     }
 
   }

@@ -131,7 +131,8 @@ experiments:
       hyperparameters:
         # XGBoost-specific hyperparameters
         maxIter: [100]               # Number of boosting rounds (trees): default 100, range 50-300
-        maxDepth: [6]                # Max depth per tree: default 6, range 3-10
+        maxDepth: [7]                # Max depth per tree: default 6, range 3-10
+                                     # Slightly increased for fair comparison with other models
         stepSize: [0.1]              # Learning rate (eta): default 0.1, range 0.01-0.3
                                      # Lower = more conservative, needs more iterations
         subsamplingRate: [0.8]       # Subsample ratio of training instances (subsample)

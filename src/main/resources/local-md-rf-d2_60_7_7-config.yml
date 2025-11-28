@@ -129,8 +129,8 @@ experiments:
     model:
       modelType: "randomforest"
       hyperparameters:
-        numTrees: [50] #[25, 50, 75, 100]
-        maxDepth: [30]  #[15, 20, 25, 50]
+        numTrees: [100] #[25, 50, 75, 100] - Increased for fair comparison
+        maxDepth: [15]  #[15, 20, 25, 50] - Reduced to prevent overfitting
         maxBins: [280]
         minInstancesPerNode: [15] #[5, 10, 15]
         subsamplingRate: [0.8] #[0.8, 1.0]

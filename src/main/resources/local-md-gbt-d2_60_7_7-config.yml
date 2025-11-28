@@ -131,8 +131,8 @@ experiments:
       hyperparameters:
         # GBT-specific hyperparameters
         maxIter: [100]              # Number of boosting iterations (trees): default 100, range 20-200
-        maxDepth: [5]               # Max depth per tree: default 5, range 3-10
-                                    # GBT uses shallower trees than RF
+        maxDepth: [6]               # Max depth per tree: default 5, range 3-10
+                                    # Slightly increased for fair comparison with other models
         stepSize: [0.1]             # Learning rate: default 0.1, range 0.01-0.3
                                     # Lower = more conservative, needs more iterations
         maxBins: [280]              # Max bins for discretizing continuous features
