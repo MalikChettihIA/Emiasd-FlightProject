@@ -1,0 +1,149 @@
+# src/main/resources/local-config.yml
+environment: "local"
+
+# ============================================================================
+# COMMON CONFIGURATION - Shared across all experiments
+# ============================================================================
+common:
+  # Random seed for reproducibility across all experiments
+  seed: 42
+
+  # Logging configuration
+  log: true                   # Enable/disable all logging
+  logLevel: "info"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: false      # If true: load from csv; if false: load from raw parquet
+  storeIntoParquet: false     # If true: save loaded data to parquet; if false: skip parquet saving
+
+  data:
+    basePath: "/data"
+    flight:
+      path: "/data/FLIGHT-3Y/Flights/*.csv"
+    weather:
+      path: "/data/FLIGHT-3Y/Weather/*.txt"
+    airportMapping:
+      path: "/data/FLIGHT-3Y/wban_airport_timezone.csv"
+
+  output:
+    basePath: "/output"
+
+  mlflow:
+    enabled: true
+    trackingUri: "http://mlflow-server:5000"  # Utilise le nom du container et le port interne
+
+# ============================================================================
+# EXPERIMENTS - Each experiment has its own feature extraction and model config
+# ============================================================================
+experiments:
+
+  # =========================================================================
+  # Experiment 1:
+  # Model : RandomForest, feature_selection
+  # =========================================================================
+  - name: "Experience-local-D4-7-7"
+    description: "Baseline Random Forest with hyperparameters tuning"
+    enabled: true
+    target: "is_delayed"
+
+    featureExtraction:
+      type: "feature_selection"
+      dxCol: "D4"
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherOriginDepthHours: 7
+      weatherDestinationDepthHours: 7
+      maxCategoricalCardinality: 280
+      handleInvalid: "keep"
+
+      flightSelectedFeatures:
+        CRS_DEP_TIME:
+          transformation: "None"
+        OP_CARRIER_AIRLINE_ID:
+          transformation: "StringIndexer"
+        ORIGIN_AIRPORT_ID:
+          transformation: "StringIndexer"
+        DEST_AIRPORT_ID:
+          transformation: "StringIndexer"
+        CRS_ELAPSED_TIME:
+          transformation: "None"
+        feature_departure_hour_rounded_sin:
+          transformation: "None"
+        feature_departure_hour_rounded_cos:
+          transformation: "None"
+        feature_flight_week_of_year_sin:
+          transformation: "None"
+        feature_flight_week_of_year_cos:
+          transformation: "None"
+        feature_departure_time_period:
+          transformation: "StringIndexer"
+        feature_arrival_time_period:
+          transformation: "StringIndexer"
+
+      weatherSelectedFeatures:
+
+        feature_weather_type:
+          transformation: "StringIndexer"
+        feature_weather_intensity:
+          transformation: "StringIndexer"
+        feature_flight_category_ordinal:
+          transformation: "None"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_icing_risk_level:
+          transformation: "None"
+        feature_icing_risk_flag:
+          transformation: "None"
+        feature_is_pressure_dropping_fast:
+          transformation: "None"
+        HourlyPrecip:
+          transformation: "None"
+        RelativeHumidity:
+          transformation: "None"
+        press_change_abs:
+          transformation: "None"
+        feature_temp_dewpoint_spread:
+          transformation: "None"
+        Temp_Delta_1hr:
+          transformation: "None"
+        Visibility_Delta_1hr:
+          transformation: "None"
+        Humidity_Delta_1hr:
+          transformation: "None"
+        WindSpeed_Delta_1hr:
+          transformation: "None"
+
+      aggregatedSelectedFeatures:
+        HourlyPrecip:
+          aggregation: "sum"
+          transformation: "None"
+        RelativeHumidity:
+          aggregation: "avg"
+          transformation: "None"
+        press_change_abs:
+          aggregation: "max"
+          transformation: "None"
+        feature_temp_dewpoint_spread:
+          aggregation: "min"
+          transformation: "None"
+
+    model:
+      modelType: "randomforest"
+      hyperparameters:
+        numTrees: [50] #[25, 50, 75, 100]
+        maxDepth: [30]  #[15, 20, 25, 50]
+        maxBins: [280]
+        minInstancesPerNode: [15] #[5, 10, 15]
+        subsamplingRate: [0.8] #[0.8, 1.0]
+        featureSubsetStrategy: ["sqrt"] #["auto","all","sqrt","log2","onethird"]
+        impurity: "gini"
+
+    train:
+      fast: true  # Skip cross-validation
+      trainRatio: 0.75
+
+      crossValidation:
+        numFolds: 1
+
+      gridSearch:
+        enabled: true
+        evaluationMetric: "f1"
+

@@ -72,28 +72,39 @@ def load_experiment_metrics(exp_info):
     metrics_dir = exp_info['metrics_path']
     metrics = {'experiment_name': exp_info['name']}
 
+    print(f"  Loading metrics for: {exp_info['name']}")
+
     # CV Summary
     cv_file = metrics_dir / "cv_summary.csv"
     if cv_file.exists():
+        print(f"    ✓ Found CV summary")
         df = pd.read_csv(cv_file)
         for _, row in df.iterrows():
             metrics[f"cv_{row['metric']}_mean"] = row['mean']
             metrics[f"cv_{row['metric']}_std"] = row['std']
+    else:
+        print(f"    ⚠ No CV summary (fast mode enabled)")
 
     # Holdout
     ho_file = metrics_dir / "holdout_test_metrics.csv"
     if ho_file.exists():
+        print(f"    ✓ Found holdout metrics")
         df = pd.read_csv(ho_file)
         perf = df[~df['metric'].str.contains('positive|negative')]
         for _, row in perf.iterrows():
             metrics[f"holdout_{row['metric']}"] = row['value']
+    else:
+        print(f"    ✗ Missing holdout metrics")
 
     # Hyperparameters
     hp_file = metrics_dir / "best_hyperparameters.csv"
     if hp_file.exists():
+        print(f"    ✓ Found hyperparameters")
         df = pd.read_csv(hp_file)
         for _, row in df.iterrows():
             metrics[f"hp_{row['parameter']}"] = row['value']
+    else:
+        print(f"    ⚠ No hyperparameters file (using config defaults)")
 
     # Metadata
     if 'pca' in exp_info['name'].lower(): metrics['feature_type'] = 'PCA'
@@ -132,32 +143,45 @@ def load_all_experiments(output_dir):
     return df
 
 def plot_metrics_comparison(df, output_dir):
+    print("\n[Plotting] Metrics comparison...")
+
     main_metrics = ['accuracy', 'precision', 'recall', 'f1_score', 'auc_roc']
-    fig, axes = plt.subplots(2, 1, figsize=(10, 8))
+
+    # Check if we have CV data
+    has_cv_data = any(f'cv_{m}_mean' in df.columns for m in main_metrics)
+
+    if has_cv_data:
+        print("  → Creating 2-panel plot (CV + Holdout)")
+        fig, axes = plt.subplots(2, 1, figsize=(10, 8))
+    else:
+        print("  → Creating 1-panel plot (Holdout only - no CV data)")
+        fig, axes = plt.subplots(1, 1, figsize=(10, 5))
+        axes = [axes]  # Make it iterable
 
     colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(main_metrics)))
     x = np.arange(len(df))
     width = 0.15
 
-    # Plot 1: CV
-    ax1 = axes[0]
-    for i, metric in enumerate(main_metrics):
-        col = f'cv_{metric}_mean'
-        std = f'cv_{metric}_std'
-        if col in df.columns:
-            offset = (i - 2) * width
-            ax1.bar(x + offset, df[col]*100, width, yerr=df[std]*100 if std in df.columns else None,
-                    label=metric.replace('_',' ').title(), color=colors[i], alpha=0.9, capsize=3)
+    # Plot 1: CV (only if data exists)
+    if has_cv_data:
+        ax1 = axes[0]
+        for i, metric in enumerate(main_metrics):
+            col = f'cv_{metric}_mean'
+            std = f'cv_{metric}_std'
+            if col in df.columns:
+                offset = (i - 2) * width
+                ax1.bar(x + offset, df[col]*100, width, yerr=df[std]*100 if std in df.columns else None,
+                        label=metric.replace('_',' ').title(), color=colors[i], alpha=0.9, capsize=3)
 
-    ax1.set_ylabel('Score (%)')
-    ax1.set_title('Cross-Validation Performance', pad=10)
-    ax1.set_xticks(x)
-    ax1.set_xticklabels([extract_short_name(name) for name in df['experiment_name']], rotation=30, ha='right')
-    ax1.legend(ncol=5, loc='lower right')
-    ax1.set_ylim(0, 105)
+        ax1.set_ylabel('Score (%)')
+        ax1.set_title('Cross-Validation Performance', pad=10)
+        ax1.set_xticks(x)
+        ax1.set_xticklabels([extract_short_name(name) for name in df['experiment_name']], rotation=30, ha='right')
+        ax1.legend(ncol=5, loc='lower right')
+        ax1.set_ylim(0, 105)
 
-    # Plot 2: Holdout
-    ax2 = axes[1]
+    # Plot 2: Holdout (always shown)
+    ax2 = axes[-1]  # Last axis (index 1 if CV exists, 0 otherwise)
     for i, metric in enumerate(main_metrics):
         col = f'holdout_{metric}'
         if col in df.columns:
@@ -172,15 +196,24 @@ def plot_metrics_comparison(df, output_dir):
     ax2.set_title('Hold-out Test Performance', pad=10)
     ax2.set_xticks(x)
     ax2.set_xticklabels([extract_short_name(name) for name in df['experiment_name']], rotation=30, ha='right')
+    ax2.legend(ncol=5, loc='lower right')
     ax2.set_ylim(0, 115)
 
     plt.tight_layout()
-    plt.savefig(output_dir / "experiments_metrics_comparison.png", bbox_inches='tight')
+    output_file = output_dir / "experiments_metrics_comparison.png"
+    plt.savefig(output_file, bbox_inches='tight')
     plt.close()
+    print(f"  ✓ Saved: {output_file.name}")
 
 def plot_heatmap_comparison(df, output_dir):
+    print("\n[Plotting] Heatmap comparison...")
+
     cols = [c for c in df.columns if c.startswith('holdout_') and not any(x in c for x in ['positive','negative'])]
-    if not cols: return
+    if not cols:
+        print("  ⚠ Skipping heatmap (no holdout metrics found)")
+        return
+
+    print(f"  → Creating heatmap with {len(cols)} metrics")
 
     data = df[cols].copy() * 100
     data.index = [extract_short_name(name) for name in df['experiment_name']]
@@ -191,12 +224,24 @@ def plot_heatmap_comparison(df, output_dir):
     ax.set_title('Performance Heatmap', pad=10)
     ax.set_ylabel('')
     plt.tight_layout()
-    plt.savefig(output_dir / "experiments_heatmap.png", bbox_inches='tight')
+    output_file = output_dir / "experiments_heatmap.png"
+    plt.savefig(output_file, bbox_inches='tight')
     plt.close()
+    print(f"  ✓ Saved: {output_file.name}")
 
 def plot_radar_comparison(df, output_dir):
+    print("\n[Plotting] Radar comparison...")
+
     metrics = ['accuracy', 'precision', 'recall', 'f1_score', 'auc_roc']
     cats = [m.replace('_',' ').title() for m in metrics]
+
+    # Check if we have holdout data
+    has_holdout = any(f'holdout_{m}' in df.columns for m in metrics)
+    if not has_holdout:
+        print("  ⚠ Skipping radar plot (no holdout metrics)")
+        return
+
+    print(f"  → Creating radar plot with {len(metrics)} metrics")
 
     fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(projection='polar'))
 
@@ -217,11 +262,25 @@ def plot_radar_comparison(df, output_dir):
     ax.set_title('Experiments Radar', pad=20)
     ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
     plt.tight_layout()
-    plt.savefig(output_dir / "experiments_radar.png", bbox_inches='tight')
+    output_file = output_dir / "experiments_radar.png"
+    plt.savefig(output_file, bbox_inches='tight')
     plt.close()
+    print(f"  ✓ Saved: {output_file.name}")
 
 def plot_stability_comparison(df, output_dir):
+    print("\n[Plotting] Stability comparison...")
+
     metrics = ['accuracy', 'precision', 'recall', 'f1_score', 'auc_roc']
+
+    # Check if we have CV std data
+    has_cv_std = any(f'cv_{m}_std' in df.columns for m in metrics)
+
+    if not has_cv_std:
+        print("  ⚠ Skipping stability plot (no CV std data - fast mode enabled)")
+        return
+
+    print("  → Creating stability plot (CV std deviation)")
+
     fig, ax = plt.subplots(figsize=(8, 6))
 
     colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(metrics)))
@@ -242,13 +301,25 @@ def plot_stability_comparison(df, output_dir):
     ax.legend()
 
     plt.tight_layout()
-    plt.savefig(output_dir / "experiments_stability.png", bbox_inches='tight')
+    output_file = output_dir / "experiments_stability.png"
+    plt.savefig(output_file, bbox_inches='tight')
     plt.close()
+    print(f"  ✓ Saved: {output_file.name}")
 
 def plot_f1_ranking(df, output_dir):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+    print("\n[Plotting] F1 ranking...")
 
-    # Plot 1
+    # Check if we have CV data
+    has_cv_data = 'cv_f1_score_mean' in df.columns
+
+    if has_cv_data:
+        print("  → Creating 2-panel plot (Holdout + CV rankings)")
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+    else:
+        print("  → Creating 1-panel plot (Holdout ranking only - no CV data)")
+        fig, ax1 = plt.subplots(1, 1, figsize=(6, 5))
+
+    # Plot 1: Holdout F1 ranking
     df1 = df.sort_values('holdout_f1_score')
     y = np.arange(len(df1))
     colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(df1)))
@@ -261,24 +332,33 @@ def plot_f1_ranking(df, output_dir):
     ax1.set_yticklabels([extract_short_name(name) for name in df1['experiment_name']])
     ax1.set_title('Ranking by Hold-out F1')
 
-    # Plot 2
-    df2 = df.sort_values('cv_f1_score_mean')
-    bars = ax2.barh(y, df2['cv_f1_score_mean']*100, xerr=df2['cv_f1_score_std']*100,
-                    color=colors, alpha=0.9, capsize=3)
-    for i, row in enumerate(df2.itertuples()):
-        val = row.cv_f1_score_mean * 100
-        ax2.text(val + row.cv_f1_score_std*100 + 1, i, f'{val:.1f}%', va='center', fontsize=9)
-    ax2.set_yticks(y)
-    ax2.set_yticklabels([extract_short_name(name) for name in df2['experiment_name']])
-    ax2.set_title('Ranking by CV F1')
+    # Plot 2: CV F1 ranking (only if data exists)
+    if has_cv_data:
+        df2 = df.sort_values('cv_f1_score_mean')
+        bars = ax2.barh(y, df2['cv_f1_score_mean']*100, xerr=df2['cv_f1_score_std']*100,
+                        color=colors, alpha=0.9, capsize=3)
+        for i, row in enumerate(df2.itertuples()):
+            val = row.cv_f1_score_mean * 100
+            ax2.text(val + row.cv_f1_score_std*100 + 1, i, f'{val:.1f}%', va='center', fontsize=9)
+        ax2.set_yticks(y)
+        ax2.set_yticklabels([extract_short_name(name) for name in df2['experiment_name']])
+        ax2.set_title('Ranking by CV F1')
 
     plt.tight_layout()
-    plt.savefig(output_dir / "experiments_f1_ranking.png", bbox_inches='tight')
+    output_file = output_dir / "experiments_f1_ranking.png"
+    plt.savefig(output_file, bbox_inches='tight')
     plt.close()
+    print(f"  ✓ Saved: {output_file.name}")
 
 def plot_hyperparameters_comparison(df, output_dir):
+    print("\n[Plotting] Hyperparameters comparison...")
+
     cols = [c for c in df.columns if c.startswith('hp_')]
-    if not cols: return
+    if not cols:
+        print("  ⚠ Skipping hyperparameters plot (no hp_ columns found)")
+        return
+
+    print(f"  → Creating table with {len(cols)} hyperparameters")
 
     data = df[['experiment_name'] + cols].copy()
     data['experiment_name'] = data['experiment_name'].apply(extract_short_name)
@@ -305,10 +385,14 @@ def plot_hyperparameters_comparison(df, output_dir):
 
     ax.set_title('Hyperparameters Comparison', pad=10)
     plt.tight_layout()
-    plt.savefig(output_dir / "experiments_hyperparameters.png", bbox_inches='tight')
+    output_file = output_dir / "experiments_hyperparameters.png"
+    plt.savefig(output_file, bbox_inches='tight')
     plt.close()
+    print(f"  ✓ Saved: {output_file.name}")
 
 def generate_comparison_report(df, output_dir):
+    print("\n[Generating] Comparison report...")
+
     report = ["="*80, "EXPERIMENTS COMPARISON REPORT", "="*80, ""]
     df_ranked = df.sort_values('holdout_f1_score', ascending=False)
 
@@ -319,21 +403,29 @@ def generate_comparison_report(df, output_dir):
         report.append(f"#{i:<4} {row.experiment_name:<35} {row.holdout_f1_score*100:>7.2f}% "
                       f"{row.holdout_accuracy*100:>7.2f}% {row.holdout_auc_roc:>7.4f}")
 
-    with open(output_dir / "experiments_comparison_report.txt", "w") as f:
+    output_file = output_dir / "experiments_comparison_report.txt"
+    with open(output_file, "w") as f:
         f.write('\n'.join(report))
+
+    print(f"  ✓ Saved: {output_file.name}")
 
 def plot_roc_curves_comparison(experiments_info, output_dir):
     """Plot ROC curves comparison MATCHING EXACTLY THE PHOTO CODE STYLE"""
+    print("\n[Plotting] ROC curves comparison...")
+
     from sklearn.metrics import roc_curve, auc
 
     fig, ax = plt.subplots(figsize=(8, 6))
 
     colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(experiments_info)))
     roc_loaded = False
+    loaded_count = 0
 
     for idx, exp in enumerate(experiments_info):
         roc_file = exp['metrics_path'] / "holdout_roc_data.csv"
-        if not roc_file.exists(): continue
+        if not roc_file.exists():
+            print(f"  ⚠ No ROC data for: {exp['name']}")
+            continue
 
         try:
             df = pd.read_csv(roc_file)
@@ -344,9 +436,15 @@ def plot_roc_curves_comparison(experiments_info, output_dir):
             ax.plot(fpr, tpr, color=colors[idx], lw=2, alpha=0.8,
                     label=f"{extract_short_name(exp['name'])} ({roc_auc:.3f})")
             roc_loaded = True
-        except: pass
+            loaded_count += 1
+        except Exception as e:
+            print(f"  ✗ Error loading ROC for {exp['name']}: {e}")
 
-    if not roc_loaded: return
+    if not roc_loaded:
+        print("  ⚠ Skipping ROC plot (no ROC data found)")
+        return
+
+    print(f"  → Creating ROC curves for {loaded_count} experiments")
 
     ax.plot([0, 1], [0, 1], 'k--', alpha=0.3, lw=1, label='Random (0.5)')
 
@@ -363,8 +461,10 @@ def plot_roc_curves_comparison(experiments_info, output_dir):
     ax.legend(loc='lower right', fontsize=9, frameon=True)
 
     plt.tight_layout()
-    plt.savefig(output_dir / "experiments_roc_curves.png", bbox_inches='tight')
+    output_file = output_dir / "experiments_roc_curves.png"
+    plt.savefig(output_file, bbox_inches='tight')
     plt.close()
+    print(f"  ✓ Saved: {output_file.name}")
 
 def plot_global_sensitivity(df, output_dir):
     """
@@ -372,12 +472,17 @@ def plot_global_sensitivity(df, output_dir):
     X-axis: Experiment names
     Y-axis: Accuracy, Rec_o, Rec_d
     """
+    print("\n[Plotting] Global sensitivity analysis...")
 
     # Check if we have the necessary columns
     required_cols = ['holdout_accuracy', 'holdout_recall_ontime', 'holdout_recall_delayed']
-    if not all(col in df.columns for col in required_cols):
-        print("⚠ Missing columns for sensitivity analysis.")
+    missing_cols = [col for col in required_cols if col not in df.columns]
+
+    if missing_cols:
+        print(f"  ⚠ Skipping sensitivity plot (missing columns: {', '.join(missing_cols)})")
         return
+
+    print(f"  → Creating sensitivity plot with 3 metrics")
 
     # Group/Sort by parameter if available, otherwise keep natural order
     if 'exp_param' in df.columns:
@@ -421,7 +526,7 @@ def plot_global_sensitivity(df, output_dir):
     plt.tight_layout()
     out_file = output_dir / "global_sensitivity_analysis.png"
     plt.savefig(out_file, bbox_inches='tight')
-    print(f"✓ Saved Global Sensitivity Plot: {out_file}")
+    print(f"  ✓ Saved: {out_file.name}")
 
 def main():
     if len(sys.argv) < 2:
@@ -429,18 +534,44 @@ def main():
         sys.exit(1)
 
     output_dir = Path(sys.argv[1])
-    if not output_dir.exists(): sys.exit(1)
+    if not output_dir.exists():
+        print(f"✗ Error: Directory not found: {output_dir}")
+        sys.exit(1)
 
-    print("="*80 + "\nExperiments Comparison\n" + "="*80)
+    print("="*80)
+    print("Experiments Comparison Visualization")
+    print("="*80)
+    print(f"\nOutput directory: {output_dir}")
 
-    df = load_all_experiments(output_dir)
+    print("\n[Loading] Finding experiments...")
     experiments = find_experiment_directories(output_dir)
+    if not experiments:
+        print("✗ No experiments found!")
+        sys.exit(1)
 
-    if df is None or len(df) < 2: sys.exit(1)
+    print(f"\n[Loading] Loading metrics from {len(experiments)} experiments...")
+    df = load_all_experiments(output_dir)
+
+    if df is None or len(df) < 2:
+        print("\n✗ Error: Need at least 2 experiments for comparison")
+        sys.exit(1)
+
+    # Check what type of data we have
+    has_cv = any(col.startswith('cv_') for col in df.columns)
+    has_holdout = any(col.startswith('holdout_') for col in df.columns)
+    has_hp = any(col.startswith('hp_') for col in df.columns)
+
+    print(f"\n[Data Summary]")
+    print(f"  • Total experiments: {len(df)}")
+    print(f"  • Has CV metrics: {'✓' if has_cv else '✗ (fast mode enabled)'}")
+    print(f"  • Has holdout metrics: {'✓' if has_holdout else '✗'}")
+    print(f"  • Has hyperparameters: {'✓' if has_hp else '✗'}")
 
     out = output_dir / "experiments_comparison"
     out.mkdir(parents=True, exist_ok=True)
+    print(f"\n[Output] Saving visualizations to: {out}")
 
+    # Generate all plots
     plot_metrics_comparison(df, out)
     plot_heatmap_comparison(df, out)
     plot_radar_comparison(df, out)
@@ -448,10 +579,13 @@ def main():
     plot_f1_ranking(df, out)
     plot_hyperparameters_comparison(df, out)
     plot_roc_curves_comparison(experiments, out)
-    plot_global_sensitivity(df, out) # Changed to use DF instead of per-experiment file
+    plot_global_sensitivity(df, out)
     generate_comparison_report(df, out)
 
-    print(f"\n✓ Done! Results in: {out}")
+    print("\n" + "="*80)
+    print("✓ Visualization complete!")
+    print(f"✓ All results saved to: {out}")
+    print("="*80)
 
 if __name__ == "__main__":
     main()
