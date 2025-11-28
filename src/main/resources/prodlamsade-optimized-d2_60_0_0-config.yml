@@ -1,4 +1,6 @@
+# src/main/resources/local-config.yml
 environment: "prodlamsade"
+profile: "prodlamsade"
 
 # ============================================================================
 # COMMON CONFIGURATION - Shared across all experiments
@@ -6,29 +8,28 @@ environment: "prodlamsade"
 common:
   # Random seed for reproducibility across all experiments
   seed: 42
-  log: true
-  logLevel: "info"
-  loadDataFromCSV: true
-  storeIntoParquet: false
+  log: true                   # Enable/disable all logging
+  logLevel: "info"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: true      # If true: load from CSV/TXT; if false: load from raw parquet
+  storeIntoParquet: false  
 
   data:
     basePath: "hdfs:///students/p6emiasd2025/hbalamou/data"
-    flight:
+    flight :
       path: "hdfs:///students/p6emiasd2025/hbalamou/data/Flights/*.csv"
-    weather:
-      path: "hdfs:///students/p6emiasd2025/hbalamou/data/Weather/*.txt"
-    airportMapping:
-      path: "hdfs:///students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv"
+    weather :
+      path : "hdfs:///students/p6emiasd2025/hbalamou/data/Weather/*.txt"
+    airportMapping :
+      path : "hdfs:///students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv"
   output:
     basePath: "hdfs:///students/p6emiasd2025/hbalamou/output"
-    localPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/output"
     localPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/output"
 
   mlflow:
     enabled: true
-    trackingUri: "http://localhost:5000"
-  scriptsPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/scripts"
+    trackingUri: "http://localhost:5000"  # Utilise le nom du container et le port interne
 
+  scriptsPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/scripts"
 # ============================================================================
 # EXPERIMENTS - Each experiment has its own feature extraction and model config
 # ============================================================================
@@ -38,20 +39,22 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-lamsade-D2-60-1-1"
-    description: "Baseline Random Forest with hyperparameters tuning"
+  - name: "Experience-lamsade-D2-60-0-0"
+    description: "Random Forest with hyperparameters tuning and 8 hours weather data"
     enabled: true
     target: "is_delayed"
+
     featureExtraction:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: false
-      storeExplodeJoinData: false
-      weatherOriginDepthHours: 1
-      weatherDestinationDepthHours: 1
+      storeJoinData: true
+      storeExplodeJoinData: true
+      weatherOriginDepthHours: -1
+      weatherDestinationDepthHours: -1
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
+
       flightSelectedFeatures:
         CRS_DEP_TIME:
           transformation: "None"
@@ -63,33 +66,16 @@ experiments:
           transformation: "StringIndexer"
         CRS_ELAPSED_TIME:
           transformation: "None"
-        feature_departure_hour_rounded_sin:
-          transformation: "None"
-        feature_departure_hour_rounded_cos:
-          transformation: "None"
-        feature_flight_week_of_year_sin:
-          transformation: "None"
-        feature_flight_week_of_year_cos:
-          transformation: "None"
+        feature_departure_hour_rounded:
+          transformation: "StringIndexer"
+        feature_flight_week_of_year:
+          transformation: "StringIndexer"
         feature_departure_time_period:
           transformation: "StringIndexer"
         feature_arrival_time_period:
           transformation: "StringIndexer"
+
       weatherSelectedFeatures:
-        feature_weather_type:
-          transformation: "StringIndexer"
-        feature_weather_intensity:
-          transformation: "StringIndexer"
-        feature_flight_category_ordinal:
-          transformation: "None"
-        feature_visibility_category:
-          transformation: "StringIndexer"
-        feature_icing_risk_level:
-          transformation: "None"
-        feature_icing_risk_flag:
-          transformation: "None"
-        feature_is_pressure_dropping_fast:
-          transformation: "None"
         HourlyPrecip:
           transformation: "None"
         RelativeHumidity:
@@ -97,6 +83,38 @@ experiments:
         press_change_abs:
           transformation: "None"
         feature_temp_dewpoint_spread:
+          transformation: "None"
+        feature_weather_severity_index:
+          transformation: "None"
+        weather_hazard_level:
+          transformation: "None"
+        feature_visibility_risk_score:
+          transformation: "None"
+        feature_operations_risk_level:
+          transformation: "None"
+        feature_requires_cat_ii:
+          transformation: "None"
+        feature_is_very_low_visibility:
+          transformation: "None"
+        feature_flight_category_ordinal:
+          transformation: "None"
+        extracted_codes:
+          transformation: "StringIndexer"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_most_critical_sky:
+          transformation: "StringIndexer"
+        feature_pressure_vis_combo_bin:
+          transformation: "StringIndexer"
+        feature_pressure_bucket:
+          transformation: "StringIndexer"
+        feature_weather_type:
+          transformation: "StringIndexer"
+        feature_weather_intensity:
+          transformation: "StringIndexer"
+        feature_icing_risk_level:
+          transformation: "None"
+        feature_icing_risk_flag:
           transformation: "None"
         Temp_Delta_1hr:
           transformation: "None"
@@ -106,6 +124,7 @@ experiments:
           transformation: "None"
         WindSpeed_Delta_1hr:
           transformation: "None"
+
       aggregatedSelectedFeatures:
         HourlyPrecip:
           aggregation: "sum"
@@ -119,21 +138,24 @@ experiments:
         feature_temp_dewpoint_spread:
           aggregation: "min"
           transformation: "None"
+
     model:
       modelType: "randomforest"
       hyperparameters:
-        numTrees: [50]
-        maxDepth: [30]
+        numTrees: [15]
+        maxDepth: [7]
         maxBins: [280]
-        minInstancesPerNode: [15]
-        subsamplingRate: [0.8]
-        featureSubsetStrategy: ["sqrt"]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"] #["auto","all","sqrt","log2","onethird"]
         impurity: "gini"
+
     train:
-      fast: true
       trainRatio: 0.75
+
       crossValidation:
-        numFolds: 1
+        numFolds: 4
+
       gridSearch:
         enabled: true
         evaluationMetric: "f1"

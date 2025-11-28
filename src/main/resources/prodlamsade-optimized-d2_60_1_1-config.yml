@@ -22,7 +22,6 @@ common:
   output:
     basePath: "hdfs:///students/p6emiasd2025/hbalamou/output"
     localPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/output"
-    localPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/output"
 
   mlflow:
     enabled: true

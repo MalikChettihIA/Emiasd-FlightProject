@@ -22,7 +22,6 @@ common:
   output:
     basePath: "hdfs:///students/p6emiasd2025/hbalamou/output"
     localPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/output"
-    localPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/output"
 
   mlflow:
     enabled: true
@@ -38,7 +37,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-lamsade-D2-60-1-1"
+  - name: "Experience-lamsade-D2-60-11-11"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -48,8 +47,8 @@ experiments:
       delayThresholdMin: 60
       storeJoinData: false
       storeExplodeJoinData: false
-      weatherOriginDepthHours: 1
-      weatherDestinationDepthHours: 1
+      weatherOriginDepthHours: 11
+      weatherDestinationDepthHours: 11
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
       flightSelectedFeatures:
