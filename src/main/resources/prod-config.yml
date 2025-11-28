@@ -32,6 +32,10 @@ profiles:
 # ============================================================================
 common:
   seed: 42
+  log: true                   # Enable/disable all logging
+  logLevel: "info"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: true      # If true: load from CSV/TXT; if false: load from raw parquet
+  storeIntoParquet: false  
 
   data:
     basePath: "/data"
@@ -58,7 +62,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-1-D2_60-weatherDepthHours_0-0"
+  - name: "Experience-local-base"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -67,11 +71,12 @@ experiments:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
-      storeJoinData: false
+      storeJoinData: true
       storeExplodeJoinData: true
-      weatherOriginDepthHours: -1
-      weatherDestinationDepthHours: -1
-      maxCategoricalCardinality: 50
+      weatherOriginDepthHours: 3
+      weatherDestinationDepthHours: 3
+      maxCategoricalCardinality: 280
+      handleInvalid: "keep"
 
       flightSelectedFeatures:
         CRS_DEP_TIME:
@@ -84,14 +89,78 @@ experiments:
           transformation: "StringIndexer"
         CRS_ELAPSED_TIME:
           transformation: "None"
-        PREV_AIRCRAFT_ARR_DELAY:
-          transformation: "None"
-        feature_avg_delay:
-          transformation: "None"
         feature_departure_hour_rounded:
           transformation: "StringIndexer"
         feature_flight_week_of_year:
           transformation: "StringIndexer"
+        feature_departure_time_period:
+          transformation: "StringIndexer"
+        feature_arrival_time_period:
+          transformation: "StringIndexer"
+
+      weatherSelectedFeatures:
+        HourlyPrecip:
+          transformation: "None"
+        RelativeHumidity:
+          transformation: "None"
+        press_change_abs:
+          transformation: "None"
+        feature_temp_dewpoint_spread:
+          transformation: "None"
+        feature_weather_severity_index:
+          transformation: "None"
+        weather_hazard_level:
+          transformation: "None"
+        feature_visibility_risk_score:
+          transformation: "None"
+        feature_operations_risk_level:
+          transformation: "None"
+        feature_requires_cat_ii:
+          transformation: "None"
+        feature_is_very_low_visibility:
+          transformation: "None"
+        feature_flight_category_ordinal:
+          transformation: "None"
+        extracted_codes:
+          transformation: "StringIndexer"
+        feature_visibility_category:
+          transformation: "StringIndexer"
+        feature_most_critical_sky:
+          transformation: "StringIndexer"
+        feature_pressure_vis_combo_bin:
+          transformation: "StringIndexer"
+        feature_pressure_bucket:
+          transformation: "StringIndexer"
+        feature_weather_type:
+          transformation: "StringIndexer"
+        feature_weather_intensity:
+          transformation: "StringIndexer"
+        feature_icing_risk_level:
+          transformation: "None"
+        feature_icing_risk_flag:
+          transformation: "None"
+        Temp_Delta_1hr:
+          transformation: "None"
+        Visibility_Delta_1hr:
+          transformation: "None"
+        Humidity_Delta_1hr:
+          transformation: "None"
+        WindSpeed_Delta_1hr:
+          transformation: "None"
+
+      aggregatedSelectedFeatures:
+        HourlyPrecip:
+          aggregation: "sum"
+          transformation: "None"
+        RelativeHumidity:
+          aggregation: "avg"
+          transformation: "None"
+        press_change_abs:
+          aggregation: "max"
+          transformation: "None"
+        feature_temp_dewpoint_spread:
+          aggregation: "min"
+          transformation: "None"
 
     model:
       modelType: "randomforest"
@@ -108,7 +177,7 @@ experiments:
       trainRatio: 0.75
 
       crossValidation:
-        numFolds: 5
+        numFolds: 4
 
       gridSearch:
         enabled: true
