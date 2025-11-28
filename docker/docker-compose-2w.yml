@@ -46,7 +46,7 @@ services:
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=10G
+      - SPARK_WORKER_MEMORY=15G
       - SPARK_WORKER_CORES=6
       - SPARK_WORKER_WEBUI_PORT=8081
       - SPARK_DAEMON_MEMORY=2g
@@ -80,7 +80,7 @@ services:
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=10G
+      - SPARK_WORKER_MEMORY=15G
       - SPARK_WORKER_CORES=6
       - SPARK_WORKER_WEBUI_PORT=8082
       - SPARK_DAEMON_MEMORY=2g

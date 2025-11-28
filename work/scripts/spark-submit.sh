@@ -45,7 +45,7 @@ if [ "$WORKERS" = "1w" ]; then
     echo "   Mode debug / développement (simple et stable)"
 elif [ "$WORKERS" = "2w" ]; then
     # 2 workers → 2 exécuteurs "moyens"
-    EXECUTOR_MEMORY="10G"
+    EXECUTOR_MEMORY="15G"
     EXECUTOR_CORES="4"
     NUM_EXECUTORS="2"
     SHUFFLE_PARTITIONS="200"
