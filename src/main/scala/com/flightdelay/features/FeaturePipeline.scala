@@ -3,6 +3,7 @@ package com.flightdelay.features
 import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import com.flightdelay.features.balancer.DelayBalancedDatasetBuilder
 import com.flightdelay.features.joiners.{DataJoinerPostProcessor, FlightWeatherDataJoiner}
+import com.flightdelay.utils.ExecutionTimeTracker
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import com.flightdelay.utils.DebugUtils._
 import com.flightdelay.utils.MetricsUtils
@@ -15,6 +16,7 @@ object FeaturePipeline {
     flightData: DataFrame,
     weatherData: DataFrame,
     experiment: ExperimentConfig,
+    timeTracker: ExecutionTimeTracker = null
   )(implicit spark: SparkSession, configuration: AppConfiguration): (DataFrame, DataFrame) = {
 
     val pipelineStartTime = System.currentTimeMillis()
@@ -30,19 +32,23 @@ object FeaturePipeline {
 
     // Step 1: Label flights (add is_delayed column)
     info("[FeaturePipeline][Step 1/5] Labeling flights with is_delayed")
+    if (timeTracker != null) timeTracker.startStep("balancing.label_flights")
     val labeledFlightData =  DelayBalancedDatasetBuilder.prepareLabeledDataset(
       df = flightData,
       dxCol = experiment.featureExtraction.dxCol
     )
+    if (timeTracker != null) timeTracker.endStep("balancing.label_flights")
 
     // Step 2: Sample flights according to nDelayed/nOnTime from configuration
     info("=" * 80)
     info("[FeaturePipeline][Step 2/5] Sampling flights based on configuration")
     info("=" * 80)
+    if (timeTracker != null) timeTracker.startStep("balancing.sample_flights")
     val (balancedFlightTrainData, balancedFlightTestData) = DelayBalancedDatasetBuilder.buildBalancedTrainTest(
       labeledDf = labeledFlightData,
       seed = configuration.common.seed
     )
+    if (timeTracker != null) timeTracker.endStep("balancing.sample_flights")
 
 
     // Step 4 & 5: Process train and test separately (join + explode)
@@ -50,13 +56,13 @@ object FeaturePipeline {
     info("[FeaturePipeline][Step 4/5] Processing TRAIN flights (join + explode)")
     info("=" * 80)
     // Step 1: Create label column from target
-    val trainData = processFlightDataset(balancedFlightTrainData, weatherData, experiment, "TRAIN")
+    val trainData = processFlightDataset(balancedFlightTrainData, weatherData, experiment, "TRAIN", timeTracker)
     info("[FeaturePipeline][Step 4/5] Processing TRAIN flights (count)"+ trainData.count())
 
     info("=" * 80)
     info("[FeaturePipeline][Step 5/5] Processing TEST flights (join + explode)")
     info("=" * 80)
-    val testData = processFlightDataset(balancedFlightTestData, weatherData, experiment, "TEST")
+    val testData = processFlightDataset(balancedFlightTestData, weatherData, experiment, "TEST", timeTracker)
     info("[FeaturePipeline][Step 5/5] Processing TEST flights (count)"+ testData.count())
 
     // Optional: Save processed data
@@ -92,6 +98,38 @@ object FeaturePipeline {
     }
 
     val totalDuration = (System.currentTimeMillis() - pipelineStartTime) / 1000.0
+
+    // Calculate and set totals
+    if (timeTracker != null) {
+      // Balancing total
+      val balancingTotal = Seq(
+        timeTracker.getStepTime("balancing.label_flights"),
+        timeTracker.getStepTime("balancing.sample_flights")
+      ).flatten.filterNot(_.isNaN).sum
+      timeTracker.setStepTime("balancing.total", balancingTotal)
+
+      // Join total
+      val joinTotal = Seq(
+        timeTracker.getStepTime("join.train"),
+        timeTracker.getStepTime("join.test")
+      ).flatten.filterNot(_.isNaN).sum
+      timeTracker.setStepTime("join.total", joinTotal)
+
+      // Explode total
+      val explodeTotal = Seq(
+        timeTracker.getStepTime("explode.train"),
+        timeTracker.getStepTime("explode.test")
+      ).flatten.filterNot(_.isNaN).sum
+      timeTracker.setStepTime("explode.total", explodeTotal)
+
+      // Post processing total
+      val postProcessingTotal = Seq(
+        timeTracker.getStepTime("post_processing.train"),
+        timeTracker.getStepTime("post_processing.test")
+      ).flatten.filterNot(_.isNaN).sum
+      timeTracker.setStepTime("post_processing.total", postProcessingTotal)
+    }
+
     info("=" * 80)
     info(s"[FeaturePipeline] Data Preparation Pipeline - End (Total: ${totalDuration}s)")
     info("=" * 80)
@@ -107,7 +145,8 @@ object FeaturePipeline {
     flightData: DataFrame,
     weatherData: DataFrame,
     experiment: ExperimentConfig,
-    datasetName: String
+    datasetName: String,
+    timeTracker: ExecutionTimeTracker = null
   )(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 
     val weatherOriginDepthHours = experiment.featureExtraction.weatherOriginDepthHours
@@ -120,26 +159,45 @@ object FeaturePipeline {
       info(s"  - Destination depth: $weatherDestinationDepthHours hours ${if (weatherDestinationDepthHours < 0) "(DISABLED)" else ""}")
 
       // Join
+      val joinStepName = if (datasetName == "TRAIN") "join.train" else "join.test"
+      if (timeTracker != null) timeTracker.startStep(joinStepName)
       var stepStartTime = System.currentTimeMillis()
       val joinedData = join(flightData, weatherData, experiment).cache()
       var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+      if (timeTracker != null) timeTracker.endStep(joinStepName)
       debug(s"[$datasetName] Join completed in ${stepDuration}s - ${joinedData.count()} lines")
 
       // Explode
+      val explodeStepName = if (datasetName == "TRAIN") "explode.train" else "explode.test"
+      if (timeTracker != null) timeTracker.startStep(explodeStepName)
       stepStartTime = System.currentTimeMillis()
       val explodedData = explose(joinedData, experiment).cache()
       stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+      if (timeTracker != null) timeTracker.endStep(explodeStepName)
       debug(s"[$datasetName] Explode completed in ${stepDuration}s - ${explodedData.count()} lines")
 
       // Apply post-processing to both train and test datasets
       info("[FeaturePipeline] Applying post-processing to datasets...")
+      val postProcessStepName = if (datasetName == "TRAIN") "post_processing.train" else "post_processing.test"
+      if (timeTracker != null) timeTracker.startStep(postProcessStepName)
       val processedExplodedData = DataJoinerPostProcessor.execute(explodedData, experiment)
+      if (timeTracker != null) timeTracker.endStep(postProcessStepName)
       info("[$datasetName]  Post-processing completed")
 
       processedExplodedData
 
     } else {
       info(s"[$datasetName] Weather features disabled - using flight data only")
+
+      // Mark join, explode, and post-processing as NA for this dataset
+      val joinStepName = if (datasetName == "TRAIN") "join.train" else "join.test"
+      val explodeStepName = if (datasetName == "TRAIN") "explode.train" else "explode.test"
+      val postProcessStepName = if (datasetName == "TRAIN") "post_processing.train" else "post_processing.test"
+      if (timeTracker != null) {
+        timeTracker.setStepNA(joinStepName)
+        timeTracker.setStepNA(explodeStepName)
+        timeTracker.setStepNA(postProcessStepName)
+      }
 
       // Select flight features + target
       val flightFeaturesWithTarget = experiment.featureExtraction.flightSelectedFeatures.map { features =>

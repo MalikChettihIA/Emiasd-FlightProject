@@ -4,6 +4,7 @@ import com.flightdelay.config.{AppConfiguration, ConfigurationLoader, Experiment
 import com.flightdelay.data.DataPipeline
 import com.flightdelay.features.FeaturePipeline
 import com.flightdelay.ml.MLPipeline
+import com.flightdelay.utils.ExecutionTimeTracker
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import com.flightdelay.utils.DebugUtils._
 
@@ -28,6 +29,9 @@ object FlightDelayPredictionApp {
 
     val appStartTime = System.currentTimeMillis()
     implicit val configuration: AppConfiguration = ConfigurationLoader.loadConfiguration(args)
+
+    // Create execution time tracker
+    val timeTracker = ExecutionTimeTracker.create()
 
     info("=" * 160)
     info("Flight Delay Prediction App Starting...")
@@ -74,7 +78,7 @@ object FlightDelayPredictionApp {
       // Exécute (ou charge) la pipeline de données et retourne les DataFrames flights et weather
       val (flightData, weatherData) = if (tasks.contains("data-pipeline")) {
         // Si la tâche "data-pipeline" est demandée, lancer la pipeline qui charge et pré-traite les données
-        val (flights, weather) = DataPipeline.execute()
+        val (flights, weather) = DataPipeline.execute(timeTracker)
         info("[FlightDelayPredictionApp][STEP 1] Data pipeline (load & preprocess)... ")
 
         // Debug : afficher le nombre d'enregistrements et de colonnes (attention : count() déclenche une action Spark)
@@ -110,7 +114,7 @@ object FlightDelayPredictionApp {
         info("=" * 80 )
 
         try {
-          runExperiment(experiment, tasks, flightData, weatherData)
+          runExperiment(experiment, tasks, flightData, weatherData, timeTracker)
         } catch {
           case ex: Exception =>
             error("=" * 80)
@@ -144,6 +148,34 @@ object FlightDelayPredictionApp {
       info(f"Total execution time: ${totalAppDuration}%.2f seconds (${totalAppDuration / 60}%.2f minutes)")
       info("=" * 80)
 
+      // Display execution time summary table
+      info("")
+      info("=" * 90)
+      info("DISPLAYING EXECUTION TIME SUMMARY")
+      info("=" * 90)
+      timeTracker.displaySummaryTable()
+
+      // Save execution time metrics to CSV and TXT
+      try {
+        val metricsBasePath = s"${configuration.common.output.basePath}/execution_time_metrics"
+        info("=" * 90)
+        info("SAVING EXECUTION TIME METRICS")
+        info("=" * 90)
+        info(s"  Saving to: $metricsBasePath")
+
+        timeTracker.saveToCSV(s"$metricsBasePath/execution_times.csv")
+        info(s"  - CSV file saved: $metricsBasePath/execution_times.csv")
+
+        timeTracker.saveToText(s"$metricsBasePath/execution_times.txt")
+        info(s"  - TXT file saved: $metricsBasePath/execution_times.txt")
+
+        info("=" * 90)
+      } catch {
+        case ex: Exception =>
+          error(s"Error saving execution time metrics: ${ex.getMessage}")
+          ex.printStackTrace()
+      }
+
       spark.stop()
       info("Spark session stopped.\n")
     }
@@ -157,7 +189,8 @@ object FlightDelayPredictionApp {
     experiment: ExperimentConfig,
     tasks: Set[String],
     flightData: DataFrame,
-    weatherData: DataFrame
+    weatherData: DataFrame,
+    timeTracker: ExecutionTimeTracker
   )(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
 
     if (!(tasks.contains("feature-extraction")) && !(tasks.contains("train"))){
@@ -171,7 +204,7 @@ object FlightDelayPredictionApp {
       info("=" * 80)
       info(s"Feature Type: ${experiment.featureExtraction.featureType}")
 
-      val (train, test) = FeaturePipeline.execute(flightData, weatherData, experiment)
+      val (train, test) = FeaturePipeline.execute(flightData, weatherData, experiment, timeTracker)
 
       info("Checkpointing prepared data to cut lineage and optimize performance...")
       val trainData = train.checkpoint()
@@ -201,7 +234,7 @@ object FlightDelayPredictionApp {
       info("-" * 80)
 
       // Train model using new MLPipeline (pre-split balanced datasets)
-      val mlResult = MLPipeline.train(trainData, testData, experiment, experiment.train.fast)
+      val mlResult = MLPipeline.train(trainData, testData, experiment, experiment.train.fast, timeTracker)
 
       // Display summary
       info("-" * 80)

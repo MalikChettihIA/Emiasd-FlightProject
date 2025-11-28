@@ -5,6 +5,7 @@ import com.flightdelay.data.loaders.{FlightDataLoader, WeatherDataLoader, WBANAi
 import com.flightdelay.data.preprocessing.flights.FlightPreprocessingPipeline
 import com.flightdelay.data.preprocessing.weather.WeatherPreprocessingPipeline
 import com.flightdelay.data.utils.SchemaValidator
+import com.flightdelay.utils.ExecutionTimeTracker
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import com.flightdelay.utils.DebugUtils._
 
@@ -15,9 +16,10 @@ object DataPipeline {
    * Charge les données depuis la configuration, preprocesse les données de vols et météo, puis les joint
    * @param spark Session Spark
    * @param configuration Configuration de l'application
+   * @param timeTracker Execution time tracker
    * @return Tuple (FlightData, Option[WeatherData]) - Weather is None if no experiments use weather features
    */
-  def execute()(implicit spark: SparkSession, configuration: AppConfiguration): (DataFrame, DataFrame) = {
+  def execute(timeTracker: ExecutionTimeTracker = null)(implicit spark: SparkSession, configuration: AppConfiguration): (DataFrame, DataFrame) = {
 
     val pipelineStartTime = System.currentTimeMillis()
 
@@ -27,45 +29,57 @@ object DataPipeline {
 
     // Chargement des données brutes
     info("[DataPipeline][Step 1/7] Loading raw flight data...")
+    if (timeTracker != null) timeTracker.startStep("data_processing.load_flights")
     var stepStartTime = System.currentTimeMillis()
     var originalFlightData = FlightDataLoader.loadFromConfiguration()
     var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    if (timeTracker != null) timeTracker.endStep("data_processing.load_flights")
     info(s"[DataPipeline][Step 1/7] Completed in ${stepDuration}s")
 
     // Preprocessing des données de météo
     info("=" * 80)
     info("[DataPipeline][Step 2/7] Loading raw weather data...")
+    if (timeTracker != null) timeTracker.startStep("data_processing.load_weather")
     stepStartTime = System.currentTimeMillis()
     var originalWeatherData = WeatherDataLoader.loadFromConfiguration()
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    if (timeTracker != null) timeTracker.endStep("data_processing.load_weather")
     info(s"[DataPipeline][Step 2/7] Completed in ${stepDuration}s")
 
     info("=" * 80)
     info("[DataPipeline][Step 3/7] Loading WBAN-Airport-Timezone mapping...")
+    if (timeTracker != null) timeTracker.startStep("data_processing.load_wban")
     stepStartTime = System.currentTimeMillis()
     var originalWBANAirportTimezoneData = WBANAirportTimezoneLoader.loadFromConfiguration()
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    if (timeTracker != null) timeTracker.endStep("data_processing.load_wban")
     info(s"[DataPipeline][Step 3/7] Completed in ${stepDuration}s")
 
     // Preprocessing des données de vols
+    if (timeTracker != null) timeTracker.startStep("data_processing.preprocess_flights")
     stepStartTime = System.currentTimeMillis()
     val processedFlightData = FlightPreprocessingPipeline.execute(originalFlightData, originalWeatherData, originalWBANAirportTimezoneData)
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    if (timeTracker != null) timeTracker.endStep("data_processing.preprocess_flights")
 
     info(s"[DataPipeline][Step 4/7] Completed in ${stepDuration}s")
 
+    if (timeTracker != null) timeTracker.startStep("data_processing.preprocess_weather")
     stepStartTime = System.currentTimeMillis()
     val processedWeatherData = WeatherPreprocessingPipeline.execute(processedFlightData, originalWeatherData, originalWBANAirportTimezoneData)
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    if (timeTracker != null) timeTracker.endStep("data_processing.preprocess_weather")
     info(s"[DataPipeline][Step 5/7] Completed in ${stepDuration}s")
 
     // Filter columns based on configuration
     info("=" * 80)
     info("[DataPipeline][Step 6/7] Filtering columns based on configuration...")
+    if (timeTracker != null) timeTracker.startStep("data_processing.filter_columns")
     stepStartTime = System.currentTimeMillis()
     val filteredFlightData = filterFlightColumns(processedFlightData)
     val filteredWeatherData = filterWeatherColumns(processedWeatherData)
     stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+    if (timeTracker != null) timeTracker.endStep("data_processing.filter_columns")
     info(s"[DataPipeline][Step 6/7] Completed in ${stepDuration}s")
 
     // Force materialization
@@ -81,6 +95,7 @@ object DataPipeline {
     if (configuration.common.storeIntoParquet) {
       info("=" * 80)
       info("[DataPipeline][Step 7/7] Saving processed data to Parquet...")
+      if (timeTracker != null) timeTracker.startStep("data_processing.save_parquet")
       stepStartTime = System.currentTimeMillis()
 
       val flightParquetPath = s"${configuration.common.output.basePath}/common/data/processed_flights.parquet"
@@ -97,12 +112,30 @@ object DataPipeline {
         .parquet(weatherParquetPath)
 
       stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+      if (timeTracker != null) timeTracker.endStep("data_processing.save_parquet")
       info(s"[DataPipeline][Step 7/7] Completed in ${stepDuration}s")
     } else {
       info("[DataPipeline][Step 7/7] Skipping Parquet save (storeIntoParquet=false)")
+      if (timeTracker != null) timeTracker.setStepNA("data_processing.save_parquet")
     }
 
     val totalDuration = (System.currentTimeMillis() - pipelineStartTime) / 1000.0
+
+    // Calculate and set data processing total time
+    if (timeTracker != null) {
+      val dpTotal = Seq(
+        timeTracker.getStepTime("data_processing.load_flights"),
+        timeTracker.getStepTime("data_processing.load_weather"),
+        timeTracker.getStepTime("data_processing.load_wban"),
+        timeTracker.getStepTime("data_processing.preprocess_flights"),
+        timeTracker.getStepTime("data_processing.preprocess_weather"),
+        timeTracker.getStepTime("data_processing.filter_columns"),
+        timeTracker.getStepTime("data_processing.save_parquet")
+      ).flatten.filterNot(_.isNaN).sum
+
+      timeTracker.setStepTime("data_processing.total", dpTotal)
+    }
+
     info("=" * 80)
     info(s"[DataPipeline] Complete Data Pipeline - End (Total: ${totalDuration}s)")
     info("=" * 80)

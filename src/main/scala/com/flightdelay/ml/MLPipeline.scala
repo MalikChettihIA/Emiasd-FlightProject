@@ -7,7 +7,7 @@ import com.flightdelay.ml.evaluation.ModelEvaluator
 import com.flightdelay.ml.evaluation.ModelEvaluator.EvaluationMetrics
 import com.flightdelay.ml.tracking.MLFlowTracker
 import com.flightdelay.ml.training.{CrossValidator, Trainer}
-import com.flightdelay.utils.HDFSHelper
+import com.flightdelay.utils.{ExecutionTimeTracker, HDFSHelper}
 import org.apache.spark.ml.{PipelineModel, Transformer}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import com.flightdelay.utils.DebugUtils._
@@ -82,6 +82,7 @@ object MLPipeline {
    * @param testDataRaw Pre-split test dataset (balanced, exploded, but features not extracted yet)
    * @param experiment Experiment configuration
    * @param fast Skip cross-validation and go directly to final model training (default: false)
+   * @param timeTracker Execution time tracker
    * @param spark Implicit SparkSession
    * @param config Implicit AppConfiguration
    * @return MLResult with trained model and comprehensive metrics
@@ -90,7 +91,8 @@ object MLPipeline {
              devDataRaw: DataFrame,
              testDataRaw: DataFrame,
              experiment: ExperimentConfig,
-             fast: Boolean = false
+             fast: Boolean = false,
+             timeTracker: ExecutionTimeTracker = null
   )(implicit spark: SparkSession, configuration: AppConfiguration): MLResult = {
 
     info("=" * 100)
@@ -165,7 +167,9 @@ object MLPipeline {
 
     // Extract features from dev set (fit + transform)
     // Returns both transformed data AND fitted models for reuse on test set
+    if (timeTracker != null) timeTracker.startStep("ml_feature_extraction.dev")
     val (devData, featureModels) = FeatureExtractor.extract(devDataRaw, experiment)
+    if (timeTracker != null) timeTracker.endStep("ml_feature_extraction.dev")
     debug(f"   Dev features extracted: ${devData.count()}%,d records")
 
     // Transform test set using pre-fitted models from dev set (NO REFITTING)
@@ -176,7 +180,9 @@ object MLPipeline {
     info("  - StringIndexer: uses categories learned from dev set only")
     info("  - Scaler: uses statistics (mean/std) from dev set only")
     info("  - PCA: uses components fitted on dev set only")
+    if (timeTracker != null) timeTracker.startStep("ml_feature_extraction.test")
     val testData = FeatureExtractor.transform(testDataRaw, featureModels, experiment)
+    if (timeTracker != null) timeTracker.endStep("ml_feature_extraction.test")
     debug(f"   Test features extracted: ${testData.count()}%,d records")
 
     // ========================================================================
@@ -186,6 +192,11 @@ object MLPipeline {
       info("[ML PIPELINE][STEP 4] FAST MODE - Skipping Cross-Validation")
       info("=" * 80)
       info("  Using default hyperparameters from configuration")
+
+      if (timeTracker != null) {
+        timeTracker.setStepNA("ml_grid_search")
+        timeTracker.setStepNA("ml_kfold_cv")
+      }
 
       // Create a dummy CV result with empty metrics
       val emptyMetrics = EvaluationMetrics(
@@ -212,7 +223,18 @@ object MLPipeline {
       info("[ML PIPELINE][STEP 4] Cross-Validation on Development Set")
       info("=" * 80)
 
+      // Track CV (Grid Search is included in CV, not separate)
+      if (timeTracker != null) {
+        timeTracker.startStep("ml_kfold_cv")
+      }
+
       val cvRes = CrossValidator.validate(devData, experiment)
+
+      if (timeTracker != null) {
+        timeTracker.endStep("ml_kfold_cv")
+        // Grid Search is part of CV, mark as NA to show it's included
+        timeTracker.setStepNA("ml_grid_search")
+      }
 
       info(f"  CV Results (${cvRes.numFolds} folds):")
       info(f"    Accuracy:  ${cvRes.avgMetrics.accuracy * 100}%6.2f%% ± ${cvRes.stdMetrics.accuracy * 100}%.2f%%")
@@ -259,17 +281,21 @@ object MLPipeline {
     info("[ML PIPELINE][STEP 5] Training Final Model on Full Development Set")
     info("=" * 80)
 
+    if (timeTracker != null) timeTracker.startStep("ml_train")
     val finalModel = Trainer.trainFinal(
       devData,
       experiment,
       cvResult.bestHyperparameters
     )
+    if (timeTracker != null) timeTracker.endStep("ml_train")
 
     // ========================================================================
     // STEP 6: Final evaluation on hold-out test set
     // =======================================================================
     info("[STEP 6] Final Evaluation on Hold-out Test Set")
     info("=" * 80)
+
+    if (timeTracker != null) timeTracker.startStep("ml_evaluation")
 
     // OPTIMIZATION: Save final model then reload to avoid broadcast OOM
     // This is critical for large models (e.g., Random Forest with 300 trees)
@@ -376,6 +402,8 @@ object MLPipeline {
     val testPredictions = reloadedModel.transform(testData)
     val holdOutMetrics = ModelEvaluator.evaluate(predictions=testPredictions, datasetType="[Hold-out Test] ")
 
+    if (timeTracker != null) timeTracker.endStep("ml_evaluation")
+
     info(f"  Hold-out Test Metrics:")
     info(f"    Accuracy:  ${holdOutMetrics.accuracy * 100}%6.2f%%")
     info(f"    Precision: ${holdOutMetrics.precision * 100}%6.2f%%")
@@ -403,6 +431,8 @@ object MLPipeline {
     info("=" * 80)
     info("   Model already saved in Step 5 (to avoid broadcast OOM)")
 
+    if (timeTracker != null) timeTracker.startStep("ml_save_metrics")
+
     // Save comprehensive metrics (CSV + TXT summary)
     saveMetrics(experiment, cvResult, holdOutMetrics, testPredictions, experimentOutputPath, fast)
 
@@ -411,6 +441,8 @@ object MLPipeline {
 
     // Save training summary as TXT file
     saveTrainingSummary(experiment, cvResult, holdOutMetrics, totalTime, experimentOutputPath, fast)
+
+    if (timeTracker != null) timeTracker.endStep("ml_save_metrics")
 
     // Copy HDFS to local if localPath is configured (for visualization and MLFlow)
     val localExperimentPath = HDFSHelper.copyExperimentMetrics(
@@ -488,12 +520,63 @@ object MLPipeline {
         MLFlowTracker.logArtifactWithPath(rid, plotsPath, "plots")
         info(s"   Visualization plots saved to MLFlow: plots/")
       }
+
+      // 6. Log execution time metrics if tracker is provided
+      if (timeTracker != null) {
+        // Save execution time metrics to files
+        val execTimeBasePath = s"$localExperimentPath/execution_time"
+        val execTimeCsvPath = s"$execTimeBasePath/execution_times.csv"
+        val execTimeTxtPath = s"$execTimeBasePath/execution_times.txt"
+
+        // Create directory if it doesn't exist
+        val execTimeDir = new java.io.File(execTimeBasePath)
+        if (!execTimeDir.exists()) {
+          execTimeDir.mkdirs()
+        }
+
+        // Save to local path
+        timeTracker.saveToCSV(execTimeCsvPath)
+        timeTracker.saveToText(execTimeTxtPath)
+
+        // Log to MLFlow
+        MLFlowTracker.logArtifactWithPath(rid, execTimeBasePath, "execution_time")
+        info(s"   Execution time metrics saved to MLFlow: execution_time/")
+
+        // Also log individual execution time metrics as MLFlow metrics
+        timeTracker.getAllTimes.foreach { case (stepName, time) =>
+          if (!time.isNaN) {
+            val metricName = s"exec_time_${stepName.replace(".", "_")}"
+            MLFlowTracker.logMetric(rid, metricName, time)
+          }
+        }
+        info(s"   Execution time metrics logged to MLFlow as individual metrics")
+      }
     }
 
     // ========================================================================
     // Display Best Model Summary
     // ========================================================================
     displayBestModelSummary(experiment, cvResult, holdOutMetrics, totalTime, fast)
+
+    // Calculate and set totals
+    if (timeTracker != null) {
+      // ML Feature Extraction total
+      val mlFeatureExtractionTotal = Seq(
+        timeTracker.getStepTime("ml_feature_extraction.dev"),
+        timeTracker.getStepTime("ml_feature_extraction.test")
+      ).flatten.filterNot(_.isNaN).sum
+      timeTracker.setStepTime("ml_feature_extraction.total", mlFeatureExtractionTotal)
+
+      // ML total - only sum high-level steps (no double counting)
+      val mlTotal = Seq(
+        timeTracker.getStepTime("ml_feature_extraction.total"),
+        timeTracker.getStepTime("ml_kfold_cv"), // Already includes Grid Search
+        timeTracker.getStepTime("ml_train"),
+        timeTracker.getStepTime("ml_evaluation"),
+        timeTracker.getStepTime("ml_save_metrics")
+      ).flatten.filterNot(_.isNaN).sum
+      timeTracker.setStepTime("ml.total", mlTotal)
+    }
 
     info("=" * 100)
     info(s"[ML PIPELINE] Completed for experiment: ${experiment.name}")

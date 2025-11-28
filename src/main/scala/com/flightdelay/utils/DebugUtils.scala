@@ -1,12 +1,39 @@
 package com.flightdelay.utils
 
 import com.flightdelay.config.{AppConfiguration, LogLevel}
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * Utilitaires pour le logging de l'application
  * Permet de contrôler l'affichage des messages via la configuration (log: true/false, logLevel: debug/info/warn/error)
  */
 object DebugUtils {
+
+  // Date formatter for logs (yy/MM/dd HH:mm:ss format)
+  private val dateFormatter = DateTimeFormatter.ofPattern("yy/MM/dd")
+  private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+
+  // Cache the date string to avoid recalculating it on every log
+  private var cachedDateString: String = LocalDateTime.now().format(dateFormatter)
+  private var lastCheckDay: Int = LocalDateTime.now().getDayOfYear
+
+  /**
+   * Get current timestamp for logs in format: yy/MM/dd HH:mm:ss
+   * Date is cached and only recalculated when day changes
+   */
+  private def getTimestamp(): String = {
+    val now = LocalDateTime.now()
+    val currentDay = now.getDayOfYear
+
+    // Update cached date only if day has changed
+    if (currentDay != lastCheckDay) {
+      cachedDateString = now.format(dateFormatter)
+      lastCheckDay = currentDay
+    }
+
+    s"$cachedDateString ${now.format(timeFormatter)}"
+  }
 
   /**
    * Vérifie si un message doit être loggé selon la configuration
@@ -25,7 +52,7 @@ object DebugUtils {
    */
   def debug(msg: => String)(implicit configuration: AppConfiguration): Unit = {
     if (shouldLog(LogLevel.DEBUG)) {
-      println(s"[DEBUG] $msg")
+      println(s"[DEBUG] ${getTimestamp()} $msg")
     }
   }
 
@@ -36,7 +63,7 @@ object DebugUtils {
    */
   def info(msg: => String)(implicit configuration: AppConfiguration): Unit = {
     if (shouldLog(LogLevel.INFO)) {
-      println(s"[INFO] $msg")
+      println(s"[INFO] ${getTimestamp()} $msg")
     }
   }
 
@@ -47,7 +74,7 @@ object DebugUtils {
    */
   def warn(msg: => String)(implicit configuration: AppConfiguration): Unit = {
     if (shouldLog(LogLevel.WARN)) {
-      println(s"[WARN] $msg")
+      println(s"[WARN] ${getTimestamp()} $msg")
     }
   }
 
@@ -58,7 +85,7 @@ object DebugUtils {
    */
   def error(msg: => String)(implicit configuration: AppConfiguration): Unit = {
     if (shouldLog(LogLevel.ERROR)) {
-      println(s"[ERROR] $msg")
+      println(s"[ERROR] ${getTimestamp()} $msg")
     }
   }
 
