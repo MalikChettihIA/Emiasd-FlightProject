@@ -260,30 +260,56 @@ class ConfigurationBasedFeatureExtractorPipeline(
       featureTransformations.get(colName).map(config => (colName, config.transformation))
     }.groupBy(_._2)
 
-    if (scalerConfig.contains("StandardScaler") ||
-        scalerConfig.contains("MinMaxScaler") ||
-        scalerConfig.contains("RobustScaler")) {
+    val hasScaler = scalerConfig.contains("StandardScaler") ||
+                    scalerConfig.contains("MinMaxScaler") ||
+                    scalerConfig.contains("RobustScaler")
 
+    // Intermediate column name for scaler output
+    val _featuresScaled = "featuresScaled"
+    var scalerOutputCol = _featuresVec  // Will be updated if scaler is added
+
+    if (hasScaler) {
       // Apply StandardScaler to the entire feature vector
       // Note: In a real scenario, you might want to apply different scalers to different subsets
       val scaler = new StandardScaler()
         .setInputCol(_featuresVec)
-        .setOutputCol(_features)
+        .setOutputCol(_featuresScaled)
         .setWithMean(true)
         .setWithStd(true)
       stages = stages :+ scaler
-    } else {
-      // No scaling, just rename the column
-      // We'll handle this in postProcess
+      scalerOutputCol = _featuresScaled
+      info("  - Added StandardScaler")
     }
 
-    // Stage 6: VectorIndexer pour RandomForest
-    val vectorIndexer = new VectorIndexer()
-      .setInputCol(_featuresVec)
-      .setOutputCol(_features)          // "features" final pour le modèle
-      .setMaxCategories(experiment.featureExtraction.maxCategoricalCardinality)
-      .setHandleInvalid("keep")         // Keep unseen values as a new category
-    stages = stages :+ vectorIndexer
+    // Stage 6: VectorIndexer - only for tree-based Spark models (RF, GBT)
+    // XGBoost and Logistic Regression don't need it
+    val needsVectorIndexer = experiment.model.modelType.toLowerCase match {
+      case "randomforest" | "gbt" => true
+      case "xgboost" | "logisticregression" => false
+      case _ => false  // Default: no VectorIndexer for unknown models
+    }
+
+    if (needsVectorIndexer) {
+      val vectorIndexer = new VectorIndexer()
+        .setInputCol(scalerOutputCol)  // Input from scaler output if present, otherwise featuresVec
+        .setOutputCol(_features)       // "features" final pour le modèle
+        .setMaxCategories(experiment.featureExtraction.maxCategoricalCardinality)
+        .setHandleInvalid("keep")      // Keep unseen values as a new category
+      stages = stages :+ vectorIndexer
+      info(s"  - Added VectorIndexer for ${experiment.model.modelType} (tree-based model)")
+    } else {
+      // For non-tree models, we don't need VectorIndexer
+      // If we have a scaler, we need to rename featuresScaled to features
+      if (hasScaler) {
+        // Use SQL transformer to rename the column
+        import org.apache.spark.ml.feature.SQLTransformer
+        val renamer = new SQLTransformer()
+          .setStatement(s"SELECT *, $scalerOutputCol AS ${_features} FROM __THIS__")
+        stages = stages :+ renamer
+      }
+      // If no scaler and no VectorIndexer, postProcess will handle the renaming
+      info(s"  - VectorIndexer skipped for ${experiment.model.modelType} (not a tree-based Spark model)")
+    }
 
     //Log Statges
     logStages(stages)
