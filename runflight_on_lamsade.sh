@@ -24,10 +24,10 @@ echo "Log file: $LOG_FILE"
 echo -e "${BLUE}================================================================================================${NC}\n"
 
 # Clean directories
-hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/Experience*
-#hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/common
-hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/spark-checkpoints/*
-#hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/spark-events/*
+hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/${USER}/output/Experience*
+#hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/${USER}/output/common
+hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/${USER}/output/spark-checkpoints/*
+#hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/${USER}/output/spark-events/*
 echo "Timestamp: $(date)"
 echo "HDFS Files cleaned"
 echo -e "${BLUE}================================================================================================${NC}\n"

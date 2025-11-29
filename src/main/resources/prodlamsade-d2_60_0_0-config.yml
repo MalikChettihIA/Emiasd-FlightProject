@@ -12,12 +12,12 @@ common:
 
   data:
     basePath: "hdfs:///students/p6emiasd2025/${USER}/data"
-    flight:
-      path: "hdfs:///students/p6emiasd2025/${USER}/data/Flights/*.csv"
-    weather:
-      path: "hdfs:///students/p6emiasd2025/${USER}/data/Weather/*.txt"
-    airportMapping:
-      path: "hdfs:///students/p6emiasd2025/${USER}/data/wban_airport_timezone.csv"
+    flight :
+      path: "hdfs:///students/p6emiasd2025/${USER}/data/FLIGHT-3Y/Flights/201201*.csv"
+    weather :
+      path : "hdfs:///students/p6emiasd2025/${USER}/data/FLIGHT-3Y/Weather/201201*.txt"
+    airportMapping :
+      path : "hdfs:///students/p6emiasd2025/${USER}/data/FLIGHT-3Y/wban_airport_timezone.csv"
 
   output:
     basePath: "hdfs:///students/p6emiasd2025/${USER}/output"
