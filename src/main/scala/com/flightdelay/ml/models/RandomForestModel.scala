@@ -1,11 +1,13 @@
 package com.flightdelay.ml.models
 
-import com.flightdelay.config.ExperimentConfig
+import com.flightdelay.utils.DebugUtils._
+import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import com.flightdelay.utils.MetricsWriter
 import org.apache.spark.ml.{Pipeline, Transformer}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.hadoop.fs.{FileSystem, Path}
+
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 
@@ -31,7 +33,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
    * @param featureImportancePath Optional path to save feature importances
    * @return Trained RandomForest model wrapped in a Pipeline
    */
-  def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
+  def train(data: DataFrame, featureImportancePath: Option[String] = None)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer = {
     val hp = experiment.model.hyperparameters
 
     // Use first value from arrays for single training
@@ -44,14 +46,14 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     val featureSubsetStrategy = hp.featureSubsetStrategy.getOrElse(Seq("auto")).head
     val impurity = hp.impurity.getOrElse("gini")
 
-    println(s"[RandomForest] Training with hyperparameters:")
-    println(s"  - Number of trees: $numTrees")
-    println(s"  - Max depth: $maxDepth")
-    println(s"  - Max bins: $maxBins")
-    println(s"  - Min instances per node: $minInstancesPerNode")
-    println(s"  - Subsampling rate: $subsamplingRate")
-    println(s"  - Feature subset strategy: $featureSubsetStrategy")
-    println(s"  - Impurity: ${hp.impurity}")
+    info(s"[RandomForest] Training with hyperparameters:")
+    info(s"  - Number of trees: $numTrees")
+    info(s"  - Max depth: $maxDepth")
+    info(s"  - Max bins: $maxBins")
+    info(s"  - Min instances per node: $minInstancesPerNode")
+    info(s"  - Subsampling rate: $subsamplingRate")
+    info(s"  - Feature subset strategy: $featureSubsetStrategy")
+    info(s"  - Impurity: ${hp.impurity}")
 
     // Configure Random Forest classifier
     val rf = new RandomForestClassifier()
@@ -75,7 +77,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(rf))
 
-    println("Starting training...")
+    info("Starting training...")
     val startTime = System.currentTimeMillis()
 
     val model = pipeline.fit(data)
@@ -83,7 +85,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"- Training completed in $trainingTime%.2f seconds")
+    info(f"- Training completed in $trainingTime%.2f seconds")
 
     // Extract and display feature importance
     val rfModel = model.stages(0).asInstanceOf[RandomForestClassificationModel]
@@ -98,7 +100,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
       saveFeatureImportanceReport(rfModel, reportPath)
     }
 
-    println("=" * 80)
+    info("=" * 80)
 
     model
   }
@@ -106,7 +108,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Override train from MLModel trait to call our extended version
    */
-  override def train(data: DataFrame): Transformer = {
+  override def train(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer = {
     train(data, None)
   }
 
@@ -147,17 +149,17 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
    * Display top feature importances from the trained model
    * Enhanced formatting with feature name abbreviation and grouping
    */
-  private def displayFeatureImportance(model: RandomForestClassificationModel): Unit = {
+  private def displayFeatureImportance(model: RandomForestClassificationModel)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val importances = model.featureImportances.toArray
     val topN = 20
 
     // Try to load feature names from file
     val featureNames = loadFeatureNames()
 
-    println(f"Top $topN Feature Importances:")
-    println("=" * 90)
-    println(f"${"Rank"}%-6s ${"Index"}%-7s ${"Feature Name"}%-60s ${"Importance"}%12s")
-    println("=" * 90)
+    info(f"Top $topN Feature Importances:")
+    info("=" * 90)
+    info(f"${"Rank"}%-6s ${"Index"}%-7s ${"Feature Name"}%-60s ${"Importance"}%12s")
+    info("=" * 90)
 
     importances.zipWithIndex
       .sortBy(-_._1)
@@ -174,29 +176,29 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
                        else if (importancePercent >= 1) "▒"
                        else "░"
 
-        println(f"${rank + 1}%-6d [${featureIdx}%3d]  ${shortName}%-60s ${indicator} ${importancePercent}%6.2f%%")
+        info(f"${rank + 1}%-6d [${featureIdx}%3d]  ${shortName}%-60s ${indicator} ${importancePercent}%6.2f%%")
       }
 
-    println("=" * 90)
+    info("=" * 90)
 
     // Print legend
-    println("Importance Levels:  ≥10% ≥5% ≥1% <1%")
+    info("Importance Levels:  ≥10% ≥5% ≥1% <1%")
 
     // Print abbreviations used
-    println("Abbreviations:")
-    println("  idx_    = indexed_")
-    println("  org_w_  = origin_weather_")
-    println("  dst_w_  = destination_weather_")
-    println("  f_      = feature_")
-    println("  wsev    = weather_severity")
-    println("  opr_risk = operations_risk_level")
+    info("Abbreviations:")
+    info("  idx_    = indexed_")
+    info("  org_w_  = origin_weather_")
+    info("  dst_w_  = destination_weather_")
+    info("  f_      = feature_")
+    info("  wsev    = weather_severity")
+    info("  opr_risk = operations_risk_level")
   }
 
   /**
    * Load feature names from the selected_features.txt file
    * Returns empty array if file doesn't exist or can't be read
    */
-  private def loadFeatureNames(): Array[String] = {
+  private def loadFeatureNames()(implicit spark: SparkSession, configuration: AppConfiguration): Array[String] = {
     try {
       val featureNamesPath = s"${experiment.name}/features/selected_features.txt"
 
@@ -215,18 +217,18 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
         val source = scala.io.Source.fromFile(foundPath)
         try {
           val names = source.getLines().toArray
-          println(s" Loaded ${names.length} feature names from: $foundPath")
+          info(s" Loaded ${names.length} feature names from: $foundPath")
           names
         } finally {
           source.close()
         }
       }.getOrElse {
-        println(s" Could not load feature names (tried ${possiblePaths.length} locations)")
+        error(s" Could not load feature names (tried ${possiblePaths.length} locations)")
         Array.empty[String]
       }
     } catch {
       case ex: Exception =>
-        println(s" Error loading feature names: ${ex.getMessage}")
+        error(s" Error loading feature names: ${ex.getMessage}")
         Array.empty[String]
     }
   }
@@ -234,7 +236,7 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Save feature importances report to text file
    */
-  def saveFeatureImportanceReport(model: RandomForestClassificationModel, outputPath: String): Unit = {
+  def saveFeatureImportanceReport(model: RandomForestClassificationModel, outputPath: String)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val importances = model.featureImportances.toArray
     val featureNames = loadFeatureNames()
 
@@ -280,20 +282,20 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
       val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
       try {
         writer.write(report.toString)
-        println(s" Feature importance report saved to: $outputPath")
+        info(s" Feature importance report saved to: $outputPath")
       } finally {
         writer.close()
       }
     } catch {
       case ex: Exception =>
-        println(s" Failed to save feature importance report: ${ex.getMessage}")
+        error(s" Failed to save feature importance report: ${ex.getMessage}")
     }
   }
 
   /**
    * Save feature importances to CSV file with feature names
    */
-  private def saveFeatureImportance(model: RandomForestClassificationModel, outputPath: String): Unit = {
+  private def saveFeatureImportance(model: RandomForestClassificationModel, outputPath: String)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val importances = model.featureImportances.toArray
     val featureNames = loadFeatureNames()
 
@@ -321,13 +323,13 @@ class RandomForestModel(experiment: ExperimentConfig) extends MLModel {
       val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
       try {
         writer.write(csvContent)
-        println(s" Feature importances saved to: $outputPath")
+        info(s" Feature importances saved to: $outputPath")
       } finally {
         writer.close()
       }
     } catch {
       case ex: Exception =>
-        println(s" Failed to save feature importances: ${ex.getMessage}")
+        error(s" Failed to save feature importances: ${ex.getMessage}")
     }
   }
 }

@@ -219,7 +219,17 @@ class ExecutionTimeTracker {
     // Write using Hadoop FileSystem (HDFS-compatible)
     val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
     val csvPath = new Path(path)
-    val out = fs.create(csvPath, true)
+
+    // Ensure the path is properly qualified for the current filesystem (local or HDFS)
+    val qualifiedPath = fs.makeQualified(csvPath)
+
+    // Create parent directories if they don't exist
+    val parentPath = qualifiedPath.getParent
+    if (parentPath != null && !fs.exists(parentPath)) {
+      fs.mkdirs(parentPath)
+    }
+
+    val out = fs.create(qualifiedPath, true)
     val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
     try {
       writer.write(csvContent.toString())
@@ -300,7 +310,17 @@ class ExecutionTimeTracker {
     // Write using Hadoop FileSystem (HDFS-compatible)
     val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
     val txtPath = new Path(path)
-    val out = fs.create(txtPath, true)
+
+    // Ensure the path is properly qualified for the current filesystem (local or HDFS)
+    val qualifiedPath = fs.makeQualified(txtPath)
+
+    // Create parent directories if they don't exist
+    val parentPath = qualifiedPath.getParent
+    if (parentPath != null && !fs.exists(parentPath)) {
+      fs.mkdirs(parentPath)
+    }
+
+    val out = fs.create(qualifiedPath, true)
     val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
     try {
       writer.write(txtContent.toString())

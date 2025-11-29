@@ -1,10 +1,12 @@
 package com.flightdelay.ml.models
 
-import com.flightdelay.config.ExperimentConfig
+import com.flightdelay.utils.DebugUtils._
+import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import org.apache.spark.ml.{Pipeline, Transformer}
 import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.hadoop.fs.{FileSystem, Path}
+
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 
@@ -35,7 +37,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
    * @param featureImportancePath Optional path to save feature importances
    * @return Trained GBT model wrapped in a Pipeline
    */
-  def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
+  def train(data: DataFrame, featureImportancePath: Option[String] = None)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer = {
     val hp = experiment.model.hyperparameters
 
     // Use first value from arrays for single training
@@ -46,13 +48,13 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
     val subsamplingRate = hp.subsamplingRate.getOrElse(Seq(1.0)).head
     val stepSize = hp.stepSize.getOrElse(Seq(0.1)).head
 
-    println(s"[GradientBoostedTrees] Training with hyperparameters:")
-    println(s"  - Max iterations (trees): $maxIter")
-    println(s"  - Max depth: $maxDepth")
-    println(s"  - Max bins: $maxBins")
-    println(s"  - Min instances per node: $minInstancesPerNode")
-    println(s"  - Subsampling rate: $subsamplingRate")
-    println(s"  - Step size (learning rate): $stepSize")
+    info(s"[GradientBoostedTrees] Training with hyperparameters:")
+    info(s"  - Max iterations (trees): $maxIter")
+    info(s"  - Max depth: $maxDepth")
+    info(s"  - Max bins: $maxBins")
+    info(s"  - Min instances per node: $minInstancesPerNode")
+    info(s"  - Subsampling rate: $subsamplingRate")
+    info(s"  - Step size (learning rate): $stepSize")
 
     // Configure GBT classifier
     val gbt = new GBTClassifier()
@@ -72,7 +74,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(gbt))
 
-    println("Starting training...")
+    info("Starting training...")
     val startTime = System.currentTimeMillis()
 
     val model = pipeline.fit(data)
@@ -80,7 +82,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"- Training completed in $trainingTime%.2f seconds")
+    info(f"- Training completed in $trainingTime%.2f seconds")
 
     // Extract and display feature importance
     val gbtModel = model.stages(0).asInstanceOf[GBTClassificationModel]
@@ -91,7 +93,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
       saveFeatureImportance(gbtModel, path)
     }
 
-    println("=" * 80)
+    info("=" * 80)
 
     model
   }
@@ -99,39 +101,39 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Override train from MLModel trait to call our extended version
    */
-  override def train(data: DataFrame): Transformer = {
+  override def train(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer = {
     train(data, None)
   }
 
   /**
    * Display top feature importances from the trained model
    */
-  private def displayFeatureImportance(model: GBTClassificationModel): Unit = {
+  private def displayFeatureImportance(model: GBTClassificationModel)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val importances = model.featureImportances.toArray
     val topN = 20
 
     // Try to load feature names from file
     val featureNames = loadFeatureNames()
 
-    println(f"Top $topN Feature Importances:")
-    println("-" * 50)
+    info(f"Top $topN Feature Importances:")
+    info("-" * 50)
 
     importances.zipWithIndex
       .sortBy(-_._1)
       .take(topN)
       .foreach { case (importance, idx) =>
         val featureName = featureNames.lift(idx).getOrElse(s"Feature_$idx")
-        println(f"[$idx%3d] $featureName%-50s: ${importance * 100}%6.2f%%")
+        info(f"[$idx%3d] $featureName%-50s: ${importance * 100}%6.2f%%")
       }
 
-    println("-" * 50)
+    info("-" * 50)
   }
 
   /**
    * Load feature names from the selected_features.txt file
    * Returns empty array if file doesn't exist or can't be read
    */
-  private def loadFeatureNames(): Array[String] = {
+  private def loadFeatureNames()(implicit spark: SparkSession, configuration: AppConfiguration): Array[String] = {
     try {
       val featureNamesPath = s"${experiment.name}/features/selected_features.txt"
 
@@ -150,18 +152,18 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
         val source = scala.io.Source.fromFile(foundPath)
         try {
           val names = source.getLines().toArray
-          println(s" Loaded ${names.length} feature names from: $foundPath")
+          info(s" Loaded ${names.length} feature names from: $foundPath")
           names
         } finally {
           source.close()
         }
       }.getOrElse {
-        println(s" Could not load feature names (tried ${possiblePaths.length} locations)")
+        error(s" Could not load feature names (tried ${possiblePaths.length} locations)")
         Array.empty[String]
       }
     } catch {
       case ex: Exception =>
-        println(s" Error loading feature names: ${ex.getMessage}")
+        error(s" Error loading feature names: ${ex.getMessage}")
         Array.empty[String]
     }
   }
@@ -169,7 +171,7 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Save feature importances to CSV file with feature names
    */
-  private def saveFeatureImportance(model: GBTClassificationModel, outputPath: String): Unit = {
+  private def saveFeatureImportance(model: GBTClassificationModel, outputPath: String)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val importances = model.featureImportances.toArray
     val featureNames = loadFeatureNames()
 
@@ -197,13 +199,13 @@ class GradientBoostedTreesModel(experiment: ExperimentConfig) extends MLModel {
       val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
       try {
         writer.write(csvContent)
-        println(s" Feature importances saved to: $outputPath")
+        info(s" Feature importances saved to: $outputPath")
       } finally {
         writer.close()
       }
     } catch {
       case ex: Exception =>
-        println(s" Failed to save feature importances: ${ex.getMessage}")
+        error(s" Failed to save feature importances: ${ex.getMessage}")
     }
   }
 }

@@ -37,12 +37,38 @@ object ConfigurationLoader {
     val yamlContent = source.mkString
     source.close()
 
+    // Replace environment variables in YAML content (e.g., ${USER}, ${HOME})
+    val expandedYamlContent = expandEnvironmentVariables(yamlContent)
+
     // Parser le YAML
     val yaml = new Yaml()
-    val data = yaml.load(yamlContent).asInstanceOf[java.util.Map[String, Any]]
+    val data = yaml.load(expandedYamlContent).asInstanceOf[java.util.Map[String, Any]]
 
     // Convertir en case classes Scala
     parseConfiguration(data.asScala.toMap)
+  }
+
+  /**
+   * Replace environment variables in the format ${VAR_NAME} with their values
+   * Supports both System environment variables and Java system properties
+   */
+  private def expandEnvironmentVariables(content: String): String = {
+    // Pattern to match ${VAR_NAME}
+    val envVarPattern = """\$\{([^}]+)\}""".r
+
+    envVarPattern.replaceAllIn(content, m => {
+      val varName = m.group(1)
+
+      // Try to get from environment variables first, then from system properties
+      val value = sys.env.getOrElse(varName,
+        System.getProperty(varName,
+          throw new RuntimeException(s"Environment variable or system property not found: $varName")
+        )
+      )
+
+      // Escape special regex characters in the replacement
+      java.util.regex.Matcher.quoteReplacement(value)
+    })
   }
 
   /**

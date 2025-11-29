@@ -1,10 +1,12 @@
 package com.flightdelay.ml.models
 
-import com.flightdelay.config.ExperimentConfig
+import com.flightdelay.utils.DebugUtils._
+import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import org.apache.spark.ml.{Pipeline, Transformer}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel => SparkLRModel}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.hadoop.fs.{FileSystem, Path}
+
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 
@@ -30,7 +32,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
    * @param featureImportancePath Optional path to save feature coefficients
    * @return Trained LogisticRegression model wrapped in a Pipeline
    */
-  def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
+  def train(data: DataFrame, featureImportancePath: Option[String] = None)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer = {
     val hp = experiment.model.hyperparameters
 
     // Use first value from arrays for single training
@@ -60,7 +62,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(lr))
 
-    println("Starting training...")
+    info("Starting training...")
     val startTime = System.currentTimeMillis()
 
     val model = pipeline.fit(data)
@@ -68,7 +70,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"- Training completed in $trainingTime%.2f seconds")
+    info(f"- Training completed in $trainingTime%.2f seconds")
 
     // Extract and display feature coefficients
     val lrModel = model.stages(0).asInstanceOf[SparkLRModel]
@@ -79,7 +81,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
       saveFeatureCoefficients(lrModel, path)
     }
 
-    println("=" * 80)
+    info("=" * 80)
 
     model
   }
@@ -87,14 +89,14 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Override train from MLModel trait to call our extended version
    */
-  override def train(data: DataFrame): Transformer = {
+  override def train(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer = {
     train(data, None)
   }
 
   /**
    * Display top feature coefficients from the trained model
    */
-  private def displayFeatureCoefficients(model: SparkLRModel): Unit = {
+  private def displayFeatureCoefficients(model: SparkLRModel)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val coefficients = model.coefficients.toArray
     val intercept = model.intercept
     val topN = 20
@@ -102,9 +104,9 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
     // Try to load feature names from file
     val featureNames = loadFeatureNames()
 
-    println(f"Model Intercept: $intercept%.6f")
-    println(f"Top $topN Feature Coefficients (Absolute Value):")
-    println("-" * 70)
+    info(f"Model Intercept: $intercept%.6f")
+    info(f"Top $topN Feature Coefficients (Absolute Value):")
+    info("-" * 70)
 
     coefficients.zipWithIndex
       .map { case (coef, idx) => (coef, math.abs(coef), idx) }
@@ -113,17 +115,17 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
       .foreach { case (coef, absCoef, idx) =>
         val featureName = featureNames.lift(idx).getOrElse(s"Feature_$idx")
         val sign = if (coef >= 0) "+" else "-"
-        println(f"[$idx%3d] $featureName%-40s: $sign%.1s ${absCoef}%8.6f (raw: ${coef}%8.6f)")
+        info(f"[$idx%3d] $featureName%-40s: $sign%.1s ${absCoef}%8.6f (raw: ${coef}%8.6f)")
       }
 
-    println("-" * 70)
+    info("-" * 70)
   }
 
   /**
    * Load feature names from the selected_features.txt file
    * Returns empty array if file doesn't exist or can't be read
    */
-  private def loadFeatureNames(): Array[String] = {
+  private def loadFeatureNames()(implicit spark: SparkSession, configuration: AppConfiguration): Array[String] = {
     try {
       val featureNamesPath = s"${experiment.name}/features/selected_features.txt"
 
@@ -142,18 +144,18 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
         val source = scala.io.Source.fromFile(foundPath)
         try {
           val names = source.getLines().toArray
-          println(s" Loaded ${names.length} feature names from: $foundPath")
+          info(s" Loaded ${names.length} feature names from: $foundPath")
           names
         } finally {
           source.close()
         }
       }.getOrElse {
-        println(s" Could not load feature names (tried ${possiblePaths.length} locations)")
+        error(s" Could not load feature names (tried ${possiblePaths.length} locations)")
         Array.empty[String]
       }
     } catch {
       case ex: Exception =>
-        println(s"\n⚠ Error loading feature names: ${ex.getMessage}")
+        info(s"\n⚠ Error loading feature names: ${ex.getMessage}")
         Array.empty[String]
     }
   }
@@ -161,7 +163,7 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Save feature coefficients to CSV file with feature names
    */
-  private def saveFeatureCoefficients(model: SparkLRModel, outputPath: String): Unit = {
+  private def saveFeatureCoefficients(model: SparkLRModel, outputPath: String)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val coefficients = model.coefficients.toArray
     val intercept = model.intercept
     val featureNames = loadFeatureNames()
@@ -191,13 +193,13 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
       val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
       try {
         writer.write(csvContent)
-        println(s" Feature coefficients saved to: $outputPath")
+        info(s" Feature coefficients saved to: $outputPath")
       } finally {
         writer.close()
       }
     } catch {
       case ex: Exception =>
-        println(s" Failed to save feature coefficients: ${ex.getMessage}")
+        error(s" Failed to save feature coefficients: ${ex.getMessage}")
     }
   }
 }

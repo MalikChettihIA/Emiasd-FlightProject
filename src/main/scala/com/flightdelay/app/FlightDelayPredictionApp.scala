@@ -47,8 +47,13 @@ object FlightDelayPredictionApp {
       .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
       .getOrCreate()
 
-    //Set CheckPoint Dir
-    spark.sparkContext.setCheckpointDir(s"${configuration.common.output.basePath}/spark-checkpoints")
+    //Set CheckPoint Dir - Use Hadoop-compatible path
+    val checkpointDir = s"${configuration.common.output.basePath}/spark-checkpoints"
+    val fs = org.apache.hadoop.fs.FileSystem.get(spark.sparkContext.hadoopConfiguration)
+    val checkpointPath = new org.apache.hadoop.fs.Path(checkpointDir)
+    val qualifiedCheckpointPath = fs.makeQualified(checkpointPath)
+    spark.sparkContext.setCheckpointDir(qualifiedCheckpointPath.toString)
+
     // Réduire les logs pour plus de clarté
     spark.sparkContext.setLogLevel("WARN")
 

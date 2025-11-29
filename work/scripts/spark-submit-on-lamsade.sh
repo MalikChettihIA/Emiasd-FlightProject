@@ -8,9 +8,9 @@ hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/spark-checkpoi
 
 # Tasks to execute (comma-separated): load,preprocess,feature-extraction,train
 # Default: all tasks
-#TASKS="${1:-data-pipeline,feature-extraction,train}"
-
 TASKS="${1:-data-pipeline,feature-extraction,train}"
+EXPERIENCE="${2:-prodlamsade-d2_60_0_0}"
+
 
 spark-submit \
   --deploy-mode client \
@@ -33,4 +33,4 @@ spark-submit \
   --conf spark.memory.storageFraction=0.3 \
   --jars ./workspace/mlflow-client-3.4.0.jar,./workspace/mlflow-spark_2.13-3.4.0.jar \
   ./workspace/Emiasd-Flight-Data-Analysis.jar \
-  lamsade $TASKS
+  $EXPERIENCE $TASKS

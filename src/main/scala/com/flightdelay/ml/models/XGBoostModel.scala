@@ -1,10 +1,12 @@
 package com.flightdelay.ml.models
 
-import com.flightdelay.config.ExperimentConfig
+import com.flightdelay.utils.DebugUtils._
+import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import org.apache.spark.ml.{Pipeline, Transformer}
 import ml.dmlc.xgboost4j.scala.spark.{XGBoostClassificationModel, XGBoostClassifier}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.hadoop.fs.{FileSystem, Path}
+
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 
@@ -38,7 +40,7 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
    * @param featureImportancePath Optional path to save feature importances
    * @return Trained XGBoost model wrapped in a Pipeline
    */
-  def train(data: DataFrame, featureImportancePath: Option[String] = None): Transformer = {
+  def train(data: DataFrame, featureImportancePath: Option[String] = None)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer = {
     val hp = experiment.model.hyperparameters
 
     // Use first value from arrays for single training
@@ -52,16 +54,16 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
     val lambda = hp.lambda.getOrElse(Seq(1.0)).head  // L2 regularization
     val gamma = hp.gamma.getOrElse(Seq(0.0)).head  // Minimum loss reduction
 
-    println(s"[XGBoost] Training with hyperparameters:")
-    println(s"  - Num rounds (trees):    $numRound")
-    println(s"  - Max depth:             $maxDepth")
-    println(s"  - Eta (learning rate):   $eta")
-    println(s"  - Subsample:             $subsample")
-    println(s"  - Colsample by tree:     $colsampleBytree")
-    println(s"  - Min child weight:      $minChildWeight")
-    println(s"  - Alpha (L1 reg):        $alpha")
-    println(s"  - Lambda (L2 reg):       $lambda")
-    println(s"  - Gamma (min loss red):  $gamma")
+    info(s"[XGBoost] Training with hyperparameters:")
+    info(s"  - Num rounds (trees):    $numRound")
+    info(s"  - Max depth:             $maxDepth")
+    info(s"  - Eta (learning rate):   $eta")
+    info(s"  - Subsample:             $subsample")
+    info(s"  - Colsample by tree:     $colsampleBytree")
+    info(s"  - Min child weight:      $minChildWeight")
+    info(s"  - Alpha (L1 reg):        $alpha")
+    info(s"  - Lambda (L2 reg):       $lambda")
+    info(s"  - Gamma (min loss red):  $gamma")
 
     // Configure XGBoost classifier
     val xgbParams = Map(
@@ -78,6 +80,8 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
       "seed" -> experiment.name.hashCode.toLong,
       "nthread" -> 4  // Can be adjusted based on cluster config
     )
+    import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
+    import org.apache.spark.sql.functions._
 
     val xgb = new XGBoostClassifier(xgbParams)
       .setLabelCol("label")
@@ -91,15 +95,34 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(xgb))
 
-    println("Starting training...")
+    info("Starting training...")
     val startTime = System.currentTimeMillis()
 
-    val model = pipeline.fit(data)
+    import org.apache.spark.sql.functions._
+    import org.apache.spark.ml.linalg.{Vector, Vectors}
+
+    val cleanVectorUdf = udf((v: Vector) => {
+      if (v == null) {
+        // vecteur nul remplacé par un vecteur de zéros
+        Vectors.dense(Array.fill(41)(0.0))
+      } else {
+        val arr = v.toArray.map { x =>
+          if (x.isNaN || x.isInfinity) 0.0 else x
+        }
+        Vectors.dense(arr)
+      }
+    })
+
+    val dfClean = data
+      .withColumn("features", cleanVectorUdf(col("features")))
+      .na.fill(0.0, Seq("label"))
+
+    val model = pipeline.fit(dfClean)
 
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
 
-    println(f"- Training completed in $trainingTime%.2f seconds")
+    info(f"- Training completed in $trainingTime%.2f seconds")
 
     // Extract and display feature importances
     val xgbModel = model.stages(0).asInstanceOf[XGBoostClassificationModel]
@@ -110,7 +133,7 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
       saveFeatureImportances(xgbModel, path)
     }
 
-    println("=" * 80)
+    info("=" * 80)
 
     model
   }
@@ -118,24 +141,24 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Override train from MLModel trait to call our extended version
    */
-  override def train(data: DataFrame): Transformer = {
+  override def train(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer = {
     train(data, None)
   }
 
   /**
    * Display top feature importances from the trained model
    */
-  private def displayFeatureImportances(model: XGBoostClassificationModel): Unit = {
+  private def displayFeatureImportances(model: XGBoostClassificationModel)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val importances = model.nativeBooster.getScore("", "gain") // Use "gain" importance type
     val topN = 20
 
     // Try to load feature names from file
     val featureNames = loadFeatureNames()
 
-    println(f"Top $topN Feature Importances (Gain):")
-    println("=" * 90)
-    println(f"${"Rank"}%-6s ${"Feature Name"}%-60s ${"Importance"}%12s")
-    println("=" * 90)
+    info(f"Top $topN Feature Importances (Gain):")
+    info("=" * 90)
+    info(f"${"Rank"}%-6s ${"Feature Name"}%-60s ${"Importance"}%12s")
+    info("=" * 90)
 
     importances.toSeq
       .sortBy(-_._2)
@@ -158,18 +181,18 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
                        else if (importancePercent >= 1) "▒"
                        else "░"
 
-        println(f"${rank + 1}%-6d ${displayName}%-60s ${indicator}  ${importancePercent}%5.2f%%")
+        info(f"${rank + 1}%-6d ${displayName}%-60s ${indicator}  ${importancePercent}%5.2f%%")
       }
 
-    println("=" * 90)
-    println("Importance Levels:  █≥10% ▓≥5% ▒≥1% ░<1%")
+    info("=" * 90)
+    info("Importance Levels:  █≥10% ▓≥5% ▒≥1% ░<1%")
   }
 
   /**
    * Load feature names from the selected_features.txt file
    * Returns empty array if file doesn't exist or can't be read
    */
-  private def loadFeatureNames(): Array[String] = {
+  private def loadFeatureNames()(implicit spark: SparkSession, configuration: AppConfiguration): Array[String] = {
     try {
       val featureNamesPath = s"${experiment.name}/features/selected_features.txt"
 
@@ -188,18 +211,18 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
         val source = scala.io.Source.fromFile(foundPath)
         try {
           val names = source.getLines().toArray
-          println(s" Loaded ${names.length} feature names from: $foundPath")
+          info(s" Loaded ${names.length} feature names from: $foundPath")
           names
         } finally {
           source.close()
         }
       }.getOrElse {
-        println(s" Could not load feature names (tried ${possiblePaths.length} locations)")
+        error(s" Could not load feature names (tried ${possiblePaths.length} locations)")
         Array.empty[String]
       }
     } catch {
       case ex: Exception =>
-        println(s"\n⚠ Error loading feature names: ${ex.getMessage}")
+        error(s"\n⚠ Error loading feature names: ${ex.getMessage}")
         Array.empty[String]
     }
   }
@@ -207,7 +230,7 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
   /**
    * Save feature importances to CSV file with feature names
    */
-  private def saveFeatureImportances(model: XGBoostClassificationModel, outputPath: String): Unit = {
+  private def saveFeatureImportances(model: XGBoostClassificationModel, outputPath: String)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
     val importances = model.nativeBooster.getScore("", "gain")
     val featureNames = loadFeatureNames()
 
@@ -240,13 +263,13 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
       val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
       try {
         writer.write(csvContent)
-        println(s" Feature importances saved to: $outputPath")
+        info(s" Feature importances saved to: $outputPath")
       } finally {
         writer.close()
       }
     } catch {
       case ex: Exception =>
-        println(s" Failed to save feature importances: ${ex.getMessage}")
+        error(s" Failed to save feature importances: ${ex.getMessage}")
     }
   }
 }

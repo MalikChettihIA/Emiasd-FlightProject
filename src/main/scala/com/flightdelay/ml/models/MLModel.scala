@@ -1,7 +1,8 @@
 package com.flightdelay.ml.models
 
+import com.flightdelay.config.AppConfiguration
 import org.apache.spark.ml.{PipelineModel, Transformer}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
  * Abstract trait for all ML models in the flight delay prediction system.
@@ -14,7 +15,7 @@ trait MLModel {
    * @param data Training data with "features" and "label" columns
    * @return Trained model as a Transformer
    */
-  def train(data: DataFrame): Transformer
+  def train(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer
 
   /**
    * Make predictions on the provided dataset
@@ -22,7 +23,7 @@ trait MLModel {
    * @param data Data to predict on (must have "features" column)
    * @return DataFrame with predictions
    */
-  def predict(model: Transformer, data: DataFrame): DataFrame = {
+  def predict(model: Transformer, data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
     model.transform(data)
   }
 

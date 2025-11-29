@@ -444,6 +444,26 @@ object MLPipeline {
 
     if (timeTracker != null) timeTracker.endStep("ml_save_metrics")
 
+    // Calculate and set totals BEFORE saving to files
+    if (timeTracker != null) {
+      // ML Feature Extraction total
+      val mlFeatureExtractionTotal = Seq(
+        timeTracker.getStepTime("ml_feature_extraction.dev"),
+        timeTracker.getStepTime("ml_feature_extraction.test")
+      ).flatten.filterNot(_.isNaN).sum
+      timeTracker.setStepTime("ml_feature_extraction.total", mlFeatureExtractionTotal)
+
+      // ML total - only sum high-level steps (no double counting)
+      val mlTotal = Seq(
+        timeTracker.getStepTime("ml_feature_extraction.total"),
+        timeTracker.getStepTime("ml_kfold_cv"), // Already includes Grid Search
+        timeTracker.getStepTime("ml_train"),
+        timeTracker.getStepTime("ml_evaluation"),
+        timeTracker.getStepTime("ml_save_metrics")
+      ).flatten.filterNot(_.isNaN).sum
+      timeTracker.setStepTime("ml.total", mlTotal)
+    }
+
     // Copy HDFS to local if localPath is configured (for visualization and MLFlow)
     val localExperimentPath = HDFSHelper.copyExperimentMetrics(
       spark,
@@ -528,13 +548,7 @@ object MLPipeline {
         val execTimeCsvPath = s"$execTimeBasePath/execution_times.csv"
         val execTimeTxtPath = s"$execTimeBasePath/execution_times.txt"
 
-        // Create directory if it doesn't exist
-        val execTimeDir = new java.io.File(execTimeBasePath)
-        if (!execTimeDir.exists()) {
-          execTimeDir.mkdirs()
-        }
-
-        // Save to local path
+        // Save files (directory creation handled inside saveToCSV/saveToText with Hadoop FileSystem API)
         timeTracker.saveToCSV(execTimeCsvPath)
         timeTracker.saveToText(execTimeTxtPath)
 
@@ -557,26 +571,6 @@ object MLPipeline {
     // Display Best Model Summary
     // ========================================================================
     displayBestModelSummary(experiment, cvResult, holdOutMetrics, totalTime, fast)
-
-    // Calculate and set totals
-    if (timeTracker != null) {
-      // ML Feature Extraction total
-      val mlFeatureExtractionTotal = Seq(
-        timeTracker.getStepTime("ml_feature_extraction.dev"),
-        timeTracker.getStepTime("ml_feature_extraction.test")
-      ).flatten.filterNot(_.isNaN).sum
-      timeTracker.setStepTime("ml_feature_extraction.total", mlFeatureExtractionTotal)
-
-      // ML total - only sum high-level steps (no double counting)
-      val mlTotal = Seq(
-        timeTracker.getStepTime("ml_feature_extraction.total"),
-        timeTracker.getStepTime("ml_kfold_cv"), // Already includes Grid Search
-        timeTracker.getStepTime("ml_train"),
-        timeTracker.getStepTime("ml_evaluation"),
-        timeTracker.getStepTime("ml_save_metrics")
-      ).flatten.filterNot(_.isNaN).sum
-      timeTracker.setStepTime("ml.total", mlTotal)
-    }
 
     info("=" * 100)
     info(s"[ML PIPELINE] Completed for experiment: ${experiment.name}")

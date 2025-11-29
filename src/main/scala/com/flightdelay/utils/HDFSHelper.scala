@@ -15,7 +15,7 @@ object HDFSHelper {
 
   /**
    * Copy a directory from HDFS to local filesystem
-   * Only performs copy if source is HDFS (starts with hdfs://)
+   * Only performs copy if source is HDFS (starts with hdfs://) or default FS is HDFS
    *
    * @param spark SparkSession for Hadoop configuration
    * @param hdfsPath Source path (can be HDFS or local)
@@ -28,8 +28,8 @@ object HDFSHelper {
     localPath: String
   ): Try[String] = {
 
-    // If not HDFS, return original path
-    if (!isHDFSPath(hdfsPath)) {
+    // If not HDFS and default FS is not HDFS, return original path
+    if (!isHDFSPath(hdfsPath) && !isDefaultFsHDFS(spark)) {
       println(s"[HDFSHelper] Path is already local: $hdfsPath")
       return Success(hdfsPath)
     }
@@ -101,10 +101,18 @@ object HDFSHelper {
   }
 
   /**
-   * Check if path is HDFS path
+   * Check if path is HDFS path or if the default filesystem is HDFS
    */
   def isHDFSPath(path: String): Boolean = {
     path.startsWith("hdfs://")
+  }
+
+  /**
+   * Check if the default filesystem is HDFS
+   */
+  def isDefaultFsHDFS(spark: SparkSession): Boolean = {
+    val defaultFS = spark.sparkContext.hadoopConfiguration.get("fs.defaultFS", "file:///")
+    defaultFS.startsWith("hdfs://")
   }
 
   /**

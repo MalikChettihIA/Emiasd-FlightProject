@@ -79,6 +79,7 @@ spark-submit \
   --executor-memory "$EXECUTOR_MEMORY" \
   --executor-cores "$EXECUTOR_CORES" \
   --num-executors "$NUM_EXECUTORS" \
+  --conf spark.task.cpus=4 \
   \
   `# ========================================================================` \
   `# SPARK MEMORY TUNING` \
@@ -128,6 +129,6 @@ spark-submit \
   --conf spark.eventLog.dir=/spark-events \
   --conf spark.eventLog.compress=true \
   \
-  --jars /apps/mlflow-client-3.4.0.jar,/apps/mlflow-spark_2.13-3.4.0.jar \
+  --jars /apps/mlflow-client-3.4.0.jar,/apps/mlflow-spark_2.13-3.4.0.jar,/apps/xgboost4j_2.12-3.1.1.jar,/apps/xgboost4j-spark_2.12-3.1.1.jar \
   /apps/Emiasd-Flight-Data-Analysis.jar \
   "$EXPERIENCE" "$TASKS"

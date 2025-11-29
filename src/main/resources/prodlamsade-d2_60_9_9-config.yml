@@ -1,7 +1,8 @@
 # Generated from local-d2_60_9_9-config.yml for prodlamsade environment
+# Environment variables: ${USER} will be replaced with the current user at runtime
 environment: "prodlamsade"
 profile: "prodlamsade"
-common: { seed: 42, log: true, logLevel: "info", loadDataFromCSV: true, storeIntoParquet: false, data: { basePath: "hdfs:///students/p6emiasd2025/hbalamou/data", flight: { path: "hdfs:///students/p6emiasd2025/hbalamou/data/Flights/*.csv" }, weather: { path: "hdfs:///students/p6emiasd2025/hbalamou/data/Weather/*.txt" }, airportMapping: { path: "hdfs:///students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv" } }, output: { basePath: "hdfs:///students/p6emiasd2025/hbalamou/output" }, mlflow: { enabled: true, trackingUri: "http://localhost:5000" } }
+common: { seed: 42, log: true, logLevel: "info", loadDataFromCSV: true, storeIntoParquet: false, data: { basePath: "hdfs:///students/p6emiasd2025/${USER}/data", flight: { path: "hdfs:///students/p6emiasd2025/${USER}/data/Flights/*.csv" }, weather: { path: "hdfs:///students/p6emiasd2025/${USER}/data/Weather/*.txt" }, airportMapping: { path: "hdfs:///students/p6emiasd2025/${USER}/data/wban_airport_timezone.csv" } }, output: { basePath: "hdfs:///students/p6emiasd2025/${USER}/output" }, mlflow: { enabled: true, trackingUri: "http://localhost:5000" } }
 experiments:
   - name: "Experience-lamsade-D2-60-9-9"
     description: "Baseline Random Forest with hyperparameters tuning"

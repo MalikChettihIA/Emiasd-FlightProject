@@ -1,4 +1,5 @@
 # Generated from local-d2_60_11_11-config.yml for prodlamsade environment
+# Environment variables: ${USER} will be replaced with the current user at runtime
 environment: "prodlamsade"
 profile: "prodlamsade"
 
@@ -13,16 +14,16 @@ common:
   storeIntoParquet: false
 
   data:
-    basePath: "hdfs:///students/p6emiasd2025/hbalamou/data"
+    basePath: "hdfs:///students/p6emiasd2025/${USER}/data"
     flight:
-      path: "hdfs:///students/p6emiasd2025/hbalamou/data/Flights/*.csv"
+      path: "hdfs:///students/p6emiasd2025/${USER}/data/Flights/*.csv"
     weather:
-      path: "hdfs:///students/p6emiasd2025/hbalamou/data/Weather/*.txt"
+      path: "hdfs:///students/p6emiasd2025/${USER}/data/Weather/*.txt"
     airportMapping:
-      path: "hdfs:///students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv"
+      path: "hdfs:///students/p6emiasd2025/${USER}/data/wban_airport_timezone.csv"
 
   output:
-    basePath: "hdfs:///students/p6emiasd2025/hbalamou/output"
+    basePath: "hdfs:///students/p6emiasd2025/${USER}/output"
 
   mlflow:
     enabled: true
