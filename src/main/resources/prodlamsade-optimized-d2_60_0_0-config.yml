@@ -1,36 +1,12 @@
-# src/main/resources/prod-config.yml
-environment: "prod"
-profile: "prod"
+# src/main/resources/local-config.yml
+environment: "prodlamsade"
+profile: "prodlamsade"
 
 # ============================================================================
-# PROFILES CONFIGURATION - Resource allocation per environment
-# ============================================================================
-profiles:
-  prod:
-    # Full resources for production training
-    spark:
-      driver:
-        memory: "40g"
-        cores: 10
-      executor:
-        memory: "16g"
-        cores: 6
-        instances: 2
-      sql:
-        shufflePartitions: 400
-        adaptiveEnabled: true
-    data:
-      sampleRatio: 1.0  # Use all data
-    ml:
-      cvFolds: 5
-      gridSearch: true
-    docker:
-      workers: 2
-
-# ============================================================================
-# COMMON CONFIGURATION - Production paths
+# COMMON CONFIGURATION - Shared across all experiments
 # ============================================================================
 common:
+  # Random seed for reproducibility across all experiments
   seed: 42
   log: true                   # Enable/disable all logging
   logLevel: "info"            # Minimum log level: debug, info, warn, error
@@ -38,23 +14,24 @@ common:
   storeIntoParquet: false  
 
   data:
-    basePath: "/data"
-    flight:
-      path: "gs://tough-artwork-475804-h0-flight-data/data/FLIGHT-3Y/Flights/*.csv"  # All years
-    weather:
-      path: "gs://tough-artwork-475804-h0-flight-data/data/FLIGHT-3Y/Weather/*.txt"  # All weather files
-    airportMapping:
-      path: "gs://tough-artwork-475804-h0-flight-data/data/FLIGHT-3Y/wban_airport_timezone.csv"
-
+    basePath: "hdfs:///students/p6emiasd2025/hbalamou/data"
+    flight :
+      path: "hdfs:///students/p6emiasd2025/hbalamou/data/Flights/*.csv"
+    weather :
+      path : "hdfs:///students/p6emiasd2025/hbalamou/data/Weather/*.txt"
+    airportMapping :
+      path : "hdfs:///students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv"
   output:
-    basePath: "gs://tough-artwork-475804-h0-flight-data/output"
+    basePath: "hdfs:///students/p6emiasd2025/hbalamou/output"
+    localPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/output"
 
   mlflow:
-    enabled: false
-    trackingUri: "gs://tough-artwork-475804-h0-flight-data/mlflow"
+    enabled: true
+    trackingUri: "http://localhost:5000"  # Utilise le nom du container et le port interne
 
+  scriptsPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/scripts"
 # ============================================================================
-# EXPERIMENTS - Production experiments
+# EXPERIMENTS - Each experiment has its own feature extraction and model config
 # ============================================================================
 experiments:
 
@@ -62,8 +39,8 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-local-base"
-    description: "Baseline Random Forest with hyperparameters tuning"
+  - name: "Experience-lamsade-D2-60-0-0"
+    description: "Random Forest with hyperparameters tuning and 8 hours weather data"
     enabled: true
     target: "is_delayed"
 
@@ -73,8 +50,8 @@ experiments:
       delayThresholdMin: 60
       storeJoinData: true
       storeExplodeJoinData: true
-      weatherOriginDepthHours: 3
-      weatherDestinationDepthHours: 3
+      weatherOriginDepthHours: -1
+      weatherDestinationDepthHours: -1
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
 

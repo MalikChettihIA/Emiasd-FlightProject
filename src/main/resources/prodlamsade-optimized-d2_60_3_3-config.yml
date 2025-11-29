@@ -12,22 +12,21 @@ common:
   storeIntoParquet: false
 
   data:
-
-    basePath: "hdfs:///students/p6emiasd2025/${USER}/data"
+    basePath: "hdfs:///students/p6emiasd2025/hbalamou/data"
     flight:
-      path: "hdfs:///students/p6emiasd2025/${USER}/data/Flights/*.csv"
+      path: "hdfs:///students/p6emiasd2025/hbalamou/data/Flights/*.csv"
     weather:
-      path: "hdfs:///students/p6emiasd2025/${USER}/data/Weather/*.txt"
+      path: "hdfs:///students/p6emiasd2025/hbalamou/data/Weather/*.txt"
     airportMapping:
-      path: "hdfs:///students/p6emiasd2025/${USER}/data/wban_airport_timezone.csv"
+      path: "hdfs:///students/p6emiasd2025/hbalamou/data/wban_airport_timezone.csv"
   output:
-    basePath: "hdfs:///students/p6emiasd2025/${USER}/output"
-    localPath: "/opt/cephfs/users/students/p6emiasd2025/${USER}/workspace/output"
+    basePath: "hdfs:///students/p6emiasd2025/hbalamou/output"
+    localPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/output"
 
   mlflow:
     enabled: true
     trackingUri: "http://localhost:5000"
-  scriptsPath: "/opt/cephfs/users/students/p6emiasd2025/${USER}/workspace/scripts"
+  scriptsPath: "/opt/cephfs/users/students/p6emiasd2025/hbalamou/workspace/scripts"
 
 # ============================================================================
 # EXPERIMENTS - Each experiment has its own feature extraction and model config
@@ -38,7 +37,7 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-lamsade-D2-60-1-1"
+  - name: "Experience-optimized-prodlamsade-D2-60-3-3"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
@@ -48,8 +47,8 @@ experiments:
       delayThresholdMin: 60
       storeJoinData: false
       storeExplodeJoinData: false
-      weatherOriginDepthHours: 1
-      weatherDestinationDepthHours: 1
+      weatherOriginDepthHours: 3
+      weatherDestinationDepthHours: 3
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
       flightSelectedFeatures:
