@@ -23,10 +23,21 @@ echo "Timestamp: $(date)"
 echo "Log file: $LOG_FILE"
 echo -e "${BLUE}================================================================================================${NC}\n"
 
+# Clean directories
+hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/Experience*
+#hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/common
+hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/spark-checkpoints/*
+#hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/spark-events/*
+echo "Timestamp: $(date)"
+echo "HDFS Files cleaned"
+echo -e "${BLUE}================================================================================================${NC}\n"
+
 # Définir les tâches (peut être surchargé par argument)
 TASKS="${1:-data-pipeline,feature-extraction,train}"
+EXPERIENCE="${2:-prodlamsade-d2_60_0_0}"
 
 echo -e "${GREEN}Tasks to execute:${NC} $TASKS"
+echo -e "${GREEN}Experience to execute:${NC} $EXPERIENCE"
 echo ""
 
 # Fonction pour nettoyer à la sortie
@@ -44,15 +55,15 @@ spark-submit \
   --master yarn \
   --deploy-mode client \
   --class com.flightdelay.app.FlightDelayPredictionApp \
-  --files prodlamsade-config.yml \
   --driver-memory 16G \
   --driver-cores 4 \
   --executor-memory 8G \
   --num-executors 4 \
   --conf spark.driver.maxResultSize=2g \
+  --conf spark.yarn.stagingDir=hdfs:///students/p6emiasd2025/${USER}/.sparkStaging \
   --jars ./apps/mlflow-client-3.4.0.jar,./apps/mlflow-spark_2.13-3.4.0.jar \
   ./apps/Emiasd-Flight-Data-Analysis.jar \
-  prodlamsade "$TASKS" 2>&1 | tee "$LOG_FILE"
+  $EXPERIENCE "$TASKS" 2>&1 | tee "$LOG_FILE"
 
 # Créer un lien vers le dernier log
 ln -sf "$LOG_FILE" "$LATEST_LOG"

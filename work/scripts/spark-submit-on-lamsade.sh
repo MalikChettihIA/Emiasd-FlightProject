@@ -11,6 +11,8 @@ hdfs dfs -rm -r -skipTrash /students/p6emiasd2025/mchettih/output/spark-checkpoi
 TASKS="${1:-data-pipeline,feature-extraction,train}"
 EXPERIENCE="${2:-prodlamsade-d2_60_0_0}"
 
+echo "- Tasks: $TASKS"
+echo "- Experience: $EXPERIENCE"
 
 spark-submit \
   --deploy-mode client \

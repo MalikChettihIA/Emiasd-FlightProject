@@ -2,12 +2,14 @@
 # Environment variables: ${USER} will be replaced with the current user at runtime
 environment: "prodlamsade"
 profile: "prodlamsade"
+
 common:
   seed: 42
   log: true
   logLevel: "info"
-  loadDataFromCSV: true
+  loadDataFromCSV: false
   storeIntoParquet: false
+
   data:
     basePath: "hdfs:///students/p6emiasd2025/${USER}/data"
     flight:
@@ -16,16 +18,25 @@ common:
       path: "hdfs:///students/p6emiasd2025/${USER}/data/Weather/*.txt"
     airportMapping:
       path: "hdfs:///students/p6emiasd2025/${USER}/data/wban_airport_timezone.csv"
+
   output:
     basePath: "hdfs:///students/p6emiasd2025/${USER}/output"
+    localPath: "/opt/cephfs/users/students/p6emiasd2025/${USER}/workspace/output"
+
   mlflow:
-    enabled: false
-    trackingUri: "http://localhost:5000"
+    enabled: true
+    trackingUri: "http://localhost:5000"  # Utilise le nom du container et le port interne
+
+  # Path to Python visualization scripts
+  scriptsPath: "/opt/cephfs/users/students/p6emiasd2025/${USER}/workspace/scripts"
+
 experiments:
+
   - name: "Experience-lamsade-D2-60-0-0"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
+
     featureExtraction:
       type: "feature_selection"
       dxCol: "D2_60"
@@ -36,6 +47,7 @@ experiments:
       weatherDestinationDepthHours: -1
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
+
       flightSelectedFeatures:
         CRS_DEP_TIME: { transformation: "None" }
         OP_CARRIER_AIRLINE_ID: { transformation: "StringIndexer" }
@@ -48,6 +60,7 @@ experiments:
         feature_flight_week_of_year_cos: { transformation: "None" }
         feature_departure_time_period: { transformation: "StringIndexer" }
         feature_arrival_time_period: { transformation: "StringIndexer" }
+
       weatherSelectedFeatures:
         feature_weather_type: { transformation: "StringIndexer" }
         feature_weather_intensity: { transformation: "StringIndexer" }
@@ -64,6 +77,7 @@ experiments:
         Visibility_Delta_1hr: { transformation: "None" }
         Humidity_Delta_1hr: { transformation: "None" }
         WindSpeed_Delta_1hr: { transformation: "None" }
+
       aggregatedSelectedFeatures:
         HourlyPrecip: { aggregation: "sum", transformation: "None" }
         RelativeHumidity: { aggregation: "avg", transformation: "None" }

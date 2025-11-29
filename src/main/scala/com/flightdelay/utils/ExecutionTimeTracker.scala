@@ -102,6 +102,43 @@ class ExecutionTimeTracker {
   }
 
   /**
+   * Display summary table for data processing only (for global tracker)
+   */
+  def displayDataProcessingSummary(): Unit = {
+    val separator = "=" * 90
+    val lineSeparator = "-" * 90
+
+    println(separator)
+    println("DATA PROCESSING EXECUTION TIME SUMMARY")
+    println(separator)
+    println(f"${"Step"}%-50s ${"Time (s)"}%15s ${"Time (min)"}%15s")
+    println(lineSeparator)
+
+    // Only data processing steps
+    val stepOrder = Seq(
+      ("data_processing.load_flights", "Load Flights"),
+      ("data_processing.load_weather", "Load Weather"),
+      ("data_processing.load_wban", "Load WBAN Mapping"),
+      ("data_processing.preprocess_flights", "Preprocess Flights"),
+      ("data_processing.preprocess_weather", "Preprocess Weather"),
+      ("data_processing.filter_columns", "Filter Columns"),
+      ("data_processing.save_parquet", "Save to Parquet")
+    )
+
+    stepOrder.foreach { case (stepKey, stepLabel) =>
+      val time = executionTimes.getOrElse(stepKey, Double.NaN)
+      val timeStr = formatTime(time)
+      val timeMinStr = if (time.isNaN) "NA" else f"${time / 60}%.2f"
+      println(f"$stepLabel%-50s ${timeStr}%15s ${timeMinStr}%15s")
+    }
+
+    val totalTime = executionTimes.getOrElse("data_processing.total", Double.NaN)
+    println(lineSeparator)
+    println(f"${"DATA PROCESSING - TOTAL"}%-50s ${formatTime(totalTime)}%15s ${if (totalTime.isNaN) "NA" else f"${totalTime / 60}%.2f"}%15s")
+    println(separator)
+  }
+
+  /**
    * Display a summary table in the console
    */
   def displaySummaryTable(): Unit = {

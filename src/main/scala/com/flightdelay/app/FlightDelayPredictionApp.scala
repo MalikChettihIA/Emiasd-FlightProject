@@ -75,6 +75,9 @@ object FlightDelayPredictionApp {
 
     info(s"Tasks to execute: ${tasks.mkString(", ")}")
 
+    // Keep reference to last experiment tracker to display summary at the end
+    var lastExperimentTimeTracker: Option[ExecutionTimeTracker] = None
+
     try {
 
       // =====================================================================================
@@ -130,6 +133,9 @@ object FlightDelayPredictionApp {
           }
 
           runExperiment(experiment, tasks, flightData, weatherData, experimentTimeTracker)
+
+          // Keep reference for final summary display
+          lastExperimentTimeTracker = Some(experimentTimeTracker)
         } catch {
           case ex: Exception =>
             error("=" * 80)
@@ -163,32 +169,24 @@ object FlightDelayPredictionApp {
       info(f"Total execution time: ${totalAppDuration}%.2f seconds (${totalAppDuration / 60}%.2f minutes)")
       info("=" * 80)
 
-      // Display global execution time summary table (data processing only)
+      // Display complete execution time summary from last experiment
       info("")
       info("=" * 90)
-      info("DISPLAYING GLOBAL EXECUTION TIME SUMMARY (DATA PROCESSING)")
+      info("EXECUTION TIME SUMMARY")
       info("=" * 90)
-      globalTimeTracker.displaySummaryTable()
-
-      // Save global execution time metrics to CSV and TXT (common level)
-      try {
-        val commonMetricsPath = s"${configuration.common.output.basePath}/execution_time_metrics"
-        info("=" * 90)
-        info("SAVING GLOBAL EXECUTION TIME METRICS (COMMON LEVEL)")
-        info("=" * 90)
-        info(s"  Saving to: $commonMetricsPath")
-
-        globalTimeTracker.saveToCSV(s"$commonMetricsPath/execution_times.csv")
-        info(s"  - CSV file saved: $commonMetricsPath/execution_times.csv")
-
-        globalTimeTracker.saveToText(s"$commonMetricsPath/execution_times.txt")
-        info(s"  - TXT file saved: $commonMetricsPath/execution_times.txt")
-
-        info("=" * 90)
-      } catch {
-        case ex: Exception =>
-          error(s"Error saving global execution time metrics: ${ex.getMessage}")
-          ex.printStackTrace()
+      lastExperimentTimeTracker match {
+        case Some(tracker) =>
+          tracker.displaySummaryTable()
+          info("")
+          info("=" * 90)
+          info("NOTE: Execution time metrics are also saved in the experiment directory:")
+          enabledExperiments.headOption.foreach { exp =>
+            info(s"  - ${configuration.common.output.basePath}/${exp.name}/execution_time/")
+          }
+          info("=" * 90)
+        case None =>
+          info("No experiments were executed")
+          info("=" * 90)
       }
 
       spark.stop()
@@ -270,27 +268,9 @@ object FlightDelayPredictionApp {
     }
 
     // =====================================================================================
-    // Save execution time metrics at experiment level
+    // NOTE: Execution time metrics are saved by MLPipeline in the experiment directory
+    // before HDFS->local copy, so they are available for MLFlow logging
     // =====================================================================================
-    try {
-      val experimentMetricsPath = s"${configuration.common.output.basePath}/${experiment.name}/execution_time"
-      info("=" * 90)
-      info(s"SAVING EXECUTION TIME METRICS FOR ${experiment.name}")
-      info("=" * 90)
-      info(s"  Saving to: $experimentMetricsPath")
-
-      timeTracker.saveToCSV(s"$experimentMetricsPath/execution_times.csv")
-      info(s"  - CSV file saved: $experimentMetricsPath/execution_times.csv")
-
-      timeTracker.saveToText(s"$experimentMetricsPath/execution_times.txt")
-      info(s"  - TXT file saved: $experimentMetricsPath/execution_times.txt")
-
-      info("=" * 90)
-    } catch {
-      case ex: Exception =>
-        error(s"Error saving execution time metrics for ${experiment.name}: ${ex.getMessage}")
-        ex.printStackTrace()
-    }
 
   }
 

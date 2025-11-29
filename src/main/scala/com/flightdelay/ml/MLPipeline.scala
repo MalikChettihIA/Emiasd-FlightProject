@@ -462,6 +462,16 @@ object MLPipeline {
         timeTracker.getStepTime("ml_save_metrics")
       ).flatten.filterNot(_.isNaN).sum
       timeTracker.setStepTime("ml.total", mlTotal)
+
+      // Save execution time metrics to HDFS first (before copying to local)
+      val execTimeBasePathHDFS = s"$experimentOutputPath/execution_time"
+      val execTimeCsvPathHDFS = s"$execTimeBasePathHDFS/execution_times.csv"
+      val execTimeTxtPathHDFS = s"$execTimeBasePathHDFS/execution_times.txt"
+
+      info("   Saving execution time metrics to HDFS/filesystem...")
+      timeTracker.saveToCSV(execTimeCsvPathHDFS)
+      timeTracker.saveToText(execTimeTxtPathHDFS)
+      info(s"   - Execution time metrics saved to: $execTimeBasePathHDFS")
     }
 
     // Copy HDFS to local if localPath is configured (for visualization and MLFlow)
@@ -541,20 +551,13 @@ object MLPipeline {
         info(s"   Visualization plots saved to MLFlow: plots/")
       }
 
-      // 6. Log execution time metrics if tracker is provided
+      // 6. Log execution time metrics to MLFlow (already saved to HDFS/filesystem and copied to local)
       if (timeTracker != null) {
-        // Save execution time metrics to files
         val execTimeBasePath = s"$localExperimentPath/execution_time"
-        val execTimeCsvPath = s"$execTimeBasePath/execution_times.csv"
-        val execTimeTxtPath = s"$execTimeBasePath/execution_times.txt"
 
-        // Save files (directory creation handled inside saveToCSV/saveToText with Hadoop FileSystem API)
-        timeTracker.saveToCSV(execTimeCsvPath)
-        timeTracker.saveToText(execTimeTxtPath)
-
-        // Log to MLFlow
+        // Log execution_time directory to MLFlow (files already exist from HDFS copy)
         MLFlowTracker.logArtifactWithPath(rid, execTimeBasePath, "execution_time")
-        info(s"   Execution time metrics saved to MLFlow: execution_time/")
+        info(s"   Execution time metrics logged to MLFlow: execution_time/")
 
         // Also log individual execution time metrics as MLFlow metrics
         timeTracker.getAllTimes.foreach { case (stepName, time) =>
@@ -563,7 +566,7 @@ object MLPipeline {
             MLFlowTracker.logMetric(rid, metricName, time)
           }
         }
-        info(s"   Execution time metrics logged to MLFlow as individual metrics")
+        info(s"   Individual execution time metrics logged to MLFlow")
       }
     }
 
