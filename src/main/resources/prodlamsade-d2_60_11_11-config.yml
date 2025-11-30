@@ -1,11 +1,8 @@
-# Generated from local-d2_60_11_11-config.yml for prodlamsade environment
+# Generated from local-d2_60_0_0-config.yml for prodlamsade environment
 # Environment variables: ${USER} will be replaced with the current user at runtime
 environment: "prodlamsade"
 profile: "prodlamsade"
 
-# ============================================================================
-# COMMON CONFIGURATION - Shared across all experiments
-# ============================================================================
 common:
   seed: 42
   log: true
@@ -24,93 +21,68 @@ common:
 
   output:
     basePath: "hdfs:///students/p6emiasd2025/${USER}/output"
+    localPath: "/opt/cephfs/users/students/p6emiasd2025/${USER}/workspace/output"
 
   mlflow:
     enabled: true
-    trackingUri: "http://localhost:5000"
+    trackingUri: "http://localhost:5000"  # Utilise le nom du container et le port interne
+
+  # Path to Python visualization scripts
+  scriptsPath: "/opt/cephfs/users/students/p6emiasd2025/${USER}/workspace/scripts"
 
 experiments:
-  - name: "Experience-lamsade-D2-60-11-11"
+
+  - name: "Experience-lamsade-d2-60-11-11"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
+
     featureExtraction:
       type: "feature_selection"
       dxCol: "D2_60"
       delayThresholdMin: 60
       storeJoinData: false
       storeExplodeJoinData: false
-      weatherOriginDepthHours: 11
+      weatherOriginDepthHours: 11  
       weatherDestinationDepthHours: 11
       maxCategoricalCardinality: 280
       handleInvalid: "keep"
+
       flightSelectedFeatures:
-        CRS_DEP_TIME:
-          transformation: "None"
-        OP_CARRIER_AIRLINE_ID:
-          transformation: "StringIndexer"
-        ORIGIN_AIRPORT_ID:
-          transformation: "StringIndexer"
-        DEST_AIRPORT_ID:
-          transformation: "StringIndexer"
-        CRS_ELAPSED_TIME:
-          transformation: "None"
-        feature_departure_hour_rounded_sin:
-          transformation: "None"
-        feature_departure_hour_rounded_cos:
-          transformation: "None"
-        feature_flight_week_of_year_sin:
-          transformation: "None"
-        feature_flight_week_of_year_cos:
-          transformation: "None"
-        feature_departure_time_period:
-          transformation: "StringIndexer"
-        feature_arrival_time_period:
-          transformation: "StringIndexer"
+        CRS_DEP_TIME: { transformation: "None" }
+        OP_CARRIER_AIRLINE_ID: { transformation: "StringIndexer" }
+        ORIGIN_AIRPORT_ID: { transformation: "StringIndexer" }
+        DEST_AIRPORT_ID: { transformation: "StringIndexer" }
+        CRS_ELAPSED_TIME: { transformation: "None" }
+        feature_departure_hour_rounded_sin: { transformation: "None" }
+        feature_departure_hour_rounded_cos: { transformation: "None" }
+        feature_flight_week_of_year_sin: { transformation: "None" }
+        feature_flight_week_of_year_cos: { transformation: "None" }
+        feature_departure_time_period: { transformation: "StringIndexer" }
+        feature_arrival_time_period: { transformation: "StringIndexer" }
+
       weatherSelectedFeatures:
-        feature_weather_type:
-          transformation: "StringIndexer"
-        feature_weather_intensity:
-          transformation: "StringIndexer"
-        feature_flight_category_ordinal:
-          transformation: "None"
-        feature_visibility_category:
-          transformation: "StringIndexer"
-        feature_icing_risk_level:
-          transformation: "None"
-        feature_icing_risk_flag:
-          transformation: "None"
-        feature_is_pressure_dropping_fast:
-          transformation: "None"
-        HourlyPrecip:
-          transformation: "None"
-        RelativeHumidity:
-          transformation: "None"
-        press_change_abs:
-          transformation: "None"
-        feature_temp_dewpoint_spread:
-          transformation: "None"
-        Temp_Delta_1hr:
-          transformation: "None"
-        Visibility_Delta_1hr:
-          transformation: "None"
-        Humidity_Delta_1hr:
-          transformation: "None"
-        WindSpeed_Delta_1hr:
-          transformation: "None"
+        feature_weather_type: { transformation: "StringIndexer" }
+        feature_weather_intensity: { transformation: "StringIndexer" }
+        feature_flight_category_ordinal: { transformation: "None" }
+        feature_visibility_category: { transformation: "StringIndexer" }
+        feature_icing_risk_level: { transformation: "None" }
+        feature_icing_risk_flag: { transformation: "None" }
+        feature_is_pressure_dropping_fast: { transformation: "None" }
+        HourlyPrecip: { transformation: "None" }
+        RelativeHumidity: { transformation: "None" }
+        press_change_abs: { transformation: "None" }
+        feature_temp_dewpoint_spread: { transformation: "None" }
+        Temp_Delta_1hr: { transformation: "None" }
+        Visibility_Delta_1hr: { transformation: "None" }
+        Humidity_Delta_1hr: { transformation: "None" }
+        WindSpeed_Delta_1hr: { transformation: "None" }
+
       aggregatedSelectedFeatures:
-        HourlyPrecip:
-          aggregation: "sum"
-          transformation: "None"
-        RelativeHumidity:
-          aggregation: "avg"
-          transformation: "None"
-        press_change_abs:
-          aggregation: "max"
-          transformation: "None"
-        feature_temp_dewpoint_spread:
-          aggregation: "min"
-          transformation: "None"
+        HourlyPrecip: { aggregation: "sum", transformation: "None" }
+        RelativeHumidity: { aggregation: "avg", transformation: "None" }
+        press_change_abs: { aggregation: "max", transformation: "None" }
+        feature_temp_dewpoint_spread: { aggregation: "min", transformation: "None" }
     model:
       modelType: "randomforest"
       hyperparameters:
@@ -123,8 +95,5 @@ experiments:
         impurity: "gini"
     train:
       trainRatio: 0.75
-      crossValidation:
-        numFolds: 4
-      gridSearch:
-        enabled: true
-        evaluationMetric: "f1"
+      crossValidation: { numFolds: 4 }
+      gridSearch: { enabled: true, evaluationMetric: "f1" }
