@@ -7,7 +7,7 @@ common:
   seed: 42
   log: true
   logLevel: "info"
-  loadDataFromCSV: false
+  loadDataFromCSV: true
   storeIntoParquet: false
 
   data:
@@ -32,7 +32,7 @@ common:
 
 experiments:
 
-  - name: "Experience-lamsade-D2-60-0-0"
+  - name: "Experience-lamsade-d2-60-0-0"
     description: "Baseline Random Forest with hyperparameters tuning"
     enabled: true
     target: "is_delayed"
