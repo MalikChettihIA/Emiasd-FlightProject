@@ -45,14 +45,30 @@ object FlightDelayPredictionApp {
       // .master("local[*]")
       .config("spark.sql.adaptive.enabled", "true")
       .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+      .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .config("spark.kryoserializer.buffer.max", "512m")
       .getOrCreate()
 
-    //Set CheckPoint Dir - Use Hadoop-compatible path
-    val checkpointDir = s"${configuration.common.output.basePath}/spark-checkpoints"
-    val fs = org.apache.hadoop.fs.FileSystem.get(spark.sparkContext.hadoopConfiguration)
+    //Set CheckPoint Dir - Use HDFS on Dataproc/YARN, otherwise use configured basePath
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val defaultFs = hadoopConf.get("fs.defaultFS", "file:///")
+    val master = spark.sparkContext.getConf.get("spark.master", "")
+    
+    val checkpointDir = if (defaultFs.startsWith("hdfs://") || master.contains("yarn")) {
+      // On Dataproc/YARN, use HDFS for checkpoints (better performance)
+      // Use a unique directory based on timestamp to avoid conflicts
+      val timestamp = System.currentTimeMillis()
+      s"/tmp/spark-checkpoints-${timestamp}"
+    } else {
+      // Local or other environments, use configured basePath
+      s"${configuration.common.output.basePath}/spark-checkpoints"
+    }
+    
+    val fs = org.apache.hadoop.fs.FileSystem.get(hadoopConf)
     val checkpointPath = new org.apache.hadoop.fs.Path(checkpointDir)
     val qualifiedCheckpointPath = fs.makeQualified(checkpointPath)
     spark.sparkContext.setCheckpointDir(qualifiedCheckpointPath.toString)
+    info(s"Checkpoint directory set to: ${qualifiedCheckpointPath.toString}")
 
     // Réduire les logs pour plus de clarté
     spark.sparkContext.setLogLevel("WARN")
@@ -267,10 +283,11 @@ object FlightDelayPredictionApp {
       warn(s"[FlightDelayPredictionApp][STEP 3] Training model for ${experiment.name}... SKIPPED")
     }
 
-    // =====================================================================================
-    // NOTE: Execution time metrics are saved by MLPipeline in the experiment directory
-    // before HDFS->local copy, so they are available for MLFlow logging
-    // =====================================================================================
+    // OPTIMIZATION: Explicitly unpersist data to free memory for the next experiment
+    // This is critical to avoid OOM (Exit 137) when running multiple experiments
+    info(s"Unpersisting data for experiment ${experiment.name}...")
+    trainData.unpersist()
+    testData.unpersist()
 
   }
 

@@ -162,7 +162,7 @@ object FeaturePipeline {
       val joinStepName = if (datasetName == "TRAIN") "join.train" else "join.test"
       if (timeTracker != null) timeTracker.startStep(joinStepName)
       var stepStartTime = System.currentTimeMillis()
-      val joinedData = join(flightData, weatherData, experiment).cache()
+      val joinedData = join(flightData, weatherData, experiment)
       var stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
       if (timeTracker != null) timeTracker.endStep(joinStepName)
       debug(s"[$datasetName] Join completed in ${stepDuration}s - ${joinedData.count()} lines")
@@ -171,7 +171,7 @@ object FeaturePipeline {
       val explodeStepName = if (datasetName == "TRAIN") "explode.train" else "explode.test"
       if (timeTracker != null) timeTracker.startStep(explodeStepName)
       stepStartTime = System.currentTimeMillis()
-      val explodedData = explose(joinedData, experiment).cache()
+      val explodedData = explose(joinedData, experiment)
       stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
       if (timeTracker != null) timeTracker.endStep(explodeStepName)
       debug(s"[$datasetName] Explode completed in ${stepDuration}s - ${explodedData.count()} lines")

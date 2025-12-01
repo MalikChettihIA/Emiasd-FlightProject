@@ -253,12 +253,14 @@ class ExecutionTimeTracker {
       csvContent.append(s"$stepLabel,$timeStr,$timeMinStr,$status\n")
     }
 
-    // Write using Hadoop FileSystem (HDFS-compatible)
-    val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
-    val csvPath = new Path(path)
+    // Write using Hadoop FileSystem, resolving FS from the target path.
+    // This keeps the original behavior on HDFS/local while supporting schemes like gs:// on Dataproc.
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val rawPath = new Path(path)
+    val fs = rawPath.getFileSystem(hadoopConf)
 
-    // Ensure the path is properly qualified for the current filesystem (local or HDFS)
-    val qualifiedPath = fs.makeQualified(csvPath)
+    // Ensure the path is properly qualified for the resolved filesystem
+    val qualifiedPath = fs.makeQualified(rawPath)
 
     // Create parent directories if they don't exist
     val parentPath = qualifiedPath.getParent
@@ -344,12 +346,14 @@ class ExecutionTimeTracker {
     txtContent.append(s"\nGenerated: ${java.time.LocalDateTime.now()}\n")
     txtContent.append(separator).append("\n")
 
-    // Write using Hadoop FileSystem (HDFS-compatible)
-    val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
-    val txtPath = new Path(path)
+    // Write using Hadoop FileSystem, resolving FS from the target path.
+    // This keeps the original behavior on HDFS/local while supporting schemes like gs:// on Dataproc.
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val rawPath = new Path(path)
+    val fs = rawPath.getFileSystem(hadoopConf)
 
-    // Ensure the path is properly qualified for the current filesystem (local or HDFS)
-    val qualifiedPath = fs.makeQualified(txtPath)
+    // Ensure the path is properly qualified for the resolved filesystem
+    val qualifiedPath = fs.makeQualified(rawPath)
 
     // Create parent directories if they don't exist
     val parentPath = qualifiedPath.getParent

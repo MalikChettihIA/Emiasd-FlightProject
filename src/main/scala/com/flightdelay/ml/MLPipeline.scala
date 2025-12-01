@@ -367,9 +367,10 @@ object MLPipeline {
         report.append("  destination_weather_  = dst_w_\n")
         report.append("  feature_              = f_\n")
 
-        // Write report to file using Hadoop FileSystem
-        val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+        // Write report to file using Hadoop FileSystem (GCS/HDFS-compatible)
         val reportPathObj = new org.apache.hadoop.fs.Path(reportPath)
+        // Get the filesystem that matches the path URI (GCS, HDFS, or local)
+        val fs = FileSystem.get(reportPathObj.toUri, spark.sparkContext.hadoopConfiguration)
         val out = fs.create(reportPathObj, true)
         val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
         try {
@@ -880,13 +881,16 @@ object MLPipeline {
     summary.append(s"Generated: ${java.time.LocalDateTime.now()}\n")
     summary.append("=" * 100 + "\n")
 
-    // Write to file using Hadoop FileSystem (HDFS-compatible)
-    val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+    // Write to file using Hadoop FileSystem, resolving FS from the target path
+    // This allows using HDFS locally and GCS (gs://) seamlessly on Dataproc.
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
     val metricsDirPath = new Path(metricsPath)
+    val fs = metricsDirPath.getFileSystem(hadoopConf)
+
     if (!fs.exists(metricsDirPath)) {
       fs.mkdirs(metricsDirPath)
     }
-    
+
     val summaryPath = new Path(summaryFile)
     val out = fs.create(summaryPath, true)
     val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))

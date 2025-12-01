@@ -433,8 +433,9 @@ object FeatureExtractor {
 
     // Save feature names if feature selection is enabled
     if (experiment.featureExtraction.isFeatureSelectionEnabled) {
-      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
       val featuresDirPath = new Path(s"${experimentOutputPath}/features")
+      // Get the filesystem that matches the path URI (GCS, HDFS, or local)
+      val fs = FileSystem.get(featuresDirPath.toUri, spark.sparkContext.hadoopConfiguration)
       if (!fs.exists(featuresDirPath)) {
         fs.mkdirs(featuresDirPath)
       }

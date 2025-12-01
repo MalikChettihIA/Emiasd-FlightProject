@@ -180,11 +180,12 @@ class LogisticRegressionModel(experiment: ExperimentConfig) extends MLModel {
     val interceptRow = s"-1,INTERCEPT,$intercept,${math.abs(intercept)}"
     val csvContent = (header +: (interceptRow +: rows)).mkString("\n")
 
-    // Write to file using Hadoop FileSystem (HDFS-compatible)
+    // Write to file using Hadoop FileSystem (GCS/HDFS-compatible)
     try {
       val spark = org.apache.spark.sql.SparkSession.active
-      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
       val outputPathObj = new Path(outputPath)
+      // Get the filesystem that matches the path URI (GCS, HDFS, or local)
+      val fs = FileSystem.get(outputPathObj.toUri, spark.sparkContext.hadoopConfiguration)
       val parentDir = outputPathObj.getParent
       if (parentDir != null && !fs.exists(parentDir)) {
         fs.mkdirs(parentDir)
