@@ -51,3 +51,4 @@ work/notebooks/Flights/DataExploration/OT/weather_2012Jan.parquet
 work/notebooks/Flights/DataExploration/OT/WindChar_dist.csv
 /work/spark-events
 work/apps/Emiasd-Flight-Data-Analysis.jar
+*.zip
