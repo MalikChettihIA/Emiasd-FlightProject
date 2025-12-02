@@ -1,0 +1,126 @@
+# src/main/resources/prod-config.yml
+environment: "prod"
+profile: "prod"
+
+# ============================================================================
+# PROFILES CONFIGURATION - Resource allocation per environment
+# ============================================================================
+profiles:
+  prod:
+    # Full resources for production training
+    spark:
+      driver:
+        memory: "40g"
+        cores: 10
+      executor:
+        memory: "16g"
+        cores: 6
+        instances: 2
+      sql:
+        shufflePartitions: 400
+        adaptiveEnabled: true
+    data:
+      sampleRatio: 1.0  # Use all data
+    ml:
+      cvFolds: 5
+      gridSearch: true
+    docker:
+      workers: 2
+
+# ============================================================================
+# COMMON CONFIGURATION - Production paths
+# ============================================================================
+common:
+  seed: 42
+  log: true                   # Enable/disable all logging
+  logLevel: "info"            # Minimum log level: debug, info, warn, error
+  loadDataFromCSV: true      # If true: load from CSV/TXT; if false: load from raw parquet
+  storeIntoParquet: false  
+
+  data:
+    basePath: "/data"
+    flight:
+      path: "gs://tough-artwork-475804-h0-flight-data/data/FLIGHT-3Y/Flights/*.csv"  # All years
+    weather:
+      path: "gs://tough-artwork-475804-h0-flight-data/data/FLIGHT-3Y/Weather/*.txt"  # All weather files
+    airportMapping:
+      path: "gs://tough-artwork-475804-h0-flight-data/data/FLIGHT-3Y/wban_airport_timezone.csv"
+
+  output:
+    basePath: "gs://tough-artwork-475804-h0-flight-data/output"
+    localPath: "gs://tough-artwork-475804-h0-flight-data/output"
+
+  mlflow:
+    enabled: false
+    trackingUri: "gs://tough-artwork-475804-h0-flight-data/mlflow"
+
+# ============================================================================
+# EXPERIMENTS - Production experiments
+# ============================================================================
+experiments:
+
+  - name: "Experience-dataproc-d2-60-3-3"
+    description: "Baseline Random Forest with hyperparameters tuning"
+    enabled: true
+    target: "is_delayed"
+
+    featureExtraction:
+      type: "feature_selection"
+      dxCol: "D2_60"
+      delayThresholdMin: 60
+      storeJoinData: false
+      storeExplodeJoinData: false
+      weatherOriginDepthHours: 3
+      weatherDestinationDepthHours: 3
+      maxCategoricalCardinality: 280
+      handleInvalid: "keep"
+
+      flightSelectedFeatures:
+        CRS_DEP_TIME: { transformation: "None" }
+        OP_CARRIER_AIRLINE_ID: { transformation: "StringIndexer" }
+        ORIGIN_AIRPORT_ID: { transformation: "StringIndexer" }
+        DEST_AIRPORT_ID: { transformation: "StringIndexer" }
+        CRS_ELAPSED_TIME: { transformation: "None" }
+        feature_departure_hour_rounded_sin: { transformation: "None" }
+        feature_departure_hour_rounded_cos: { transformation: "None" }
+        feature_flight_week_of_year_sin: { transformation: "None" }
+        feature_flight_week_of_year_cos: { transformation: "None" }
+        feature_departure_time_period: { transformation: "StringIndexer" }
+        feature_arrival_time_period: { transformation: "StringIndexer" }
+
+      weatherSelectedFeatures:
+        feature_weather_type: { transformation: "StringIndexer" }
+        feature_weather_intensity: { transformation: "StringIndexer" }
+        feature_flight_category_ordinal: { transformation: "None" }
+        feature_visibility_category: { transformation: "StringIndexer" }
+        feature_icing_risk_level: { transformation: "None" }
+        feature_icing_risk_flag: { transformation: "None" }
+        feature_is_pressure_dropping_fast: { transformation: "None" }
+        HourlyPrecip: { transformation: "None" }
+        RelativeHumidity: { transformation: "None" }
+        press_change_abs: { transformation: "None" }
+        feature_temp_dewpoint_spread: { transformation: "None" }
+        Temp_Delta_1hr: { transformation: "None" }
+        Visibility_Delta_1hr: { transformation: "None" }
+        Humidity_Delta_1hr: { transformation: "None" }
+        WindSpeed_Delta_1hr: { transformation: "None" }
+
+      aggregatedSelectedFeatures:
+        HourlyPrecip: { aggregation: "sum", transformation: "None" }
+        RelativeHumidity: { aggregation: "avg", transformation: "None" }
+        press_change_abs: { aggregation: "max", transformation: "None" }
+        feature_temp_dewpoint_spread: { aggregation: "min", transformation: "None" }
+    model:
+      modelType: "randomforest"
+      hyperparameters:
+        numTrees: [15]
+        maxDepth: [10]
+        maxBins: [280]
+        minInstancesPerNode: [5]
+        subsamplingRate: [1.0]
+        featureSubsetStrategy: ["all"]
+        impurity: "gini"
+    train:
+      trainRatio: 0.75
+      crossValidation: { numFolds: 4 }
+      gridSearch: { enabled: true, evaluationMetric: "f1" }
