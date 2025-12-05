@@ -2,7 +2,7 @@
 
 # Configuration des workers (2w ou 4w)
 WORKERS="${1:-4w}"
-TASKS="${2:- }"
+TASKS="${2:-data-pipeline,feature-extraction,train}"
 EXPERIENCE="${3:-local-d2_60_0_0}"
 
 if [[ "$WORKERS" != "1w" && "$WORKERS" != "2w" && "$WORKERS" != "4w" ]]; then

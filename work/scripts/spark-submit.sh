@@ -49,15 +49,15 @@ elif [ "$WORKERS" = "2w" ]; then
     EXECUTOR_CORES="4"
     NUM_EXECUTORS="2"
     SHUFFLE_PARTITIONS="200"
-    echo "✅ Spark config: 2 executors × 8G × 4 cores"
+    echo "✅ Spark config: 2 executors × 15G × 4 cores"
     echo "   Bon compromis parallélisme / mémoire (~24G total avec le driver)"
 else
     # 4 workers → 4 petits exécuteurs (plus de parallélisme, moins de mémoire chacun)
-    EXECUTOR_MEMORY="4G"
+    EXECUTOR_MEMORY="10G"
     EXECUTOR_CORES="3"
     NUM_EXECUTORS="4"
     SHUFFLE_PARTITIONS="240"
-    echo "✅ Spark config: 4 executors × 4G × 3 cores"
+    echo "✅ Spark config: 4 executors × 10G × 3 cores"
     echo "   Mode plus granulaire, adapté aux jobs plus légers ou très parallélisables"
 fi
 
@@ -79,7 +79,6 @@ spark-submit \
   --executor-memory "$EXECUTOR_MEMORY" \
   --executor-cores "$EXECUTOR_CORES" \
   --num-executors "$NUM_EXECUTORS" \
-  --conf spark.task.cpus=4 \
   \
   `# ========================================================================` \
   `# SPARK MEMORY TUNING` \

@@ -636,15 +636,53 @@ object MLPipeline {
         info(s"   - ${param.padTo(25, ' ')} : $value")
       }
     } else {
-      // Display default hyperparameters from config
+      // Display default hyperparameters from config based on model type
       val hp = experiment.model.hyperparameters
-      info(s"   - ${"numTrees".padTo(25, ' ')} : ${hp.numTrees.head}")
-      info(s"   - ${"maxDepth".padTo(25, ' ')} : ${hp.maxDepth.head}")
-      info(s"   - ${"maxBins".padTo(25, ' ')} : ${hp.maxBins}")
-      info(s"   - ${"minInstancesPerNode".padTo(25, ' ')} : ${hp.minInstancesPerNode}")
-      info(s"   - ${"subsamplingRate".padTo(25, ' ')} : ${hp.subsamplingRate}")
-      info(s"   - ${"featureSubsetStrategy".padTo(25, ' ')} : ${hp.featureSubsetStrategy}")
-      info(s"   - ${"impurity".padTo(25, ' ')} : ${hp.impurity}")
+      val modelType = experiment.model.modelType.toLowerCase
+
+      modelType match {
+        case "rf" | "randomforest" =>
+          // Random Forest specific parameters
+          hp.numTrees.flatMap(_.headOption).foreach(v => info(s"   - ${"numTrees".padTo(25, ' ')} : $v"))
+          hp.maxDepth.flatMap(_.headOption).foreach(v => info(s"   - ${"maxDepth".padTo(25, ' ')} : $v"))
+          hp.maxBins.flatMap(_.headOption).foreach(v => info(s"   - ${"maxBins".padTo(25, ' ')} : $v"))
+          hp.minInstancesPerNode.flatMap(_.headOption).foreach(v => info(s"   - ${"minInstancesPerNode".padTo(25, ' ')} : $v"))
+          hp.subsamplingRate.flatMap(_.headOption).foreach(v => info(s"   - ${"subsamplingRate".padTo(25, ' ')} : $v"))
+          hp.featureSubsetStrategy.flatMap(_.headOption).foreach(v => info(s"   - ${"featureSubsetStrategy".padTo(25, ' ')} : $v"))
+          hp.impurity.foreach(v => info(s"   - ${"impurity".padTo(25, ' ')} : $v"))
+
+        case "gbt" | "gradientboostedtrees" =>
+          // Gradient Boosted Trees specific parameters
+          hp.maxIter.flatMap(_.headOption).foreach(v => info(s"   - ${"maxIter".padTo(25, ' ')} : $v"))
+          hp.stepSize.flatMap(_.headOption).foreach(v => info(s"   - ${"stepSize".padTo(25, ' ')} : $v"))
+          hp.maxDepth.flatMap(_.headOption).foreach(v => info(s"   - ${"maxDepth".padTo(25, ' ')} : $v"))
+          hp.maxBins.flatMap(_.headOption).foreach(v => info(s"   - ${"maxBins".padTo(25, ' ')} : $v"))
+          hp.minInstancesPerNode.flatMap(_.headOption).foreach(v => info(s"   - ${"minInstancesPerNode".padTo(25, ' ')} : $v"))
+          hp.subsamplingRate.flatMap(_.headOption).foreach(v => info(s"   - ${"subsamplingRate".padTo(25, ' ')} : $v"))
+          hp.impurity.foreach(v => info(s"   - ${"impurity".padTo(25, ' ')} : $v"))
+
+        case "lr" | "logisticregression" =>
+          // Logistic Regression specific parameters
+          hp.maxIter.flatMap(_.headOption).foreach(v => info(s"   - ${"maxIter".padTo(25, ' ')} : $v"))
+          hp.regParam.flatMap(_.headOption).foreach(v => info(s"   - ${"regParam".padTo(25, ' ')} : $v"))
+          hp.elasticNetParam.flatMap(_.headOption).foreach(v => info(s"   - ${"elasticNetParam".padTo(25, ' ')} : $v"))
+
+        case "xgboost" =>
+          // XGBoost specific parameters
+          hp.maxIter.flatMap(_.headOption).foreach(v => info(s"   - ${"maxIter".padTo(25, ' ')} : $v"))
+          hp.stepSize.flatMap(_.headOption).foreach(v => info(s"   - ${"stepSize".padTo(25, ' ')} : $v"))
+          hp.maxDepth.flatMap(_.headOption).foreach(v => info(s"   - ${"maxDepth".padTo(25, ' ')} : $v"))
+          hp.maxBins.flatMap(_.headOption).foreach(v => info(s"   - ${"maxBins".padTo(25, ' ')} : $v"))
+          hp.minInstancesPerNode.flatMap(_.headOption).foreach(v => info(s"   - ${"minInstancesPerNode".padTo(25, ' ')} : $v"))
+          hp.subsamplingRate.flatMap(_.headOption).foreach(v => info(s"   - ${"subsamplingRate".padTo(25, ' ')} : $v"))
+          hp.alpha.flatMap(_.headOption).foreach(v => info(s"   - ${"alpha".padTo(25, ' ')} : $v"))
+          hp.lambda.flatMap(_.headOption).foreach(v => info(s"   - ${"lambda".padTo(25, ' ')} : $v"))
+          hp.gamma.flatMap(_.headOption).foreach(v => info(s"   - ${"gamma".padTo(25, ' ')} : $v"))
+          hp.colsampleBytree.flatMap(_.headOption).foreach(v => info(s"   - ${"colsampleBytree".padTo(25, ' ')} : $v"))
+
+        case _ =>
+          warn(s"   Unknown model type: $modelType - cannot display hyperparameters")
+      }
     }
 
     // Display performance metrics
