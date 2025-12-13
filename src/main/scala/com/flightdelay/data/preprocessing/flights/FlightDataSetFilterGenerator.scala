@@ -77,7 +77,7 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
 
     val enriched = withDelayFilters(flightData)
 
-    whenDebug{
+    //whenDebug{
       val total = enriched.count()
       info(s"[FlightDataSetFilterGenerator] Total vols: $total")
 
@@ -87,7 +87,7 @@ object FlightDataSetFilterGenerator extends DataPreprocessor {
         val pct = if (total > 0) (n.toDouble / total * 100) else 0.0
         info(f" - $c%-6s : $n%8d vols (${pct}%.2f%%)")
       }
-    }
+    //}
 
     enriched
   }

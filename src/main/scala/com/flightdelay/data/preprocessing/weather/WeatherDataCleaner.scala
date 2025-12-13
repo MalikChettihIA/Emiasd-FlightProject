@@ -115,25 +115,32 @@ object WeatherDataCleaner extends BiDataPreprocessor {
   /** Phase 2: normalisation temporelle HH:mm -> enregistrement le plus proche de HH:00 */
   import org.apache.spark.sql.expressions.Window
   private def normalizeWeatherTime(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
-    info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.normalizeWeatherTime()")
+    withUiLabels(
+      groupId = "Filter-Weather-Normalize-Weather-Time",
+      desc = "Filter-Weather-Normalize-Weather-Time",
+      tags = "prep,semi-join,wban"
+    ) {
 
-    debug("Phase 2: Weather Time Normalization")
-    debug("  - Keeping only the closest record to HH:00 for each hour")
-    debug("  - Normalizing selected times to HH:00")
 
-    val dfWithHour = df.withColumn("hour", (col("Time").cast("int") / 100).cast("int"))
-    val dfWithDistance = dfWithHour.withColumn("distance_to_hour", abs(col("Time").cast("int") % 100))
-    val window = Window.partitionBy("WBAN", "Date", "hour").orderBy(col("distance_to_hour"))
+      info("- Calling com.flightdelay.data.preprocessing.weather.WeatherDataCleaner.normalizeWeatherTime()")
 
-    val result = dfWithDistance
-      .withColumn("rank", row_number().over(window))
-      .filter(col("rank") === 1)
-      .withColumn("Time", format_string("%04d", col("hour") * 100))
-      .drop("hour", "distance_to_hour", "rank")
+      debug("Phase 2: Weather Time Normalization")
+      debug("  - Keeping only the closest record to HH:00 for each hour")
+      debug("  - Normalizing selected times to HH:00")
 
-    result
+      val dfWithHour = df.withColumn("hour", (col("Time").cast("int") / 100).cast("int"))
+      val dfWithDistance = dfWithHour.withColumn("distance_to_hour", abs(col("Time").cast("int") % 100))
+      val window = Window.partitionBy("WBAN", "Date", "hour").orderBy(col("distance_to_hour"))
+
+      val result = dfWithDistance
+        .withColumn("rank", row_number().over(window))
+        .filter(col("rank") === 1)
+        .withColumn("Time", format_string("%04d", col("hour") * 100))
+        .drop("hour", "distance_to_hour", "rank")
+
+      result
+    }
   }
-
   /** Phase 3: conversions de types + nettoyage des codes "NULL" → null et cast en Int */
   private def convertAndValidateDataTypes(df: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): DataFrame = {
 

@@ -12,7 +12,7 @@ common:
   log: true                   # Enable/disable all logging
   logLevel: "info"            # Minimum log level: debug, info, warn, error
   loadDataFromCSV: false      # If true: load from csv; if false: load from raw parquet
-  storeIntoParquet: false     # If true: save loaded data to parquet; if false: skip parquet saving
+  storeIntoParquet: true     # If true: save loaded data to parquet; if false: skip parquet saving
 
   data:
     basePath: "/data"
@@ -47,8 +47,8 @@ experiments:
     featureExtraction:
       type: "feature_selection"
       dxCol: "D3"
-      storeJoinData: false
-      storeExplodeJoinData: false
+      storeJoinData: true
+      storeExplodeJoinData: true
       weatherOriginDepthHours: 7
       weatherDestinationDepthHours: 7
       maxCategoricalCardinality: 280

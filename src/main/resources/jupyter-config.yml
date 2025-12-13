@@ -66,53 +66,64 @@ experiments:
           transformation: "StringIndexer"
         CRS_ELAPSED_TIME:
           transformation: "None"
-        feature_departure_hour_rounded:
-          transformation: "StringIndexer"
-        feature_flight_week_of_year:
-          transformation: "StringIndexer"
+        feature_departure_hour_rounded_sin:
+          transformation: "None"
+        feature_departure_hour_rounded_cos:
+          transformation: "None"
+        feature_flight_week_of_year_sin:
+          transformation: "None"
+        feature_flight_week_of_year_cos:
+          transformation: "None"
         feature_departure_time_period:
           transformation: "StringIndexer"
         feature_arrival_time_period:
           transformation: "StringIndexer"
 
       weatherSelectedFeatures:
-        RelativeHumidity:
-          transformation: "None"
-        feature_weather_severity_index:
-          transformation: "None"
-        weather_hazard_level:
-          transformation: "None"
-        feature_visibility_risk_score:
-          transformation: "None"
-        feature_operations_risk_level:
-          transformation: "None"
-        feature_requires_cat_ii:
-          transformation: "None"
-        feature_is_very_low_visibility:
-          transformation: "None"
-        feature_flight_category_ordinal:
-          transformation: "None"
-        press_change_abs:
-          transformation: "None"
-        extracted_codes:
-          transformation: "StringIndexer"
-        feature_visibility_category:
-          transformation: "StringIndexer"
-        feature_most_critical_sky:
-          transformation: "StringIndexer"
-        feature_pressure_vis_combo_bin:
-          transformation: "StringIndexer"
-        feature_pressure_bucket:
-          transformation: "StringIndexer"
+
         feature_weather_type:
           transformation: "StringIndexer"
         feature_weather_intensity:
           transformation: "StringIndexer"
-        feature_temp_dewpoint_spread:
+        feature_flight_category_ordinal:
           transformation: "None"
+        feature_visibility_category:
+          transformation: "StringIndexer"
         feature_icing_risk_level:
           transformation: "None"
         feature_icing_risk_flag:
+          transformation: "None"
+        feature_is_pressure_dropping_fast:
+          transformation: "None"
+        HourlyPrecip:
+          transformation: "None"
+        RelativeHumidity:
+          transformation: "None"
+        press_change_abs:
+          transformation: "None"
+        feature_temp_dewpoint_spread:
+          transformation: "None"
+        Temp_Delta_1hr:
+          transformation: "None"
+        Visibility_Delta_1hr:
+          transformation: "None"
+        Humidity_Delta_1hr:
+          transformation: "None"
+        WindSpeed_Delta_1hr:
+          transformation: "None"
+
+      aggregatedSelectedFeatures:
+        HourlyPrecip:
+          aggregation: "sum"
+          transformation: "None"
+        RelativeHumidity:
+          aggregation: "avg"
+          transformation: "None"
+        press_change_abs:
+          aggregation: "max"
+          transformation: "None"
+        feature_temp_dewpoint_spread:
+          aggregation: "min"
           transformation: "None"
 
     model:

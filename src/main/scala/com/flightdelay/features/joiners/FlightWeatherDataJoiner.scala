@@ -137,7 +137,7 @@ object FlightWeatherDataJoiner {
             weatherByKey.hint("shuffle_hash"),
             col("ORIGIN_WBAN") === weatherByKey("WBAN") &&
               col("UTC_FL_DATE")    === weatherByKey("DATE"),
-            "left"
+            "inner"
           )
           .drop(weatherByKey("WBAN")).drop(weatherByKey("DATE"))
 
@@ -167,7 +167,7 @@ object FlightWeatherDataJoiner {
             weatherByKey.hint("shuffle_hash"),
             col("DEST_WBAN") === weatherByKey("WBAN") &&
               col("UTC_ARR_DATE")  === weatherByKey("DATE"),
-            "left"
+            "inner"
           )
           .drop(weatherByKey("WBAN")).drop(weatherByKey("DATE"))
 
