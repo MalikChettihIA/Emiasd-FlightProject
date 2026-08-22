@@ -7,9 +7,19 @@
 [![MLflow](https://img.shields.io/badge/MLflow-3.4.0-blue.svg)](https://mlflow.org/)
 [![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg)](https://www.docker.com/)
 
-A scalable machine learning system for predicting flight delays based on weather conditions using Apache Spark and Scala. Built for the **[EMIASD Executive Master](https://executive-education.dauphine.psl.eu/formations/executive-master-diplome-universite/ia-science-donnees)** (Artificial Intelligence & Data Science, Université Paris-Dauphine \| PSL), with **Henri Balamou**. The project implements and extends the methodology from the academic paper ["Using Scalable Data Mining for Predicting Flight Delays"](https://www.dropbox.com/s/4rqnjueuqi5e0uo/TIST-Flight-Delay-final.pdf) (ACM TIST, 2016).
+A scalable machine learning system for predicting flight delays based on weather conditions using Apache Spark and Scala. Built for the **[EMIASD Executive Master](https://executive-education.dauphine.psl.eu/formations/executive-master-diplome-universite/ia-science-donnees)** (Artificial Intelligence & Data Science, Université Paris-Dauphine \| PSL), by **Naveed Awan, Henri Balamou, Malik Chettih, Zineddine Gherari and Rachna Hean**. The project implements and substantially extends the methodology from the academic paper ["Using Scalable Data Mining for Predicting Flight Delays"](https://www.dropbox.com/s/4rqnjueuqi5e0uo/TIST-Flight-Delay-final.pdf) (Belcastro et al., ACM TIST, 2016) — full write-up in [`Rapport_Projet_Flight_DEC7.pdf`](Rapport_Projet_Flight_DEC7.pdf) (171 pages, 100+ experiments).
 
 ---
+
+## 💼 Why this matters — the functional case
+
+Around **20% of airline flights worldwide arrive more than 15 minutes late**. In the US alone, the FAA estimated the economic cost of flight delays at **$32.9 billion in 2007**, over half of it borne directly by passengers through missed connections, lost productivity and extra accommodation. Official delay-cause statistics attribute only ~3% of delays directly to "extreme weather," but once indirect effects are counted — weather-triggered air-traffic-control restrictions, and the knock-on effect of late-arriving aircraft caused by weather at their previous stop — **weather is a contributing factor in an estimated 35-40% of all delays**.
+
+That combination — a large, costly, recurring problem where the main driver is *forecastable* — is what makes flight-delay prediction a genuinely useful ML target rather than an academic exercise. A reliable model built purely from information known *before* departure (schedule, route, airport, weather forecast) can plug into:
+
+- **Booking/travel platforms** — surfacing a delay-risk score next to a flight, similar to price-tracking features.
+- **Airport & airline operations** — proactive gate, crew and ground-handling reallocation for flights flagged as high-risk, ahead of the delay actually happening.
+- **Passenger-facing tools** — smarter connection-time recommendations, proactive rebooking suggestions.
 
 ## 🎯 Project Overview
 
@@ -30,11 +40,12 @@ This system predicts flight delays by analyzing historical flight data combined 
 
 ### Achieved Performance
 
-Best configuration to date (Random Forest, PCA feature reduction, 5-fold CV) — see [Results & Metrics](#-results--metrics):
+Across **100+ experiments** run on local Docker, the LAMSADE (Dauphine) cluster and Google Cloud Dataproc, the best-performing configuration found was **`Experience-optimized-local-D2-60-9-9`** — a higher-capacity Random Forest (50 trees, depth 30) on the D2 dataset with a symmetric 9-hour origin+destination weather window:
 
-- **Accuracy**: 85.8% for 60+ minute delays
-- **Recall**: 86.9% for critical delay detection
-- **Training Time**: < 5 minutes on 4-worker Spark cluster
+- **F1-Score: 82.13%**, **AUC-ROC: 0.8925** — the highest of every experiment run (see [Results & Metrics](#-results--metrics))
+- Baseline with **no weather data at all**: F1 = 73.03%, AUC-ROC = 0.7931 — weather integration is what drives the gain
+- Increasing model capacity alone (15→50 trees, depth 7→30) lifted F1 from 76.75% to 82.13% on the same data — model capacity mattered as much as feature richness
+- For reference, the original Belcastro et al. (2016) paper reports 85.8% accuracy / 86.9% recall at the 60-minute threshold on their (larger, 5-year) dataset — a useful benchmark, not our own result
 
 ---
 
@@ -185,6 +196,18 @@ experiments:
 ---
 
 ## 📊 Results & Metrics
+
+### Key findings from the 100+ experiment study
+
+Full analysis in [`Rapport_Projet_Flight_DEC7.pdf`](Rapport_Projet_Flight_DEC7.pdf), sections 8.2–8.10.
+
+<img src="docs/images/results-champion-model-ranking.png" alt="Ranking by hold-out F1-Score across symmetric weather-depth experiments, from 1h (79.4%) to 9h (82.1%, champion) to 11h (82.1%, plateau)" width="600">
+
+Ranking of the *optimized* model family by hold-out F1-Score as symmetric weather depth increases: performance climbs from 79.4% (1h of weather) to a peak of 82.1% at 9h (`D2-60-9-9`, our champion configuration), then plateaus — more weather history stops helping past that point.
+
+<img src="docs/images/results-performance-heatmap.png" alt="Heatmap of 8 metrics (Accuracy, Precision, Recall, F1, AUC-ROC, AUC-PR, Recall Delayed, Recall Ontime) across 7 destination-weather-depth experiments from 0h to 11h" width="700">
+
+Full metric breakdown for the *destination-weather-only* study (standard-capacity model): AUC-ROC/AUC-PR improve steadily with more weather depth, while F1 and Recall peak early (3h) and drift down — evidence that "more weather data" and "better classification threshold behavior" are not the same objective, and that the standard-capacity model can't fully exploit the extra signal (which the optimized, higher-capacity model above does).
 
 After training, the system generates:
 
