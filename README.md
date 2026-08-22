@@ -86,6 +86,14 @@ The project uses three primary datasets:
 └──────────────────────────────────────────────────────────────┘
 ```
 
+<img src="docs/images/architecture-preprocessing-pipeline.png" alt="DataPipeline orchestrator delegating to FlightPreprocessingPipeline and WeatherPreprocessingPipeline, each doing Cleaning, Synchronization and Feature Engineering, before a Spatio-Temporal Join and ML Training step" width="700">
+
+The `DataPipeline` orchestrator delegates flight-side and weather-side cleaning/synchronization/feature-engineering to two independent sub-pipelines, so each can evolve and be debugged without touching the other — they only meet again at the spatio-temporal join.
+
+<img src="docs/images/architecture-spatiotemporal-sync.png" alt="Spatial enrichment via WBAN lookup and temporal synchronization (UTC conversion) aligning raw flight data and raw weather data on Origin WBAN, Dest WBAN and UTC_Hour_Rounded matching keys, ready for joining" width="700">
+
+Flights and weather observations don't share a natural key: flight times are local and airport-indexed, weather observations are UTC and station-indexed (WBAN). The join preparation step resolves this in two stages — **spatial enrichment** (mapping each airport to its WBAN weather station and timezone) then **temporal synchronization** (converting local scheduled times to UTC, rounded to the hour) — producing matching `(WBAN, UTC_Hour_Rounded)` keys on both sides before the actual join runs.
+
 **Technology Stack**:
 - **Language**: Scala 2.12.18
 - **Big Data**: Apache Spark 3.5.3 (Spark SQL, Spark MLlib)
