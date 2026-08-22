@@ -3,6 +3,7 @@ package com.flightdelay.features
 import com.flightdelay.config.{AppConfiguration, ExperimentConfig}
 import com.flightdelay.features.balancer.DelayBalancedDatasetBuilder
 import com.flightdelay.features.joiners.{DataJoinerPostProcessor, FlightWeatherDataJoiner}
+import com.flightdelay.features.quality.MissingValuesHandler
 import com.flightdelay.utils.ExecutionTimeTracker
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import com.flightdelay.utils.DebugUtils._
@@ -122,6 +123,13 @@ object FeaturePipeline {
       ).flatten.filterNot(_.isNaN).sum
       timeTracker.setStepTime("explode.total", explodeTotal)
 
+      // Missing handler total
+      val missingHandlerTotal = Seq(
+        timeTracker.getStepTime("missing_handler.train"),
+        timeTracker.getStepTime("missing_handler.test")
+      ).flatten.filterNot(_.isNaN).sum
+      timeTracker.setStepTime("missing_handler.total", missingHandlerTotal)
+
       // Post processing total
       val postProcessingTotal = Seq(
         timeTracker.getStepTime("post_processing.train"),
@@ -176,7 +184,9 @@ object FeaturePipeline {
       if (timeTracker != null) timeTracker.endStep(explodeStepName)
       debug(s"[$datasetName] Explode completed in ${stepDuration}s - ${explodedData.count()} lines")
 
-      // Apply post-processing to both train and test datasets
+      // IMPORTANT: Post-processing BEFORE missing values handler
+      // This allows aggregations (sum, avg, etc.) to correctly handle NULL values
+      // NULL values are treated as 0 during aggregation (via coalesce)
       info("[FeaturePipeline] Applying post-processing to datasets...")
       val postProcessStepName = if (datasetName == "TRAIN") "post_processing.train" else "post_processing.test"
       if (timeTracker != null) timeTracker.startStep(postProcessStepName)
@@ -184,18 +194,31 @@ object FeaturePipeline {
       if (timeTracker != null) timeTracker.endStep(postProcessStepName)
       info("[$datasetName]  Post-processing completed")
 
-      processedExplodedData
+      // Handle missing values (add flags and sentinels) AFTER aggregation
+      // This prevents sentinel values (-999) from polluting aggregated features
+      info("[FeaturePipeline] Handling missing values...")
+      val missingHandlerStepName = if (datasetName == "TRAIN") "missing_handler.train" else "missing_handler.test"
+      if (timeTracker != null) timeTracker.startStep(missingHandlerStepName)
+      stepStartTime = System.currentTimeMillis()
+      val finalData = MissingValuesHandler.handleMissingValues(processedExplodedData, experiment)
+      stepDuration = (System.currentTimeMillis() - stepStartTime) / 1000.0
+      if (timeTracker != null) timeTracker.endStep(missingHandlerStepName)
+      info(s"[$datasetName] Missing values handling completed in ${stepDuration}s")
+
+      finalData
 
     } else {
       info(s"[$datasetName] Weather features disabled - using flight data only")
 
-      // Mark join, explode, and post-processing as NA for this dataset
+      // Mark join, explode, missing_handler, and post-processing as NA for this dataset
       val joinStepName = if (datasetName == "TRAIN") "join.train" else "join.test"
       val explodeStepName = if (datasetName == "TRAIN") "explode.train" else "explode.test"
+      val missingHandlerStepName = if (datasetName == "TRAIN") "missing_handler.train" else "missing_handler.test"
       val postProcessStepName = if (datasetName == "TRAIN") "post_processing.train" else "post_processing.test"
       if (timeTracker != null) {
         timeTracker.setStepNA(joinStepName)
         timeTracker.setStepNA(explodeStepName)
+        timeTracker.setStepNA(missingHandlerStepName)
         timeTracker.setStepNA(postProcessStepName)
       }
 

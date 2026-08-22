@@ -53,6 +53,9 @@ services:
       - SPARK_LOCAL_DIRS=/tmp/spark-local
       # JMX Exporter for Prometheus
       - SPARK_WORKER_OPTS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9999:/opt/jmx-exporter/jmx-exporter-config.yml
+      # XGBoost Rabit configuration for Docker networking
+      - DMLC_TRACKER_URI=spark-submit
+      - DMLC_TRACKER_PORT=9091
     ports:
       - "8081:8081"
       - "9101:9999"  # JMX Exporter metrics
@@ -87,6 +90,9 @@ services:
       - SPARK_LOCAL_DIRS=/tmp/spark-local
       # JMX Exporter for Prometheus
       - SPARK_WORKER_OPTS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9999:/opt/jmx-exporter/jmx-exporter-config.yml
+      # XGBoost Rabit configuration for Docker networking
+      - DMLC_TRACKER_URI=spark-submit
+      - DMLC_TRACKER_PORT=9091
     ports:
       - "8082:8082"
       - "9102:9999"  # JMX Exporter metrics
@@ -116,8 +122,13 @@ services:
       - SPARK_MASTER_URL=spark://spark-master:7077
       - SPARK_HOME=/opt/bitnami/spark
       - JAVA_HOME=/opt/bitnami/java
-    #ports:
-    #  - "4040:4040"  # Spark Application UI
+      # XGBoost Rabit configuration for Docker networking
+      - DMLC_TRACKER_URI=spark-submit
+      - DMLC_TRACKER_PORT=9091
+    ports:
+      # 4040 already used by jupyter-spark
+      - "9091:9091"  # XGBoost Rabit tracker
+      - "38000-39000:38000-39000"  # XGBoost Rabit port range
     volumes:
       - ../work/data:/data
       - ../work/apps:/apps
@@ -306,6 +317,10 @@ services:
 networks:
   spark-network:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.bridge.host_binding_ipv4: "0.0.0.0"
 
 volumes:
   prometheus-data:

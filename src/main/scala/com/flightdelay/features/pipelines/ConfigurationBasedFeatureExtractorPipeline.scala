@@ -128,7 +128,16 @@ class ConfigurationBasedFeatureExtractorPipeline(
       .flatMap { case (name, _) => findMatchingColumns(name) }
       .toArray
 
-    (stringIndexerFeatures, oneHotEncoderFeatures, numericFeatures)
+    // Add missing value flags and counters automatically (not in configuration but should be numeric)
+    val missingFlagPatterns = Seq("_missing", "_missing_h", "_missing_count")
+    val missingFlagCols = availableFeatures
+      .filter(colName => missingFlagPatterns.exists(pattern => colName.contains(pattern)))
+      .toArray
+
+    // Combine configured numeric features with missing flags
+    val allNumericFeatures = (numericFeatures ++ missingFlagCols).distinct
+
+    (stringIndexerFeatures, oneHotEncoderFeatures, allNumericFeatures)
   }
 
   /**
@@ -165,6 +174,9 @@ class ConfigurationBasedFeatureExtractorPipeline(
   def buildPipelineStages(data: DataFrame, experiment:ExperimentConfig)(implicit spark: SparkSession, configuration: AppConfiguration): Array[PipelineStage] = {
     val (stringIndexerCols, oneHotEncoderCols, numericCols) = groupFeaturesByTransformation(data)
 
+    // Count missing flags
+    val missingFlagCount = numericCols.count(_.contains("_missing"))
+
     info(s"[ConfigurationBasedFeatureExtractorPipeline] Feature Distribution:")
     info(s"  - StringIndexer features: ${stringIndexerCols.length}")
     if (stringIndexerCols.length > 0 && stringIndexerCols.length <= 5) {
@@ -172,6 +184,8 @@ class ConfigurationBasedFeatureExtractorPipeline(
     } else if (stringIndexerCols.length > 5) {
       info(s"    ${stringIndexerCols.take(5).mkString(", ")}, ... (${stringIndexerCols.length - 5} more)")
     }
+
+    info(s"  - Numeric features: ${numericCols.length} (including $missingFlagCount missing value flags)")
 
 
     // DIAGNOSTIC: Print distinct value counts for categorical features
@@ -186,12 +200,6 @@ class ConfigurationBasedFeatureExtractorPipeline(
         debug(s"    ${oneHotEncoderCols.mkString(", ")}")
       } else if (oneHotEncoderCols.length > 5) {
         debug(s"    ${oneHotEncoderCols.take(5).mkString(", ")}, ... (${oneHotEncoderCols.length - 5} more)")
-      }
-      debug(s"  - Numeric features: ${numericCols.length}")
-      if (numericCols.length > 0 && numericCols.length <= 5) {
-        debug(s"    ${numericCols.mkString(", ")}")
-      } else if (numericCols.length > 5) {
-        debug(s"    ${numericCols.take(5).mkString(", ")}, ... (${numericCols.length - 5} more)")
       }
     }
 
@@ -230,24 +238,29 @@ class ConfigurationBasedFeatureExtractorPipeline(
       stages = stages :+ oneHotEncoder
     }
 
-    // Stage 3: Imputer to replace NaN/null values in numeric columns
-    // This is critical because VectorAssembler and ML models cannot handle NaN
-    if (numericCols.nonEmpty) {
-      val imputer = new Imputer()
-        .setInputCols(numericCols)
-        .setOutputCols(numericCols.map("imputed_" + _))
-        .setStrategy("mean")  // Replace NaN with mean (alternatives: "median", "mode")
-        .setMissingValue(Double.NaN)
-      stages = stages :+ imputer
+    // Stage 3: Imputer DISABLED
+    // NOTE: Imputer is disabled because we use sentinel values (-999, "MISSING")
+    //       to handle missing data. The MissingValuesHandler already replaced all NULLs
+    //       with sentinelles, so there are no NaN values left to impute.
+    //       Adding an Imputer would be redundant and could corrupt sentinel values.
+    //
+    // if (numericCols.nonEmpty) {
+    //   val imputer = new Imputer()
+    //     .setInputCols(numericCols)
+    //     .setOutputCols(numericCols.map("imputed_" + _))
+    //     .setStrategy("mean")
+    //     .setMissingValue(Double.NaN)
+    //   stages = stages :+ imputer
+    //   info(s"  - Added Imputer for ${numericCols.length} numeric columns (strategy: mean)")
+    // }
 
-      info(s"  - Added Imputer for ${numericCols.length} numeric columns (strategy: mean)")
-    }
+    info(s"  - Imputer SKIPPED (using sentinel values instead)")
 
     // Stage 4: VectorAssembler to combine all features
-    val imputedNumericCols = if (numericCols.nonEmpty) numericCols.map("imputed_" + _) else Array.empty[String]
+    // Use original numeric columns (not "imputed_" prefix since Imputer is disabled)
     val allInputCols = stringIndexerCols.map(_prefix + _) ++
                        oneHotOutputCols ++
-                       imputedNumericCols
+                       numericCols
 
     val vectorAssembler = new VectorAssembler()
       .setInputCols(allInputCols)
@@ -441,11 +454,12 @@ class ConfigurationBasedFeatureExtractorPipeline(
           info(s"     handleInvalid = ${e.getHandleInvalid}")
 
         // ============================================================
-        case i: Imputer =>
-          info("     type          = Imputer")
-          info(s"     inputCols     = ${i.getInputCols.mkString(", ")}")
-          info(s"     outputCols    = ${i.getOutputCols.mkString(", ")}")
-          info(s"     strategy      = ${i.getStrategy}")
+        // Imputer case removed (Imputer is disabled)
+        // case i: Imputer =>
+        //   info("     type          = Imputer")
+        //   info(s"     inputCols     = ${i.getInputCols.mkString(", ")}")
+        //   info(s"     outputCols    = ${i.getOutputCols.mkString(", ")}")
+        //   info(s"     strategy      = ${i.getStrategy}")
 
         // ============================================================
         case v: VectorAssembler =>

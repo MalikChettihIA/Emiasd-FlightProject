@@ -78,7 +78,7 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
       "objective" -> "binary:logistic",
       "eval_metric" -> "logloss",
       "seed" -> experiment.name.hashCode.toLong,
-      "nthread" -> 4  // Can be adjusted based on cluster config
+      "nthread" -> 1  // Can be adjusted based on cluster config
     )
     import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
     import org.apache.spark.sql.functions._
@@ -90,7 +90,7 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
       .setProbabilityCol("probability")
       .setRawPredictionCol("rawPrediction")
       .setNumRound(numRound)
-      .setNumWorkers(2)  // Adjust based on cluster size
+      .setNumWorkers(1)  // Use 1 worker - Spark handles distribution across executors
 
     // Create pipeline with the classifier
     val pipeline = new Pipeline().setStages(Array(xgb))
@@ -99,25 +99,33 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
     val startTime = System.currentTimeMillis()
 
     import org.apache.spark.sql.functions._
-    import org.apache.spark.ml.linalg.{Vector, Vectors}
+    import org.apache.spark.ml.linalg.Vector
 
-    val cleanVectorUdf = udf((v: Vector) => {
-      if (v == null) {
-        // vecteur nul remplacé par un vecteur de zéros
-        Vectors.dense(Array.fill(41)(0.0))
-      } else {
-        val arr = v.toArray.map { x =>
-          if (x.isNaN || x.isInfinity) 0.0 else x
-        }
-        Vectors.dense(arr)
-      }
-    })
+    // Just ensure label is not null (should already be guaranteed by data pipeline)
+    val dfClean = data.na.fill(0.0, Seq("label"))
 
-    val dfClean = data
-      .withColumn("features", cleanVectorUdf(col("features")))
-      .na.fill(0.0, Seq("label"))
+    // CRITICAL FIX: Force single partition to avoid XGBoost Rabit network issues in Docker
+    // This makes XGBoost run in local mode without distributed communication
+    // Using repartition(1) instead of coalesce(1) because XGBoost Barrier Mode requires it
+    info("⚠️  Forcing data to single partition for local XGBoost training (Docker workaround)")
+    val dfRepartitioned = dfClean.repartition(1)
+    info(s"  - Original partitions: ${dfClean.rdd.getNumPartitions}")
+    info(s"  - Repartitioned to: ${dfRepartitioned.rdd.getNumPartitions} (barrier mode compatible)")
 
-    val model = pipeline.fit(dfClean)
+    // ============================================================================
+    // VALIDATION: Check for NaN/Infinity in features BEFORE XGBoost
+    // ============================================================================
+    info("=" * 80)
+    info("[XGBoost] Validating features for NaN/Infinity values...")
+    info("=" * 80)
+
+    validateFeaturesForNaN(dfRepartitioned, experiment)
+
+    info("=" * 80)
+    info("[XGBoost] Validation complete - proceeding with training...")
+    info("=" * 80)
+
+    val model = pipeline.fit(dfRepartitioned)
 
     val endTime = System.currentTimeMillis()
     val trainingTime = (endTime - startTime) / 1000.0
@@ -142,6 +150,27 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
    * Override train from MLModel trait to call our extended version
    */
   override def train(data: DataFrame)(implicit spark: SparkSession, configuration: AppConfiguration): Transformer = {
+
+    import org.apache.spark.sql.DataFrame
+    import org.apache.spark.sql.functions._
+    import org.apache.spark.ml.linalg.Vector
+
+    //print Schema
+    data.printSchema
+
+    // UDF qui détecte null / NaN / Inf dans un Vector
+    val hasBad = udf((v: Vector) => {
+      v == null || v.toArray.exists(x => x.isNaN || x.isInfinite)
+    })
+
+    // data = ton DF qui contient "features" et "is_delayed"
+    val badRows = data.filter(
+      col("features").isNull || hasBad(col("features")) || col("label").isNull
+    )
+
+    println("badRows = " + badRows.count())
+    badRows.select("label", "features").show(20, truncate = false)
+
     train(data, None)
   }
 
@@ -224,6 +253,98 @@ class XGBoostModel(experiment: ExperimentConfig) extends MLModel {
       case ex: Exception =>
         error(s"\n⚠ Error loading feature names: ${ex.getMessage}")
         Array.empty[String]
+    }
+  }
+
+  /**
+   * Validate features for NaN/Infinity values before XGBoost training
+   * XGBoost cannot handle NaN or Infinity values and will crash with cryptic errors
+   */
+  private def validateFeaturesForNaN(data: DataFrame, experiment: ExperimentConfig)(implicit spark: SparkSession, configuration: AppConfiguration): Unit = {
+    import org.apache.spark.sql.functions._
+    import org.apache.spark.ml.linalg.Vector
+
+    // Load feature names for better reporting
+    val featureNames = loadFeatureNames()
+
+    // UDF to check if a vector contains NaN or Infinity
+    val hasNaNOrInfinity = udf((v: Vector) => {
+      if (v == null) {
+        (true, -1, "NULL_VECTOR")  // (hasIssue, index, type)
+      } else {
+        val arr = v.toArray
+        val nanIdx = arr.indexWhere(_.isNaN)
+        val infIdx = arr.indexWhere(_.isInfinity)
+
+        if (nanIdx >= 0) (true, nanIdx, "NaN")
+        else if (infIdx >= 0) (true, infIdx, "Infinity")
+        else (false, -1, "OK")
+      }
+    })
+
+    // Check for problematic values
+    val validationDF = data
+      .withColumn("validation", hasNaNOrInfinity(col("features")))
+      .withColumn("has_issue", col("validation._1"))
+      .withColumn("issue_index", col("validation._2"))
+      .withColumn("issue_type", col("validation._3"))
+
+    // Count rows with issues
+    val totalRows = data.count()
+    val problematicRows = validationDF.filter(col("has_issue")).count()
+
+    if (problematicRows > 0) {
+      error(s"❌ VALIDATION FAILED: Found $problematicRows/$totalRows rows (${100.0 * problematicRows / totalRows}%.2f%%) with NaN/Infinity in features")
+      error("")
+
+      // Group by issue type and index to find most common problems
+      val issueStats = validationDF
+        .filter(col("has_issue"))
+        .groupBy("issue_type", "issue_index")
+        .count()
+        .orderBy(desc("count"))
+        .limit(20)
+        .collect()
+
+      error("Top 20 problematic features:")
+      error("=" * 90)
+      error(f"${"Type"}%-10s ${"Feature Index"}%-15s ${"Feature Name"}%-50s ${"Count"}%10s")
+      error("=" * 90)
+
+      issueStats.foreach { row =>
+        val issueType = row.getString(0)
+        val featureIdx = row.getInt(1)
+        val count = row.getLong(2)
+
+        val featureName = if (featureIdx >= 0 && featureNames.nonEmpty && featureIdx < featureNames.length) {
+          featureNames(featureIdx)
+        } else {
+          s"Feature_$featureIdx"
+        }
+
+        error(f"$issueType%-10s $featureIdx%-15d $featureName%-50s $count%10d")
+      }
+
+      error("=" * 90)
+      error("")
+      error("💡 Possible causes:")
+      error("  1. Division by zero in calculated features (e.g., ratios, deltas)")
+      error("  2. Aggregations on all-NULL values (Avg([NULL, NULL]) = NaN)")
+      error("  3. Log/Sqrt of negative or zero values")
+      error("  4. Missing value sentinels not applied correctly")
+      error("")
+      error("💡 Next steps:")
+      error("  1. Check MissingValuesHandler for these specific columns")
+      error("  2. Add validation in calculated feature logic")
+      error("  3. Replace NaN with sentinel values (-999.0) after calculations")
+      error("")
+
+      throw new IllegalStateException(
+        s"Cannot train XGBoost: $problematicRows rows contain NaN/Infinity values. " +
+        "Fix the feature pipeline to eliminate these values."
+      )
+    } else {
+      info(s"✅ Validation passed: All $totalRows rows have valid feature values (no NaN/Infinity)")
     }
   }
 

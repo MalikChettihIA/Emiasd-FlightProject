@@ -15,8 +15,8 @@ EXPERIENCE="${3:-local-d2_60_0_0}"
 if [[ "$WORKERS" != "1w" && "$WORKERS" != "2w" && "$WORKERS" != "4w" ]]; then
     echo "❌ Argument invalide. Utilisation: $0 [1w|2w|4w] [tasks] [experience]"
     echo "   1w: 1 worker  × 8G  × 4 cores"
-    echo "   2w: 2 workers × 8G  × 4 cores"
-    echo "   4w: 4 workers × 4G  × 3 cores (défaut, plus granulaire)"
+    echo "   2w: 2 workers × 15G × 4 cores (recommandé pour XGBoost)"
+    echo "   4w: 4 workers × 10G × 4 cores (plus granulaire)"
     echo ""
     echo "Exemples:"
     echo "  $0 2w"
@@ -37,7 +37,7 @@ echo "🧪 Experience: $EXPERIENCE"
 
 if [ "$WORKERS" = "1w" ]; then
     # 1 worker → 1 exécuteur "moyen"
-    EXECUTOR_MEMORY="8G"
+    EXECUTOR_MEMORY="30G"
     EXECUTOR_CORES="4"
     NUM_EXECUTORS="1"
     SHUFFLE_PARTITIONS="160"
@@ -54,10 +54,10 @@ elif [ "$WORKERS" = "2w" ]; then
 else
     # 4 workers → 4 petits exécuteurs (plus de parallélisme, moins de mémoire chacun)
     EXECUTOR_MEMORY="10G"
-    EXECUTOR_CORES="3"
+    EXECUTOR_CORES="4"
     NUM_EXECUTORS="4"
     SHUFFLE_PARTITIONS="240"
-    echo "✅ Spark config: 4 executors × 10G × 3 cores"
+    echo "✅ Spark config: 4 executors × 10G × 4 cores"
     echo "   Mode plus granulaire, adapté aux jobs plus légers ou très parallélisables"
 fi
 
@@ -90,6 +90,8 @@ spark-submit \
   \
   `# ========================================================================` \
   `# PARALLELISM CONFIGURATION` \
+  `# Note: spark.task.cpus=4 allows XGBoost to use 4 threads (nthread=4)` \
+  `#       Requires executor-cores >= 4 (works with 1w and 2w modes)` \
   `# ========================================================================` \
   --conf spark.sql.shuffle.partitions="$SHUFFLE_PARTITIONS" \
   --conf spark.default.parallelism="$SHUFFLE_PARTITIONS" \
@@ -102,6 +104,15 @@ spark-submit \
   --conf spark.rpc.message.maxSize=1024 \
   --conf spark.network.timeout=600s \
   --conf spark.executor.heartbeatInterval=30s \
+  \
+  `# ========================================================================` \
+  `# XGBOOST RABIT NETWORK CONFIGURATION (Docker fix)` \
+  `# XGBoost uses Rabit protocol for distributed training, which requires` \
+  `# proper network configuration in Docker environments` \
+  `# Solution: Set driver host to container hostname so executors can reach it` \
+  `# ========================================================================` \
+  --conf spark.driver.host=spark-submit \
+  --conf spark.driver.bindAddress=0.0.0.0 \
   \
   `# ========================================================================` \
   `# BROADCAST & COMPRESSION` \

@@ -3,19 +3,23 @@ package com.flightdelay.config
 /**
  * Feature transformation configuration
  * @param transformation Transformation to apply: "None", "StringIndexer", "OneHotEncoder", "StandardScaler", etc.
+ * @param sentinelValue Optional sentinel value to use for missing data (default: type-dependent)
  */
 case class FeatureTransformationConfig(
-  transformation: String
+  transformation: String,
+  sentinelValue: Option[Any] = None
 )
 
 /**
  * Aggregated feature configuration
  * @param aggregation Aggregation method: "sum", "avg", "max", "min", "std"
  * @param transformation Transformation to apply to aggregated features: "None", "StringIndexer", "StandardScaler", etc.
+ * @param sentinelValue Optional sentinel value to use for missing data (default: type-dependent)
  */
 case class AggregatedFeatureConfig(
   aggregation: String,
-  transformation: String = "None"
+  transformation: String = "None",
+  sentinelValue: Option[Any] = None
 )
 
 /**

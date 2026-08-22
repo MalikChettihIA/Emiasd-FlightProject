@@ -140,6 +140,14 @@ object DataJoinerPostProcessor {
           resultDF = resultDF.withColumn(featureName, aggExpr)
           info(s"  ✓ Created: $featureName (from ${originCols.length} columns: ${originCols.mkString(", ")})")
 
+          // NOUVEAU : Créer un compteur de valeurs NULL avant agrégation
+          val missingCountExpr = originCols
+            .map(colName => when(col(colName).isNull, 1).otherwise(0))
+            .reduce(_ + _)
+          val missingCountName = s"${featureName}_missing_count"
+          resultDF = resultDF.withColumn(missingCountName, missingCountExpr)
+          info(s"  ✓ Created: $missingCountName (count of NULL values in source columns)")
+
           // Marquer les colonnes sources pour suppression
           columnsToDrop ++= originCols
           createdFeaturesCount += 1
@@ -160,6 +168,14 @@ object DataJoinerPostProcessor {
           resultDF = resultDF.withColumn(featureName, aggExpr)
           info(s"  ✓ Created: $featureName (from ${destCols.length} columns: ${destCols.mkString(", ")})")
 
+          // NOUVEAU : Créer un compteur de valeurs NULL avant agrégation
+          val missingCountExpr = destCols
+            .map(colName => when(col(colName).isNull, 1).otherwise(0))
+            .reduce(_ + _)
+          val missingCountName = s"${featureName}_missing_count"
+          resultDF = resultDF.withColumn(missingCountName, missingCountExpr)
+          info(s"  ✓ Created: $missingCountName (count of NULL values in source columns)")
+
           // Marquer les colonnes sources pour suppression
           columnsToDrop ++= destCols
           createdFeaturesCount += 1
@@ -174,6 +190,13 @@ object DataJoinerPostProcessor {
       val uniqueColumnsToDrop = columnsToDrop.distinct
       resultDF = resultDF.drop(uniqueColumnsToDrop: _*)
       info(s"  - Dropped ${uniqueColumnsToDrop.length} temporal columns (_hx) after aggregation")
+    }
+
+    // Supprimer les colonnes WDATE (dates du weather) qui ne doivent pas être des features
+    val wdateColumns = resultDF.columns.filter(_.contains("_WDATE_"))
+    if (wdateColumns.nonEmpty) {
+      resultDF = resultDF.drop(wdateColumns: _*)
+      info(s"  - Dropped ${wdateColumns.length} WDATE columns (temporal metadata, not features)")
     }
 
     info(s"  - Created $createdFeaturesCount accumulation features")

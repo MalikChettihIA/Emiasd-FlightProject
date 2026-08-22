@@ -39,8 +39,8 @@ experiments:
   # Experiment 1:
   # Model : RandomForest, feature_selection
   # =========================================================================
-  - name: "Experience-optimized-local-D-60-7-7"
-    description: "Baseline Random Forest with hyperparameters tuning"
+  - name: "Experience-md-xgb-local-D2-60-7-7"
+    description: "XGBoost with advanced regularization and weather features (7h depth) - Extreme Gradient Boosting"
     enabled: true
     target: "is_delayed"
 
@@ -83,68 +83,97 @@ experiments:
 
         feature_weather_type:
           transformation: "StringIndexer"
+          sentinelValue: "MISSING"
         feature_weather_intensity:
           transformation: "StringIndexer"
+          sentinelValue: "MISSING"
         feature_flight_category_ordinal:
           transformation: "None"
+          sentinelValue: -999
         feature_visibility_category:
           transformation: "StringIndexer"
+          sentinelValue: "MISSING"
         feature_icing_risk_level:
           transformation: "None"
+          sentinelValue: -999
         feature_icing_risk_flag:
           transformation: "None"
+          sentinelValue: -999
         feature_is_pressure_dropping_fast:
           transformation: "None"
+          sentinelValue: -999
         HourlyPrecip:
           transformation: "None"
+          sentinelValue: -999.0
         RelativeHumidity:
           transformation: "None"
+          sentinelValue: -999.0
         press_change_abs:
           transformation: "None"
+          sentinelValue: -999.0
         feature_temp_dewpoint_spread:
           transformation: "None"
+          sentinelValue: -999.0
         Temp_Delta_1hr:
           transformation: "None"
+          sentinelValue: -999.0
         Visibility_Delta_1hr:
           transformation: "None"
+          sentinelValue: -999.0
         Humidity_Delta_1hr:
           transformation: "None"
+          sentinelValue: -999.0
         WindSpeed_Delta_1hr:
           transformation: "None"
+          sentinelValue: -999.0
 
       aggregatedSelectedFeatures:
         HourlyPrecip:
           aggregation: "sum"
           transformation: "None"
+          sentinelValue: -999.0
         RelativeHumidity:
           aggregation: "avg"
           transformation: "None"
+          sentinelValue: -999.0
         press_change_abs:
           aggregation: "max"
           transformation: "None"
+          sentinelValue: -999.0
         feature_temp_dewpoint_spread:
           aggregation: "min"
           transformation: "None"
+          sentinelValue: -999.0
 
     model:
-      modelType: "randomforest"
+      modelType: "xgboost"
       hyperparameters:
-        numTrees: [50] #[25, 50, 75, 100]
-        maxDepth: [30]  #[15, 20, 25, 50]
-        maxBins: [280]
-        minInstancesPerNode: [15] #[5, 10, 15]
-        subsamplingRate: [0.8] #[0.8, 1.0]
-        featureSubsetStrategy: ["sqrt"] #["auto","all","sqrt","log2","onethird"]
-        impurity: "gini"
+        # XGBoost-specific hyperparameters
+        maxIter: [ 100 ]               # Number of boosting rounds (trees): default 100, range 50-300
+        maxDepth: [ 7 ]                # Max depth per tree: default 6, range 3-10
+        # Slightly increased for fair comparison with other models
+        stepSize: [ 0.1 ]              # Learning rate (eta): default 0.1, range 0.01-0.3
+        # Lower = more conservative, needs more iterations
+        subsamplingRate: [ 0.8 ]       # Subsample ratio of training instances (subsample)
+        colsampleBytree: [ 0.8 ]       # Subsample ratio of columns per tree: default 1.0, range 0.5-1.0
+        minInstancesPerNode: [ 1 ]     # Min child weight: default 1, range 1-10
+
+        # Advanced regularization parameters
+        alpha: [ 0.0 ]                 # L1 regularization: default 0, range 0.0-1.0
+        # Higher = more regularization (sparse models)
+        lambda: [ 1.0 ]                # L2 regularization: default 1.0, range 0.0-2.0
+        # Higher = more regularization (smooth models)
+        gamma: [ 0.0 ]                 # Minimum loss reduction for split: default 0, range 0.0-1.0
+        # Higher = more conservative (less splits)
 
     train:
-      fast: true  # Skip cross-validation
+      fast: true  # Skip cross-validation (train only final model)
       trainRatio: 0.75
 
       crossValidation:
         numFolds: 1
 
       gridSearch:
-        enabled: true
+        enabled: false  # Disabled (using single hyperparameter values)
         evaluationMetric: "f1"
 

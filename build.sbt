@@ -86,3 +86,25 @@ Compile / resourceDirectory := baseDirectory.value / "src" / "main" / "resources
 
 // Configuration pour le classpath
 Runtime / managedClasspath += (Compile / packageBin).value
+
+// ============================================================================
+// ASSEMBLY CONFIGURATION - Create fat JAR with all dependencies
+// ============================================================================
+import sbtassembly.AssemblyPlugin.autoImport._
+
+assembly / assemblyJarName := "Emiasd-Flight-Data-Analysis.jar"
+
+// Merge strategy for conflicting files
+assembly / assemblyMergeStrategy := {
+  case PathList("META-INF", xs @ _*) => xs match {
+    case "MANIFEST.MF" :: Nil => MergeStrategy.discard
+    case "services" :: _ => MergeStrategy.concat
+    case _ => MergeStrategy.discard
+  }
+  case "reference.conf" => MergeStrategy.concat
+  case "application.conf" => MergeStrategy.concat
+  case x if x.endsWith(".proto") => MergeStrategy.first
+  case x if x.contains("hadoop") => MergeStrategy.first
+  case x if x.contains("spark") => MergeStrategy.first
+  case _ => MergeStrategy.first
+}
