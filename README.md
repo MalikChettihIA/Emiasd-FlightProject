@@ -1,29 +1,36 @@
 # ✈️ Flight Delay Prediction using Weather Data
 
+[![EMIASD Dauphine](https://img.shields.io/badge/-EMIASD%20Dauphine-000000?style=flat)](https://executive-education.dauphine.psl.eu/formations/executive-master-diplome-universite/ia-science-donnees)
 [![Scala](https://img.shields.io/badge/Scala-2.12.18-red.svg)](https://www.scala-lang.org/)
 [![Spark](https://img.shields.io/badge/Spark-3.5.3-orange.svg)](https://spark.apache.org/)
+[![XGBoost](https://img.shields.io/badge/XGBoost4j--Spark-1.7.6-blue.svg)](https://xgboost.readthedocs.io/)
 [![MLflow](https://img.shields.io/badge/MLflow-3.4.0-blue.svg)](https://mlflow.org/)
 [![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg)](https://www.docker.com/)
 
-A scalable machine learning system for predicting flight delays based on weather conditions using Apache Spark and Scala. This project implements the methodology from the academic paper ["Using Scalable Data Mining for Predicting Flight Delays"](https://www.dropbox.com/s/4rqnjueuqi5e0uo/TIST-Flight-Delay-final.pdf) (ACM TIST, 2016).
+A scalable machine learning system for predicting flight delays based on weather conditions using Apache Spark and Scala. Built for the **[EMIASD Executive Master](https://executive-education.dauphine.psl.eu/formations/executive-master-diplome-universite/ia-science-donnees)** (Artificial Intelligence & Data Science, Université Paris-Dauphine \| PSL), with **Henri Balamou**. The project implements and extends the methodology from the academic paper ["Using Scalable Data Mining for Predicting Flight Delays"](https://www.dropbox.com/s/4rqnjueuqi5e0uo/TIST-Flight-Delay-final.pdf) (ACM TIST, 2016).
 
 ---
 
 ## 🎯 Project Overview
 
-This system predicts flight delays by analyzing historical flight data combined with weather observations from origin and destination airports. The solution processes large-scale datasets using Apache Spark, implements sophisticated data preprocessing pipelines, and trains Random Forest classifiers with cross-validation and hyperparameter tuning.
+This system predicts flight delays by analyzing historical flight data combined with weather observations from origin and destination airports. The solution processes large-scale datasets using Apache Spark, implements a rigorous, leakage-aware data preprocessing pipeline, and trains and compares **four classifier families** (Random Forest, Gradient Boosted Trees, Logistic Regression, XGBoost) with cross-validation and grid-search hyperparameter tuning.
 
 ### Key Features
 
-- **✅ Scalable Data Processing** - Handles millions of flights with Spark distributed computing
-- **✅ Advanced Feature Engineering** - PCA dimensionality reduction with variance-based selection
+- **✅ Scalable Data Processing** - Handles hundreds of thousands of flights with Spark distributed computing
+- **✅ Data Leakage Protection** - Centralized, explicit removal of post-flight columns (`ARR_DELAY_NEW`, `WEATHER_DELAY`, `NAS_DELAY`...) before feature extraction
+- **✅ Missing-Value Strategy** - Per-hour missing flags + missing-counts for aggregated weather features, sentinel values (`-999` / `"MISSING"`) instead of drops, with a dedicated parquet validation suite
+- **✅ Dual Feature Engineering Paths** - PCA (variance-threshold component selection) *or* hybrid statistical feature selection (Chi-Square for categorical, ANOVA F-test for numerical)
+- **✅ Multi-Model Pipeline** - Random Forest, Gradient Boosted Trees, Logistic Regression and XGBoost, swappable via a Factory pattern and pure YAML configuration
 - **✅ Robust ML Pipeline** - K-fold cross-validation with grid search hyperparameter tuning
 - **✅ Comprehensive Evaluation** - Multiple metrics, ROC curves, and detailed analysis
 - **✅ Experiment Tracking** - MLflow integration for experiment management
-- **✅ Docker Infrastructure** - Complete containerized environment with Spark cluster
+- **✅ Dual Deployment** - Local Docker Spark cluster for development, and the LAMSADE (Dauphine) HDFS/Spark cluster for full-scale production runs
 - **✅ Visualization Tools** - Python scripts for metrics analysis and comparison
 
-### Target Performance
+### Achieved Performance
+
+Best configuration to date (Random Forest, PCA feature reduction, 5-fold CV) — see [Results & Metrics](#-results--metrics):
 
 - **Accuracy**: 85.8% for 60+ minute delays
 - **Recall**: 86.9% for critical delay detection
@@ -49,7 +56,7 @@ The project uses three primary datasets:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Docker Infrastructure                    │
+│           Docker Infrastructure (dev)  ·  LAMSADE HDFS/Spark cluster (prod) │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐        │
 │  │ Spark Master│  │ 4x Workers   │  │ MLflow Server│        │
@@ -58,20 +65,32 @@ The project uses three primary datasets:
 └─────────────────────────────────────────────────────────────┘
                              ↓
 ┌──────────────────────────────────────────────────────────────┐
-│                      ML Pipeline                             │
+│                      ML Pipeline (configuration-driven)      │
 ├──────────────────────────────────────────────────────────────┤
-│  1. Data Loading → 2. Preprocessing → 3. Feature Engineering │
-│  4. Model Training → 5. Evaluation → 6. MLflow Tracking      │
+│  1. Load → 2. Preprocess & clean → 3. Leakage protection      │
+│  4. Feature engineering (PCA / hybrid selection)              │
+│  5. Model training (RF / GBT / LR / XGBoost) via ModelFactory │
+│  6. Cross-validation + grid search → 7. Evaluation             │
+│  8. MLflow tracking                                            │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 **Technology Stack**:
 - **Language**: Scala 2.12.18
-- **Big Data**: Apache Spark 3.5.3
-- **ML Library**: Spark MLlib
+- **Big Data**: Apache Spark 3.5.3 (Spark SQL, Spark MLlib)
+- **ML Models**: Spark MLlib (Random Forest, GBT, Logistic Regression) + **XGBoost4j-Spark 1.7.6**
 - **Experiment Tracking**: MLflow 3.4.0
-- **Containerization**: Docker & Docker Compose
+- **Containerization**: Docker & Docker Compose (local dev cluster), Ansible-provisioned LAMSADE cluster (Dauphine, production runs)
 - **Visualization**: Python (matplotlib, seaborn, scikit-learn)
+
+### Implementation choices
+
+- **Data leakage protection is centralized, not scattered.** `DataLeakageProtection` explicitly strips columns only known *after* the flight lands (`ARR_DELAY_NEW`, `WEATHER_DELAY`, `NAS_DELAY`, unused delay labels) at two points — preprocessing and feature extraction — rather than relying on each pipeline stage to remember not to touch them.
+- **Missing weather data is flagged, not silently dropped.** Each hourly weather observation gets a `_missing_hN` binary flag, aggregated features carry a `_missing_count`, and NULLs are replaced with sentinel values (`-999` / `"MISSING"`) so `VectorAssembler` never chokes on them — a dedicated validator (`ParquetMissingValuesValidator`, `scripts/validate_parquets.sh`) checks this invariant holds on every generated parquet.
+- **Two competing feature-reduction strategies, picked per experiment via YAML**: `PCAFeatureExtractor` (standardize → PCA → keep components up to a variance threshold, ~12-15 components for 70% variance) for a pure dimensionality-reduction approach, or `HybridFeatureSelector` (Chi-Square test for one-hot categorical features, ANOVA F-test for numerical ones) when interpretability of the surviving features matters more than compression.
+- **Four models behind one interface.** `RandomForestModel`, `GradientBoostedTreesModel`, `LogisticRegressionModel` and `XGBoostModel` all implement the same `MLModel` trait and are instantiated by `ModelFactory` purely from the `modelType` string in the experiment's YAML config — adding a 5th model (Decision Tree and LightGBM are stubbed as "planned") means implementing the trait and adding one factory branch, no changes to the training/evaluation pipeline.
+- **Every experiment goes through the same rigor**: 80/20 hold-out split, then k-fold cross-validation with optional grid search *within* the 80% dev set, and only the final hold-out test numbers are reported as the real result — avoiding the classic mistake of tuning against the test set.
+- **Two deployment targets, one codebase.** The same JAR runs against a local 4-worker Docker Spark cluster for iteration, and against Dauphine's LAMSADE HDFS/Spark cluster (`ssh.lamsade.dauphine.fr`, `/students/p6emiasd2025/...`) for full-scale runs on the real dataset — configuration-only switch between `local-config.yml` and `lamsade-config.yml`.
 
 ---
 
@@ -104,8 +123,8 @@ cd docker
 
 **That's it!** The system will automatically:
 - Load and preprocess flight and weather data
-- Generate features with PCA dimensionality reduction
-- Train Random Forest model with 5-fold cross-validation
+- Generate features with PCA dimensionality reduction (or hybrid statistical selection)
+- Train the configured model (Random Forest, GBT, Logistic Regression or XGBoost) with 5-fold cross-validation
 - Track all experiments in MLflow
 - Save trained models and metrics
 
@@ -127,6 +146,9 @@ cd docker
 | [Adding Models](docs/MD/10-adding-models.md) | How to implement new models |
 | [Code Reference](docs/MD/11-code-reference.md) | Class-by-class documentation |
 | [Visualization](docs/MD/12-visualization.md) | Analyze and visualize results |
+| [Spark Cluster](docs/MD/13-spark-cluster.md) | Local Docker Spark cluster design, config and operational limits |
+| [Scientific Cluster Architecture Report](docs/MD/14-scientific-cluster-architecture-report.md) | Full architecture report on the production cluster setup |
+| [Missing-Values Validation](VALIDATION_README.md) | How missing weather data is flagged, sentineled and validated in the generated parquets |
 
 ---
 
@@ -330,16 +352,23 @@ Emiasd-FlightProject/
 │   ├── app/                     # Main application
 │   ├── config/                  # Configuration classes
 │   ├── data/                    # Data loading & preprocessing
-│   │   ├── loaders/             # Data loaders
-│   │   └── preprocessing/       # Preprocessing pipeline
+│   │   ├── loaders/             # Data loaders (flights, weather, WBAN/airport mapping)
+│   │   ├── preprocessing/       # Cleaning, labeling, balancing (flights/ and weather/ generators)
+│   │   └── utils/               # Schema validation, data quality metrics
 │   ├── features/                # Feature engineering
-│   │   ├── pipelines/           # Feature pipelines
-│   │   └── pca/                 # PCA implementation
+│   │   ├── joiners/              # Flight ↔ weather join + post-processing
+│   │   ├── leakage/              # Centralized data-leakage protection
+│   │   ├── pca/                  # PCA dimensionality reduction
+│   │   ├── pipelines/            # Basic / enhanced / config-driven feature pipelines
+│   │   ├── quality/               # Parquet missing-values validation
+│   │   ├── selection/            # Hybrid (Chi-Square + ANOVA) feature selection
+│   │   └── balancer/             # Class balancing
 │   ├── ml/                      # Machine learning
-│   │   ├── models/              # Model implementations
-│   │   ├── training/            # Training logic
-│   │   ├── evaluation/          # Model evaluation
-│   │   └── tracking/            # MLflow tracking
+│   │   ├── models/              # RandomForest, GBT, LogisticRegression, XGBoost + ModelFactory
+│   │   ├── training/             # Trainer + CrossValidator (k-fold, grid search)
+│   │   ├── evaluation/           # Metrics, ROC, confusion matrix
+│   │   └── tracking/             # MLflow tracking
+│   ├── examples/                # Standalone validation/example entry points
 │   └── utils/                   # Utilities
 ├── work/                        # Working directory
 │   ├── apps/                    # JARs and libraries
